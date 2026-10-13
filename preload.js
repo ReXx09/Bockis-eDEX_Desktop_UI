@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("edex", {
   launchHeight,
   launchScale,
   bootstrap: () => ipcRenderer.invoke("get-bootstrap"),
+  getWindowsColors: () => ipcRenderer.invoke("get-windows-colors"),
   saveSettings: (patch) => ipcRenderer.invoke("save-settings", patch),
   saveDisplayLayout: (layout) => ipcRenderer.invoke("save-display-layout", layout),
   raiseOverlay: () => ipcRenderer.invoke("raise-overlay"),
@@ -95,6 +96,7 @@ contextBridge.exposeInMainWorld("edex", {
   listEmbedWindows: () => ipcRenderer.invoke("list-embed-windows"),
   embedLaunch: (payload) => ipcRenderer.invoke("embed-launch", payload),
   embedPutty: (payload) => ipcRenderer.invoke("embed-putty", payload),
+  embedFileBrowser: (payload) => ipcRenderer.invoke("embed-file-browser", payload),
   embedAttach: (payload) => ipcRenderer.invoke("embed-attach", payload),
   embedBounds: (payload) => ipcRenderer.invoke("embed-bounds", payload),
   embedRelease: (payload) => ipcRenderer.invoke("embed-release", payload),
@@ -119,6 +121,7 @@ contextBridge.exposeInMainWorld("edex", {
   getSysMetrics: () => ipcRenderer.invoke("get-sys-metrics"),
   getHardwareInfo: () => ipcRenderer.invoke("get-hardware-info"),
   getTopProcesses: () => ipcRenderer.invoke("get-top-processes"),
+  getWeather: (location) => ipcRenderer.invoke("get-weather", location),
   getGlobeGrid: () => ipcRenderer.invoke("get-globe-grid"),
   onDisplaysChanged: (fn) => {
     ipcRenderer.on("display-info", (_e, payload) => fn(payload));

@@ -50,25 +50,53 @@ Filterung nach Kategorien wie Ordner, Symbole, Dateien und Bilder; mit Tabs, Kon
 - **Plugins**: Taschenrechner, Musik-Kassette, Cockpit, CPU-Versorgungspfad, Code-Regen, Kalender und weitere.
 - **Kalendereinträge**: Datum doppelt anklicken, um Einträge zu bearbeiten; Einträge können nach WeChat kopiert werden.
 - **Schnellsuche**: Dateinamensuche auf lokalen Laufwerken und in zusätzlichen Stammverzeichnissen.
+- **Wetter-Panel**: Ortsbasierte aktuelle Wetterdaten und 4-Tage-Prognose über Open-Meteo, ohne API-Key; der Ort kann direkt im Panel gesucht werden.
 - **Theme-Hintergründe**: eDEX-Theme-JSON-Dateien sowie Raster-, Scanline- und weitere Hintergrundstile.
+
+## Terminal
+
+Das Grid-Terminal verwendet unter Windows eine echte interaktive PowerShell-Sitzung über **ConPTY** (`node-pty`). Die Ausgabe wird mit **xterm.js** gerendert; dadurch funktionieren ANSI-Farben, Cursor, History, Tabulator, Pfeiltasten und interaktive PowerShell-Kommandos korrekt. Jede Terminal-Pane kann separat gestartet, geschlossen und skaliert werden.
+
+Zusätzlich stehen im Terminal-Panel zur Verfügung:
+
+- **FILES**: Öffnet einen ausgewählten Ordner als Datei-Browser-Container.
+- **PuTTY**: Startet und bettet eine lokale PuTTY-Sitzung in eine Terminal-Pane ein.
+- **1x1, 2x1 und 2x2**: Ändert das Terminal-Raster.
+
+Die Terminal-Ausgabe wird ereignisbasiert an den Renderer übertragen. Die übrigen HUD-Panels liefern ihre Live-Systemdaten unabhängig davon.
 
 ## Ausführen
 
 ```powershell
-cd organizer
 npm install
 npm start
 ```
 
 ## Windows-Installer erstellen
 
+Für die native ConPTY-Komponente `node-pty` benötigt der Rechner, auf dem der Installer gebaut wird, die **Visual Studio Build Tools** mit der Workload **Desktopentwicklung mit C++**. Diese Werkzeuge werden nicht auf dem Zielrechner benötigt.
+
 ```powershell
-cd organizer
 npm install
+npm run rebuild-native
 npm run dist
 ```
 
+`npm run dist` führt den nativen Rebuild über den `predist`-Hook automatisch aus. `xterm.js`, das Fit-Addon und `node-pty` werden in die Electron-App und damit in den NSIS-Installer aufgenommen. Der installierte Endanwender benötigt kein Node.js, npm oder Visual Studio.
+
 Ergebnis: `dist/eDEX-Desktop-Organizer-Setup-<version>.exe` (NSIS-Installer, Installationsverzeichnis kann geändert werden).
+
+Für einen entpackten Test-Build:
+
+```powershell
+npm run dist:dir
+```
+
+## Tests
+
+```powershell
+npm test
+```
 
 ## Veröffentlichung
 

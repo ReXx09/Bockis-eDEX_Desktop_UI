@@ -6,6 +6,8 @@
   let animateTimer = null;
   let globeInitTimer = null;
   let globeConnectionsTimer = null;
+  let globeRefreshConnections = null;
+  let globeFilter = "world";
   let netTimer = null;
   let trafficTimer = null;
   let cpuTimer = null;
@@ -49,6 +51,7 @@
     animateTimer = globeInitTimer = null;
     if (globeConnectionsTimer) clearTimeout(globeConnectionsTimer);
     globeConnectionsTimer = null;
+    globeRefreshConnections = null;
     const host = document.getElementById("mod_globe_innercontainer");
     host?.querySelector("canvas")?.remove();
     globeInstance = null;
@@ -129,6 +132,16 @@
       const bg = getComputedStyle(document.documentElement).getPropertyValue("--color_light_black").trim() || "#05080d";
       globeInstance.init(bg, () => {
         if (gen !== globeGen || !globeInstance) return;
+        const filterButtons = host.querySelectorAll("[data-globe-filter]");
+        filterButtons.forEach((button) => {
+          button.classList.toggle("on", button.dataset.globeFilter === globeFilter);
+          button.addEventListener("click", () => {
+            globeFilter = button.dataset.globeFilter || "world";
+            filterButtons.forEach((item) => item.classList.toggle("on", item.dataset.globeFilter === globeFilter));
+            if (globeConnectionsTimer) clearTimeout(globeConnectionsTimer);
+            globeRefreshConnections?.();
+          });
+        });
         const tick = () => {
           if (gen !== globeGen || !globeInstance) return;
           if (pageActive()) globeInstance.tick();
@@ -140,15 +153,43 @@
           try {
             const connections = await window.edex.getLiveConnections();
             if (gen !== globeGen || !globeInstance) return;
-            const visible = connections.filter((item) => item.geo && Number.isFinite(item.geo.lat) && Number.isFinite(item.geo.lon));
-            visible.forEach((item) => globeInstance.addPin(item.geo.lat, item.geo.lon, `${item.process}:${item.port}`, 1.18));
+            const filtered = globeFilter === "world"
+              ? connections
+              : connections.filter((item) => item.direction === globeFilter);
+            const visible = filtered.filter((item) => item.geo && Number.isFinite(item.geo.lat) && Number.isFinite(item.geo.lon));
+            for (const marker of globeInstance.markers || []) marker.remove?.();
+            if (Array.isArray(globeInstance.markers)) globeInstance.markers.length = 0;
+            const colors = {
+              outgoing: "#00f6ff",
+              incoming: "#00ff75",
+              local: "#ffd23c"
+            };
+            visible.forEach((item) => {
+              const direction = colors[item.direction] ? item.direction : "outgoing";
+              globeInstance.addMarker(
+                item.geo.lat,
+                item.geo.lon,
+                `${item.process}:${item.port}`,
+                false,
+                1.18,
+                colors[direction]
+              );
+            });
             const info = document.querySelector(".mod_globe_headerInfo");
-            if (info && visible.length) info.textContent = `LIVE CONNECTIONS: ${visible.length}`;
+            if (info && visible.length) {
+              const counts = visible.reduce((result, item) => {
+                const direction = colors[item.direction] ? item.direction : "outgoing";
+                result[direction] += 1;
+                return result;
+              }, { outgoing: 0, incoming: 0, local: 0 });
+              info.textContent = `${globeFilter.toUpperCase()} · OUT ${counts.outgoing} · IN ${counts.incoming} · LOCAL ${counts.local}`;
+            }
           } catch (err) {
             console.warn("globe connections failed", err);
           }
           globeConnectionsTimer = setTimeout(refreshConnections, 15000);
         };
+        globeRefreshConnections = refreshConnections;
         refreshConnections();
         setTimeout(() => {
           if (gen !== globeGen || !globeInstance) return;

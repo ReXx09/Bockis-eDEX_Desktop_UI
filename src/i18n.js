@@ -1,5 +1,5 @@
 (() => {
-  const SUPPORTED = ["zh-Hant", "de"];
+  const SUPPORTED = ["zh-Hant", "de", "en"];
   const translations = {
     de: {
       "設定": "Einstellungen",
@@ -48,6 +48,7 @@
       "網格大小": "Rastergröße",
       "時鐘字格": "Uhr-Raster",
       "顯示日期": "Datum anzeigen",
+      "時間格式": "Zeitformat",
       "時鐘高亮": "Uhr-Hervorhebung",
       "搜尋字體": "Suchschriftgröße",
       "瀑布字體": "Code-Regen-Schriftgröße",
@@ -76,6 +77,11 @@
       "路徑": "Pfad",
       "可用": "frei",
       "已用": "belegt",
+      "可移除": "Wechseldatenträger",
+      "網路": "Netzwerk",
+      "本機": "Lokal",
+      "找不到本機磁碟": "Keine lokalen Laufwerke gefunden",
+      "無法讀取磁碟": "Laufwerke konnten nicht gelesen werden",
       "本機索引": "Lokaler Index",
       "索引中": "Indexierung läuft",
       "搜尋尚未就緒": "Suche noch nicht bereit",
@@ -180,6 +186,34 @@
       "開啟後自動整理會把檔案搬到「分類／副檔名」資料夾；關閉則只篩選顯示": "Aktiviert verschiebt die automatische Sortierung Dateien in Kategorie-/Endungsordner; deaktiviert filtert sie nur",
       "遷移時一併把資料夾收到「資料夾」": "Beim Verschieben Ordner zusätzlich in den Ordner „Ordner“ einsortieren",
       "保存本顯示器全部容器：插件開關與位置、系統桌面、路徑卡、桌面標籤。關閉的插件不會在下次啟動復原。": "Alle Container dieses Monitors speichern: Plugins, Positionen, Systemdesktop, Pfadkarten und Desktop-Tabs. Geschlossene Plugins werden beim nächsten Start nicht wiederhergestellt."
+    },
+    en: {
+      "Windows-Farben": "Windows colors", "Windows-Akzentfarbe in das aktive Theme einmischen": "Blend the Windows accent color into the active theme", "Theme-Hintergrund beibehalten": "Keep theme wallpaper", "Theme-Wallpaper auch ohne aktive Organizer-Oberfläche als Windows-Desktop verwenden": "Use the theme wallpaper as the Windows desktop even when the Organizer is closed", "Aus": "Off", "Dezent": "Subtle", "Stark": "Strong",
+      "設定": "Settings", "添加容器": "Add container", "插件開關": "Plugin switches",
+      "底部 Dock（貼螢幕底邊）": "Bottom Dock (screen edge)", "外框": "Frame", "寬度": "Width", "高度": "Height", "像素": "Pixels",
+      "圓角": "Rounded", "梯形": "Trapezoid", "直角": "Square", "插件面板": "Plugin panels", "其他": "Other options",
+      "桌面容器": "Desktop container", "路徑容器": "Path container", "可連續添加，完成後按「關閉」": "Add multiple items, then close",
+      "關閉": "Close", "保存佈局": "Save layout", "套用設定並保存佈局": "Apply settings and save layout", "重設容器位置": "Reset container positions", "結束程式": "Exit",
+      "畫面與外觀（解析度與網格全顯示器同步）": "Display and appearance (resolution and grid synchronized)", "項目": "Item", "說明": "Description", "值": "Value",
+      "本顯示器": "This monitor", "實體解析度（非系統 2K 縮放）": "Physical resolution (without system 2K scaling)", "顯示器數量": "Number of monitors", "各自獨立視窗，非鏡像": "Separate windows, not mirrored",
+      "主題": "Theme", "原版介面主題": "Original interface theme", "壁紙": "Wallpaper", "所有顯示器共用背景": "Shared background on all monitors",
+      "圖示顯示": "Icon view", "桌面容器內圖示排列": "Icon arrangement in desktop containers", "圖示網格": "Icon grid", "圖示列表": "Icon list",
+      "自動吸附": "Snap automatically", "底部 Dock": "Bottom Dock", "網格大小": "Grid size", "時鐘字格": "Clock grid", "顯示日期": "Show date",
+      "時鐘高亮": "Clock highlight", "搜尋字體": "Search font size", "瀑布字體": "Code rain font size", "瀑布速度": "Code rain speed", "佈局解析度": "Layout resolution", "介面比例": "Interface scale",
+      "遷移檔案": "Move files", "整理資料夾": "Include folders", "桌面佈局": "Desktop layout", "快速搜尋": "Quick search",
+      "文件": "Documents", "圖片": "Pictures", "影片": "Videos", "音樂": "Audio", "壓縮檔": "Archives", "應用程式": "Applications", "其他": "Other", "全部": "All",
+      "文件夾": "Folder", "資料夾": "Folder", "圖標": "Icons", "圖示": "Icons", "桌面分類": "Desktop categories", "桌面捷徑": "Desktop shortcuts", "中": "Center", "路徑": "Path",
+      "可用": "free", "已用": "used", "可移除": "Removable", "網路": "Network", "本機": "Local", "找不到本機磁碟": "No local drives found", "無法讀取磁碟": "Could not read drives",
+      "本機索引": "Local index", "索引中": "Indexing", "搜尋尚未就緒": "Search is not ready", "時鐘": "Clock", "瀑布代碼": "Code rain", "處理器": "Processor", "記憶體": "Memory", "進程": "Processes",
+      "地球視圖": "Globe", "網路流量": "Network traffic", "日曆": "Calendar", "本機磁碟": "Local drives", "終端機": "Terminal", "駕駛室": "Cockpit", "音樂磁帶": "Music cassette", "計算器": "Calculator",
+      "更多操作": "More actions", "標記": "Label", "無": "None", "點陣時鐘": "Dot-matrix clock", "搜尋": "Search", "輸入關鍵字開始搜尋": "Enter a search term to begin",
+      "重新整理": "Refresh", "新增資料夾／網路磁碟": "Add folder/network drive", "新增局域網路徑": "Add LAN path", "管理搜尋路徑": "Manage search paths", "重建索引": "Rebuild index",
+      "切換為網格": "Switch to grid", "切換為列表": "Switch to list", "重新掃描": "Rescan", "在 VS Code 開啟桌面資料夾": "Open desktop folder in VS Code", "預覽整理": "Preview organization", "執行整理": "Organize files",
+      "還原上次": "Undo last action", "啟用此路徑": "Enable this path", "開啟資料夾": "Open folder", "在 VS Code 開啟": "Open in VS Code", "更換路徑": "Change path", "關閉容器": "Close container",
+      "系統桌面": "System desktop", "讀取中…": "Loading…", "此資料夾沒有可顯示的項目": "This folder has no items to display", "新增事項": "Add event", "編輯": "Edit", "刪除": "Delete",
+      "紅色": "Red", "橙色": "Orange", "黃色": "Yellow", "綠色": "Green", "藍色": "Blue", "紫色": "Purple", "灰色": "Gray", "白": "White", "紅": "Red", "黃": "Yellow", "青": "Cyan",
+      "預設": "Default", "自訂": "Custom", "容器背景": "Container background", "桌面整理": "Desktop Organizer", "最小化到 Dock": "Minimize to Dock", "原版網格": "Original grid", "純色背景": "Solid background", "掃描線": "Scanlines",
+      "解鎖": "Unlock", "鎖定": "Lock", "隱藏日期": "Hide date", "背景顏色": "Background color", "添加容器": "Add container"
     }
   };
   const dynamicRules = [
@@ -205,6 +239,28 @@
     [/^已鎖定容器$/, "Container gesperrt"],
     [/^已解鎖容器$/, "Container entsperrt"]
   ];
+  const dynamicRulesEn = [
+    [/^顯示器 (\d+) · (.+)$/, "Monitor $1 · $2"],
+    [/^(\d+) 台$/, "$1 monitors"],
+    [/^移至 顯示器 (\d+)（(.+?)，主螢幕）$/, "Move to monitor $1 ($2, primary)"],
+    [/^移至 顯示器 (\d+)（(.+?)）$/, "Move to monitor $1 ($2)"],
+    [/^已最小化「(.+)」$/, "Minimized “$1” to Dock"],
+    [/^已移至 (.+)$/, "Moved to $1"],
+    [/^已添加「(.+)」$/, "Added “$1”"],
+    [/^已關閉「(.+)」$/, "Closed “$1”"],
+    [/^已加入 (\d+) 個項目$/, "$1 items added"],
+    [/^已遷移 (\d+) 個項目$/, "$1 items moved"],
+    [/^掃描 (.+)：(\d+) 個項目$/, "Scanned $1: $2 items"],
+    [/^讀取失敗：(.+)$/, "Read failed: $1"],
+    [/^執行失敗：(.+)$/, "Execution failed: $1"],
+    [/^開啟失敗$/, "Open failed"],
+    [/^無法開啟此項目$/, "Could not open item"],
+    [/^無法讀取資料夾$/, "Could not read folder"],
+    [/^已顯示日期$/, "Date shown"],
+    [/^已隱藏日期$/, "Date hidden"],
+    [/^已鎖定容器$/, "Container locked"],
+    [/^已解鎖容器$/, "Container unlocked"]
+  ];
   let current = "de";
 
   function normalize(locale) {
@@ -229,7 +285,7 @@
   function translateDynamic(value) {
     const text = translateValue(value);
     if (text !== String(value ?? "") || current === "zh-Hant") return text;
-    for (const [pattern, replacement] of dynamicRules) {
+    for (const [pattern, replacement] of current === "en" ? dynamicRulesEn : dynamicRules) {
       if (pattern.test(text)) return text.replace(pattern, replacement);
     }
     return text;

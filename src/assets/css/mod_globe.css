@@ -63,6 +63,64 @@ div#mod_globe i.mod_globe_headerInfo {
     padding-top: .2vh;
 }
 
+.globe-filters {
+    display: flex;
+    gap: 0.35vh;
+    align-self: flex-start;
+    width: 98%;
+    margin-top: 0.25vh;
+}
+
+.globe-filter {
+    min-width: 5.6vh;
+    padding: 0.12vh 0.45vh;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.04);
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.62);
+    font: inherit;
+    font-size: 1.02vh;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+}
+
+.globe-filter:hover,
+.globe-filter:focus-visible,
+.globe-filter.on {
+    border-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.18);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    outline: none;
+}
+
+.globe-connection-legend {
+    display: flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 0.8vh;
+    width: 98%;
+    margin-top: 0.2vh;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.55);
+    font-size: 1.02vh;
+}
+
+.globe-connection-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25vh;
+}
+
+.globe-connection-legend i {
+    width: 0.65vh;
+    height: 0.65vh;
+    border-radius: 50%;
+    opacity: 1 !important;
+    position: static !important;
+}
+
+.globe-connection-legend i.outgoing { background: #00f6ff; }
+.globe-connection-legend i.incoming { background: #00ff75; }
+.globe-connection-legend i.local { background: #ffd23c; }
+
 div#mod_globe canvas {
     width: 109%;
     margin: 0px;

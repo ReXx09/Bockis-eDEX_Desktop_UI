@@ -203,6 +203,39 @@ div.modal_popup summary+table {
     margin-top: 1.5vh;
 }
 
+div.modal_popup details.settings-section {
+    width: 100%;
+    margin-bottom: 0.8vh;
+    border: 0.15vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
+    padding: 0.5vh 0.7vh 0.7vh;
+    box-sizing: border-box;
+}
+
+div.modal_popup details.settings-section > summary {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font-weight: bold;
+    list-style: none;
+}
+
+div.modal_popup details.settings-section > summary::-webkit-details-marker {
+    display: none;
+}
+
+div.modal_popup details.settings-section > summary::before {
+    content: "+";
+    display: inline-block;
+    width: 1.6vh;
+    margin-right: 0.4vh;
+}
+
+div.modal_popup details.settings-section[open] > summary::before {
+    content: "−";
+}
+
+div.modal_popup details.settings-section > table {
+    width: 100%;
+}
+
 /* Settings editor modal */
 
 h6#settingsEditorStatus {

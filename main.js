@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, screen, Tray, Menu, nativeImage, clipboard, desktopCapturer } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, screen, Tray, Menu, nativeImage, clipboard, desktopCapturer, systemPreferences, nativeTheme } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const os = require("os");
@@ -37,7 +37,7 @@ const { listDesktopShortcuts } = require("./lib/desktop-shortcuts");
 const { listDrives } = require("./lib/drives");
 const fileSearch = require("./lib/file-search");
 const { loadNotes, addNote, updateNote, removeNote } = require("./lib/calendar-store");
-const { getNetStatus, getLiveConnections, getTrafficSample, getCpuMetrics, getMemMetrics, getSysMetrics, loadGlobeGrid, getHardwareInfo, getTopProcesses } = require("./lib/net-info");
+const { getNetStatus, getLiveConnections, getTrafficSample, getCpuMetrics, getMemMetrics, getSysMetrics, loadGlobeGrid, getHardwareInfo, getTopProcesses, getWeather } = require("./lib/net-info");
 const fileOps = require("./lib/file-ops");
 const clipboardFiles = require("./lib/clipboard-files");
 const win32Embed = require("./lib/win32-embed");
@@ -552,7 +552,9 @@ if (!gotLock) {
       try { win32Embed.stopEmbedDaemon(); } catch { /* ignore */ }
       try {
         await restoreDesktopIcons(app.getPath("userData"));
-        await restoreWallpaper(app.getPath("userData"));
+        if (settings?.keepThemeWallpaper !== true) {
+          await restoreWallpaper(app.getPath("userData"));
+        }
       } catch (err) {
         console.error("restore desktop", err);
       }
@@ -606,6 +608,19 @@ ipcMain.handle("get-bootstrap", (event) => {
     theme: loadTheme(themeName),
     themeName
   };
+});
+
+ipcMain.handle("get-windows-colors", (event) => {
+  requireTrustedWindow(event);
+  let accent = "#00eaff";
+  try {
+    const raw = String(systemPreferences.getAccentColor?.() || "").replace(/^#/, "");
+    const hex = raw.length === 8 ? raw.slice(2) : raw;
+    if (/^[0-9a-f]{6}$/i.test(hex)) accent = `#${hex}`;
+  } catch {
+    // Keep the cyan fallback when Windows cannot provide its accent color.
+  }
+  return { accent, dark: Boolean(nativeTheme.shouldUseDarkColors) };
 });
 
 ipcMain.handle("save-settings", (event, patch) => {
@@ -1325,8 +1340,16 @@ function parentHwndOf(event) {
   return win32Embed.hwndFromBuffer(win.getNativeWindowHandle());
 }
 
+function resolveEmbedZone(payload = {}) {
+  if (payload.zone === "edge" || payload.zone === "workspace") return payload.zone;
+  const kind = String(payload.kind || "");
+  return settings.windowZoneEnabled !== false && settings.panelZones?.[kind] !== "edge"
+    ? "workspace"
+    : "edge";
+}
+
 /** Map renderer CSS host rect → physical screen pixels for docking. */
-function mapCssBoundsToScreen(event, bounds = {}) {
+function mapCssBoundsToScreen(event, bounds = {}, zone = "workspace") {
   const win = getSenderWindow(event);
   if (!win || win.isDestroyed()) {
     return {
@@ -1338,11 +1361,28 @@ function mapCssBoundsToScreen(event, bounds = {}) {
   }
   const zoom = win.webContents.getZoomFactor() || 1;
   const content = win.getContentBounds();
+  let cssX = Number(bounds.x) || 0;
+  let cssY = Number(bounds.y) || 0;
+  let cssW = Math.max(40, Number(bounds.w) || 400);
+  let cssH = Math.max(40, Number(bounds.h) || 300);
+  if (zone === "workspace" && settings.windowZoneEnabled !== false) {
+    const margins = settings.windowZoneMargins || {};
+    const left = content.width * Math.max(0, Math.min(45, Number(margins.left) || 0)) / 100;
+    const top = content.height * Math.max(0, Math.min(45, Number(margins.top) || 0)) / 100;
+    const right = content.width * (1 - Math.max(0, Math.min(45, Number(margins.right) || 0)) / 100);
+    const bottom = content.height * (1 - Math.max(0, Math.min(45, Number(margins.bottom) || 0)) / 100);
+    const zoneWidth = Math.max(40, right - left);
+    const zoneHeight = Math.max(40, bottom - top);
+    cssW = Math.min(cssW, zoneWidth);
+    cssH = Math.min(cssH, zoneHeight);
+    cssX = Math.max(left, Math.min(cssX, right - cssW));
+    cssY = Math.max(top, Math.min(cssY, bottom - cssH));
+  }
   const dipRect = {
-    x: Math.round(content.x + (Number(bounds.x) || 0) * zoom),
-    y: Math.round(content.y + (Number(bounds.y) || 0) * zoom),
-    width: Math.max(40, Math.round((Number(bounds.w) || 400) * zoom)),
-    height: Math.max(40, Math.round((Number(bounds.h) || 300) * zoom))
+    x: Math.round(content.x + cssX * zoom),
+    y: Math.round(content.y + cssY * zoom),
+    width: Math.max(40, Math.round(cssW * zoom)),
+    height: Math.max(40, Math.round(cssH * zoom))
   };
   const display = screen.getDisplayMatching(win.getBounds());
   try {
@@ -1372,7 +1412,7 @@ ipcMain.handle("embed-launch", async (event, payload = {}) => {
   if (!fs.existsSync(appPath) || !/\.(exe|lnk)$/i.test(appPath)) {
     throw new Error("只允許存在的 .exe 或 .lnk 程式");
   }
-  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {});
+  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {}, resolveEmbedZone(payload));
   return win32Embed.launchAndDock(appPath, screenBounds, {
     timeoutMs: Number(payload.timeoutMs) || 15000,
     hostHwnd: parentHwndOf(event)
@@ -1402,7 +1442,7 @@ ipcMain.handle("embed-putty", async (event, payload = {}) => {
   const args = target.toLowerCase().startsWith("session:")
     ? ["-load", target.slice(8).trim()]
     : ["-ssh", target];
-  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {});
+  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {}, resolveEmbedZone({ ...payload, kind: "putty" }));
   return win32Embed.launchAndDock(puttyPath, screenBounds, {
     timeoutMs: 15000,
     hostHwnd: parentHwndOf(event),
@@ -1410,11 +1450,26 @@ ipcMain.handle("embed-putty", async (event, payload = {}) => {
   });
 });
 
+ipcMain.handle("embed-file-browser", async (event, payload = {}) => {
+  requireTrustedWindow(event);
+  const explorerPath = path.join(process.env.WINDIR || "C:\\Windows", "explorer.exe");
+  if (!fs.existsSync(explorerPath)) throw new Error("Windows-Datei-Explorer wurde nicht gefunden");
+  const target = String(payload.target || "").trim();
+  if (!target) throw new Error("Kein Datei-Browser-Ziel angegeben");
+  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {}, resolveEmbedZone({ ...payload, kind: "fileBrowser" }));
+  return win32Embed.launchAndDock(explorerPath, screenBounds, {
+    timeoutMs: 15000,
+    hostHwnd: parentHwndOf(event),
+    args: ["/n,", "/e,", target],
+    processName: "explorer.exe"
+  });
+});
+
 ipcMain.handle("embed-attach", async (event, payload = {}) => {
   requireTrustedWindow(event);
   const childHwnd = String(payload.hwnd || "").trim();
   if (!childHwnd) throw new Error("視窗無效");
-  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {});
+  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {}, resolveEmbedZone(payload));
   const ok = await win32Embed.dockWindow(
     childHwnd,
     parentHwndOf(event),
@@ -1431,7 +1486,7 @@ ipcMain.handle("embed-bounds", async (event, payload = {}) => {
   requireTrustedWindow(event);
   const childHwnd = String(payload.hwnd || "").trim();
   if (!childHwnd) return { ok: false };
-  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {});
+  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {}, resolveEmbedZone(payload));
   const ok = await win32Embed.setDockBounds(
     childHwnd,
     parentHwndOf(event),
@@ -1555,6 +1610,10 @@ ipcMain.handle("get-mem-metrics", () => getMemMetrics());
 ipcMain.handle("get-sys-metrics", () => getSysMetrics());
 ipcMain.handle("get-hardware-info", async () => getHardwareInfo());
 ipcMain.handle("get-top-processes", async () => getTopProcesses());
+ipcMain.handle("get-weather", async (event, location) => {
+  requireTrustedWindow(event);
+  return getWeather(location);
+});
 ipcMain.handle("get-globe-grid", () => {
   try {
     return loadGlobeGrid();

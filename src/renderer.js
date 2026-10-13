@@ -50,6 +50,7 @@ const PANEL_META = {
   drives: { title: "本機磁碟", box: { x: 66, y: 42, w: 15, h: 38 } },
   filesearch: { title: "快速搜尋", box: { x: 18, y: 82, w: 47, h: 16 } },
   terminal: { title: "終端機", box: { x: 19, y: 42, w: 31, h: 36 } },
+  weather: { title: "天氣", box: { x: 52, y: 42, w: 13, h: 28 } },
   cockpit: { title: "駕駛室", box: { x: 20, y: 22, w: 38, h: 54 } },
   cassette: { title: "音樂磁帶", box: { x: 28, y: 28, w: 36, h: 38 } },
   ddj: { title: "DDJ-1000", box: { x: 8, y: 6, w: 84, h: 86 } },
@@ -92,6 +93,7 @@ const state = {
   wallpapers: [],
   themeName: "tron",
   theme: null,
+  windowsColors: null,
   scan: null,
   plan: null,
   includeFolders: false,
@@ -122,6 +124,7 @@ const state = {
   cpuRailRaf: null,
   dockTimer: null,
   dockRaf: null
+  ,weatherTimer: null
 };
 
 function defaultWidgets() {
@@ -148,6 +151,17 @@ function panelBody(id) {
               <canvas id="mod_coderain_canvas"></canvas>
             </section>
           </div>
+        </div>`;
+    case "weather":
+      return `
+        <div class="weather-root">
+          <div class="weather-toolbar">
+            <input type="search" data-weather-location value="Berlin" placeholder="Ort suchen …" spellcheck="false" />
+            <button type="button" data-weather-refresh title="Wetter aktualisieren">↻</button>
+          </div>
+          <div class="weather-status" data-weather-status>Wetter wird geladen …</div>
+          <div class="weather-current" data-weather-current></div>
+          <div class="weather-days" data-weather-days></div>
         </div>`;
     case "sysinfo":
       return `
@@ -275,6 +289,17 @@ function panelBody(id) {
           <div id="mod_globe_innercontainer">
             <h1>WORLD VIEW<i>GLOBAL NETWORK MAP</i></h1>
             <h2>ENDPOINT LAT/LON<i class="mod_globe_headerInfo">0.0000, 0.0000</i></h2>
+            <div class="globe-filters" role="group" aria-label="Verbindungsfilter">
+              <button type="button" class="globe-filter on" data-globe-filter="world">WORLD</button>
+              <button type="button" class="globe-filter" data-globe-filter="outgoing">OUT</button>
+              <button type="button" class="globe-filter" data-globe-filter="incoming">IN</button>
+              <button type="button" class="globe-filter" data-globe-filter="local">LOCAL</button>
+            </div>
+            <div class="globe-connection-legend" aria-label="Verbindungsarten">
+              <span><i class="outgoing"></i>OUT</span>
+              <span><i class="incoming"></i>IN</span>
+              <span><i class="local"></i>LOCAL</span>
+            </div>
             <div id="mod_globe_canvas_placeholder"></div>
             <h3>OFFLINE</h3>
           </div>
@@ -706,6 +731,16 @@ function clockShowDate() {
   return state.settings?.clockShowDate !== false;
 }
 
+function clockTimeFormat() {
+  const value = String(state.settings?.clockTimeFormat || "24h-seconds");
+  return ["24h-seconds", "24h-short", "12h-seconds", "12h-short"].includes(value) ? value : "24h-seconds";
+}
+
+function clockDateFormat() {
+  const value = String(state.settings?.clockDateFormat || "yy/m/d");
+  return ["yy/m/d", "dd/mm/yy", "mm/dd/yy", "dd.mm.yy", "yyyy/mm/dd"].includes(value) ? value : "yy/m/d";
+}
+
 function wallpaperGridPx() {
   const raw = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--grid-size"));
   if (Number.isFinite(raw) && raw > 4) return raw;
@@ -767,6 +802,7 @@ const LED_GLYPHS = {
   ":": ["0", "1", "0", "1", "0"],
   ".": ["0", "0", "0", "0", "1"],
   "/": ["001", "001", "010", "100", "100"],
+  "-": ["000", "000", "111", "000", "000"],
   " ": ["0", "0", "0", "0", "0"]
 };
 
@@ -1151,15 +1187,33 @@ function applyUiMetrics() {
   applyClockMetrics();
 }
 
+function mixThemeColor(base, accent, amount) {
+  const baseMatch = String(base || "").replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  const accentMatch = String(accent || "").replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!baseMatch || !accentMatch) return base;
+  const values = baseMatch.slice(1).map((part, index) => Math.round(
+    parseInt(part, 16) * (1 - amount) + parseInt(accentMatch[index + 1], 16) * amount
+  ));
+  return rgbToHex(...values);
+}
+
 function applyTheme(theme, wallpaperId) {
   state.theme = theme;
   const c = theme.colors || {};
-  document.documentElement.style.setProperty("--color_r", c.r ?? 170);
-  document.documentElement.style.setProperty("--color_g", c.g ?? 207);
-  document.documentElement.style.setProperty("--color_b", c.b ?? 209);
+  const mode = state.settings.windowsColorMode || "subtle";
+  const rawAccent = state.windowsColors?.accent || "#00eaff";
+  const match = rawAccent.replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  const windowsRgb = match ? match.slice(1).map((part) => parseInt(part, 16)) : [0, 234, 255];
+  const blend = mode === "strong" ? 0.55 : mode === "subtle" ? 0.22 : 0;
+  const r = Math.round((c.r ?? 170) * (1 - blend) + windowsRgb[0] * blend);
+  const g = Math.round((c.g ?? 207) * (1 - blend) + windowsRgb[1] * blend);
+  const b = Math.round((c.b ?? 209) * (1 - blend) + windowsRgb[2] * blend);
+  document.documentElement.style.setProperty("--color_r", r);
+  document.documentElement.style.setProperty("--color_g", g);
+  document.documentElement.style.setProperty("--color_b", b);
   document.documentElement.style.setProperty("--color_black", c.black || "#000000");
-  document.documentElement.style.setProperty("--color_light_black", c.light_black || "#05080d");
-  document.documentElement.style.setProperty("--color_grey", c.grey || "#262828");
+  document.documentElement.style.setProperty("--color_light_black", mixThemeColor(c.light_black || "#05080d", rawAccent, blend * 0.18));
+  document.documentElement.style.setProperty("--color_grey", mixThemeColor(c.grey || "#262828", rawAccent, blend * 0.35));
   document.documentElement.style.setProperty("--color_red", c.red || "#ff3c3c");
   document.documentElement.style.setProperty("--color_yellow", c.yellow || "#ffd23c");
   document.documentElement.style.setProperty("--snap-gap", `${snapGap()}px`);
@@ -1271,8 +1325,22 @@ function renderClock() {
   if (!host) return;
   applyClockMetrics();
   const now = new Date();
-  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${Math.floor(now.getMilliseconds() / 100)}`;
-  const date = `${now.getFullYear() % 100}/${now.getMonth() + 1}/${now.getDate()}`;
+  const timeMode = clockTimeFormat();
+  const hour24 = now.getHours();
+  const hour12 = hour24 % 12 || 12;
+  const timeHour = timeMode.startsWith("12h") ? hour12 : hour24;
+  const time = `${pad(timeHour)}:${pad(now.getMinutes())}${timeMode.endsWith("seconds") ? `:${pad(now.getSeconds())}` : ""}`;
+  const year = now.getFullYear();
+  const month = pad(now.getMonth() + 1);
+  const day = pad(now.getDate());
+  const dateFormats = {
+    "yy/m/d": `${String(year).slice(-2)}/${Number(month)}/${Number(day)}`,
+    "dd/mm/yy": `${day}/${month}/${String(year).slice(-2)}`,
+    "mm/dd/yy": `${month}/${day}/${String(year).slice(-2)}`,
+    "dd.mm.yy": `${day}.${month}.${String(year).slice(-2)}`,
+    "yyyy/mm/dd": `${year}/${month}/${day}`
+  };
+  const date = dateFormats[clockDateFormat()];
   const matrix = buildLedMatrix(clockShowDate() ? [time, date] : [time]);
   const rows = matrix.length;
   const cols = matrix[0]?.length || 0;
@@ -2590,6 +2658,51 @@ function openAddPicker() {
       <button type="button" id="add-cancel">關閉</button>
     </div>
   `;
+
+  const wrapSettingsSection = (title, table, open = false) => {
+    const details = document.createElement("details");
+    details.className = "settings-section";
+    details.open = open;
+    const summary = document.createElement("summary");
+    summary.textContent = title;
+    details.append(summary, table);
+    return details;
+  };
+  const languageHeading = modal.querySelector("h2");
+  const languageTable = languageHeading?.nextElementSibling;
+  if (languageHeading && languageTable?.tagName === "TABLE") {
+    languageHeading.replaceWith(wrapSettingsSection(languageHeading.textContent, languageTable, true));
+  }
+  const appearanceHeading = modal.querySelector("h2");
+  const editor = modal.querySelector("#settingsEditor");
+  if (appearanceHeading && editor) {
+    const rows = [...editor.querySelectorAll("tbody > tr")];
+    const header = rows.shift();
+    const rowContains = (row, id) => Boolean(row.querySelector(`#${id}`));
+    const displayEnd = rows.findIndex((row) => rowContains(row, "set-grid"));
+    const clockEnd = rows.findIndex((row) => rowContains(row, "set-search-font"));
+    const organizerEnd = rows.findIndex((row) => rowContains(row, "set-migrate"));
+    const cuts = [
+      ["Anzeige & Theme", 0, displayEnd < 0 ? rows.length : displayEnd, true],
+      ["Uhr", displayEnd < 0 ? rows.length : displayEnd, clockEnd < 0 ? rows.length : clockEnd, false],
+      ["Interface & Code-Regen", clockEnd < 0 ? rows.length : clockEnd, organizerEnd < 0 ? rows.length : organizerEnd, false],
+      ["Organizer", organizerEnd < 0 ? rows.length : organizerEnd, rows.length, false]
+    ];
+    const fragment = document.createDocumentFragment();
+    for (const [title, start, end, open] of cuts) {
+      const table = editor.cloneNode(false);
+      table.removeAttribute("id");
+      table.classList.add("settings-section-table");
+      const body = document.createElement("tbody");
+      if (header) body.appendChild(header.cloneNode(true));
+      rows.slice(start, end).forEach((row) => body.appendChild(row));
+      table.appendChild(body);
+      if (start === 0) table.id = "settingsEditor";
+      fragment.appendChild(wrapSettingsSection(title, table, open));
+    }
+    appearanceHeading.replaceWith(fragment);
+    editor.remove();
+  }
   document.body.appendChild(modal);
   window.edexI18n?.translatePage?.(modal);
   placeCentered(modal, { width: Math.min(520, window.innerWidth * 0.45), topRatio: 0.18 });
@@ -2715,10 +2828,83 @@ function stopPluginRuntimes() {
     state.cpuRailVisHandler = null;
   }
   window.dockPanel?.unbind?.(state);
+  if (state.weatherTimer) {
+    clearInterval(state.weatherTimer);
+    state.weatherTimer = null;
+  }
   if (state.dockRaf) {
     cancelAnimationFrame(state.dockRaf);
     state.dockRaf = null;
   }
+}
+
+function weatherLabel(code) {
+  const labels = {
+    0: "Klar", 1: "Überwiegend klar", 2: "Teilweise bewölkt", 3: "Bedeckt",
+    45: "Nebel", 48: "Reifnebel", 51: "Leichter Nieselregen", 53: "Nieselregen",
+    55: "Starker Nieselregen", 61: "Leichter Regen", 63: "Regen", 65: "Starker Regen",
+    71: "Leichter Schneefall", 73: "Schneefall", 75: "Starker Schneefall",
+    80: "Regenschauer", 81: "Regenschauer", 82: "Starke Regenschauer",
+    95: "Gewitter", 96: "Gewitter mit Hagel", 99: "Gewitter mit Hagel"
+  };
+  return labels[Number(code)] || "Unbekannt";
+}
+
+function weatherIcon(code) {
+  const value = Number(code);
+  if (value === 0) return "☀";
+  if (value <= 3) return "☁";
+  if (value >= 71 && value <= 77) return "❄";
+  if (value >= 95) return "⚡";
+  if (value >= 51) return "雨";
+  return "◌";
+}
+
+function bindWeatherPanel() {
+  const root = document.querySelector(".weather-root");
+  if (!root || !window.edex?.getWeather) return;
+  const locationInput = root.querySelector("[data-weather-location]");
+  const status = root.querySelector("[data-weather-status]");
+  const current = root.querySelector("[data-weather-current]");
+  const days = root.querySelector("[data-weather-days]");
+  let request = 0;
+  const load = async () => {
+    const token = ++request;
+    const location = locationInput?.value?.trim() || "Berlin";
+    status.textContent = "Wetter wird geladen …";
+    try {
+      const data = await window.edex.getWeather(location);
+      if (token !== request) return;
+      const now = data.current || {};
+      current.innerHTML = `
+        <div class="weather-main"><span class="weather-icon">${weatherIcon(now.weather_code)}</span><strong>${Math.round(Number(now.temperature_2m) || 0)}°</strong></div>
+        <div class="weather-condition">${escapeHtml(weatherLabel(now.weather_code))}</div>
+        <div class="weather-meta">Gefühlt ${Math.round(Number(now.apparent_temperature) || 0)}° · ${Math.round(Number(now.relative_humidity_2m) || 0)}% · Wind ${Math.round(Number(now.wind_speed_10m) || 0)} km/h</div>`;
+      const daily = data.daily || {};
+      const dates = daily.time || [];
+      days.innerHTML = dates.slice(0, 4).map((date, index) => {
+        const locale = window.edexI18n?.locale?.() === "en" ? "en-US" : "de-DE";
+        const day = new Date(`${date}T12:00:00`).toLocaleDateString(locale, { weekday: "short" }).toUpperCase();
+        return `<div class="weather-day"><span>${escapeHtml(day)}</span><b>${weatherIcon(daily.weather_code?.[index])}</b><strong>${Math.round(Number(daily.temperature_2m_max?.[index]) || 0)}°</strong><small>${Math.round(Number(daily.temperature_2m_min?.[index]) || 0)}°</small></div>`;
+      }).join("");
+      const locale = window.edexI18n?.locale?.() === "en" ? "en-US" : "de-DE";
+      const updated = window.edexI18n?.locale?.() === "en" ? "updated" : "aktualisiert";
+      status.textContent = `${data.location} · ${updated} ${new Date().toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}`;
+    } catch (error) {
+      status.textContent = error?.message || "Wetter nicht verfügbar";
+      current.innerHTML = "";
+      days.innerHTML = "";
+    }
+  };
+  locationInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      load();
+    }
+  });
+  root.querySelector("[data-weather-refresh]")?.addEventListener("click", load);
+  load();
+  state.weatherTimer = setInterval(load, 15 * 60 * 1000);
 }
 
 function buildLayout() {
@@ -2891,6 +3077,7 @@ function bindPluginPanels() {
   if (state.layout.calculator) window.calculatorPanel?.bind?.(state);
   if (state.layout.dock && state.primary) window.dockPanel?.bind?.(state);
   else window.dockPanel?.unbind?.(state);
+  if (state.layout.weather) bindWeatherPanel();
 }
 
 function updateDesktopViewToggle() {
@@ -3198,11 +3385,12 @@ async function loadDesktopListing(options = {}) {
 async function fillDrivesStage() {
   const stage = document.getElementById("drives-stage");
   if (!stage) return;
+  const translate = (value) => window.edexI18n?.translateDynamic?.(value) || value;
   try {
     const listing = await window.edex.listDrives();
     const items = listing.items || [];
     if (!items.length) {
-      stage.innerHTML = `<p class="path-empty">找不到本機磁碟</p>`;
+      stage.innerHTML = `<p class="path-empty">${escapeHtml(translate("找不到本機磁碟"))}</p>`;
       return;
     }
     stage.innerHTML = items.map((d) => `
@@ -3211,10 +3399,10 @@ async function fillDrivesStage() {
         <div class="drive-main">
           <div class="drive-head">
             <span class="drive-name">${escapeHtml(d.name)}</span>
-            <span class="drive-meta">${escapeHtml(d.freeLabel)} 可用 / ${escapeHtml(d.totalLabel)}</span>
+            <span class="drive-meta">${escapeHtml(d.freeLabel)} ${escapeHtml(translate("可用"))} / ${escapeHtml(d.totalLabel)}</span>
           </div>
           <div class="drive-bar"><i style="width:${d.pct}%"></i></div>
-          <div class="drive-foot">${escapeHtml(d.type)}${d.fs ? ` · ${escapeHtml(d.fs)}` : ""} · 已用 ${d.pct}%</div>
+          <div class="drive-foot">${escapeHtml(translate(d.type))}${d.fs ? ` · ${escapeHtml(d.fs)}` : ""} · ${escapeHtml(translate("已用"))} ${d.pct}%</div>
         </div>
       </button>
     `).join("");
@@ -3232,7 +3420,7 @@ async function fillDrivesStage() {
       onRefresh: () => fillDrivesStage()
     });
   } catch (err) {
-    stage.innerHTML = `<p class="path-empty">${escapeHtml(err.message || "無法讀取磁碟")}</p>`;
+    stage.innerHTML = `<p class="path-empty">${escapeHtml(err.message || translate("無法讀取磁碟"))}</p>`;
   }
 }
 
@@ -3248,13 +3436,14 @@ function bindTerminal() {
   terminalInstances.clear();
   grid.innerHTML = terminalPaneIds.map((id, index) => `
     <section class="terminal-pane" data-terminal-pane="${id}">
-      <header class="terminal-pane-head"><span>TTY ${index + 1}</span><span class="terminal-pane-actions"><button type="button" data-terminal-putty title="PuTTY einbetten">PuTTY</button><button type="button" data-terminal-close title="Terminal schließen">×</button></span></header>
+      <header class="terminal-pane-head"><span>TTY ${index + 1}</span><span class="terminal-pane-actions"><button type="button" data-terminal-browser title="Datei-Browser im Terminal öffnen">FILES</button><button type="button" data-terminal-putty title="PuTTY im Terminal einbetten">PuTTY</button><button type="button" data-terminal-shell title="Zur Shell zurückkehren">SHELL</button><button type="button" data-terminal-close title="Terminal schließen">×</button></span></header>
       <div class="terminal-output" data-terminal-output aria-label="Terminalausgabe"></div>
     </section>`).join("");
   terminalPaneIds.forEach((id) => {
     const pane = grid.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
     const output = pane?.querySelector("[data-terminal-output]");
     if (!pane || !output) return;
+    if (terminalNativePanes.has(id)) pane.classList.add("terminal-pane-native");
     const existing = terminalInstances.get(id);
     const terminal = existing || (window.Terminal ? new window.Terminal({
       cursorBlink: true,
@@ -3276,9 +3465,11 @@ function bindTerminal() {
       const embedded = terminalNativePanes.get(id);
       if (!embedded) return;
       const rect = pane.getBoundingClientRect();
-      window.edex.embedBounds({ hwnd: embedded.hwnd, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
+      window.edex.embedBounds({ hwnd: embedded.hwnd, kind: embedded.kind, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
     };
     const puttyButton = pane.querySelector("[data-terminal-putty]");
+    const browserButton = pane.querySelector("[data-terminal-browser]");
+    const shellButton = pane.querySelector("[data-terminal-shell]");
     puttyButton?.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
       window.edex?.setMouseIgnore?.(false);
@@ -3294,12 +3485,44 @@ function bindTerminal() {
         window.edex.closeTerminal(id);
         const result = await window.edex.embedPutty({ target: target.trim(), bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
         if (!result?.ok) throw new Error(result?.message || "PuTTY konnte nicht eingebettet werden");
-        terminalNativePanes.set(id, { hwnd: result.hwnd });
+        terminalNativePanes.set(id, { hwnd: result.hwnd, kind: "putty" });
         pane.classList.add("terminal-pane-native");
         status.textContent = `PuTTY in TTY ${terminalPaneIds.indexOf(id) + 1}`;
       } catch (error) {
         status.textContent = error?.message || "PuTTY konnte nicht eingebettet werden";
       }
+    });
+    browserButton?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const picked = await window.edex.pickFolder();
+      if (!picked) return;
+      status.textContent = "Datei-Browser wird gestartet …";
+      const rect = pane.getBoundingClientRect();
+      try {
+        const embedded = terminalNativePanes.get(id);
+        if (embedded) await window.edex.embedRelease({ hwnd: embedded.hwnd });
+        window.edex.closeTerminal(id);
+        const result = await window.edex.embedFileBrowser({
+          target: picked,
+          bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+        });
+        if (!result?.ok) throw new Error(result?.message || "Datei-Browser konnte nicht eingebettet werden");
+        terminalNativePanes.set(id, { hwnd: result.hwnd, kind: "fileBrowser" });
+        pane.classList.add("terminal-pane-native");
+        status.textContent = `Datei-Browser in TTY ${terminalPaneIds.indexOf(id) + 1}`;
+      } catch (error) {
+        status.textContent = error?.message || "Datei-Browser konnte nicht eingebettet werden";
+      }
+    });
+    shellButton?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const embedded = terminalNativePanes.get(id);
+      if (embedded) await window.edex.embedRelease({ hwnd: embedded.hwnd });
+      terminalNativePanes.delete(id);
+      terminalStarted.delete(id);
+      bindTerminal();
     });
     syncNativeBounds();
     pane.querySelector("[data-terminal-close]")?.addEventListener("click", () => {
@@ -3326,11 +3549,8 @@ function bindTerminal() {
     terminalPaneIds.push(`terminal-${terminalNextPane++}`);
     bindTerminal();
   });
-  root.querySelector("[data-terminal-browser]")?.addEventListener("click", async () => {
-    const picked = await window.edex.pickFolder();
-    if (!picked) return;
-    await addPathCardAt(picked);
-    status.textContent = `Datei-Browser geöffnet: ${picked}`;
+  root.querySelector("[data-terminal-browser]")?.addEventListener("click", () => {
+    root.querySelector("[data-terminal-pane] [data-terminal-browser]")?.click();
   });
   root.querySelector("[data-terminal-layout]")?.addEventListener("change", (event) => {
     terminalGridMode = event.target.value;
@@ -3342,7 +3562,7 @@ function bindTerminal() {
       const embedded = terminalNativePanes.get(id);
       if (!pane || !embedded) return;
       const rect = pane.getBoundingClientRect();
-      window.edex.embedBounds({ hwnd: embedded.hwnd, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
+      window.edex.embedBounds({ hwnd: embedded.hwnd, kind: embedded.kind, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
     });
   }, { passive: true });
   if (!terminalBridgeBound) {
@@ -4827,6 +5047,7 @@ function openSettings() {
       <select id="set-locale">
         <option value="zh-Hant" ${(state.settings.locale || "zh-Hant") === "zh-Hant" ? "selected" : ""}>繁體中文</option>
         <option value="de" ${state.settings.locale === "de" ? "selected" : ""}>Deutsch</option>
+        <option value="en" ${state.settings.locale === "en" ? "selected" : ""}>English</option>
       </select>
     </td></tr></table>
     <h2>畫面與外觀（解析度與網格全顯示器同步）</h2>
@@ -4846,6 +5067,22 @@ function openSettings() {
         <td>主題</td>
         <td>原版介面主題</td>
         <td><select id="set-theme">${themeOpts}</select></td>
+      </tr>
+      <tr>
+        <td>Windows-Farben</td>
+        <td>Windows-Akzentfarbe in das aktive Theme einmischen</td>
+        <td>
+          <select id="set-windows-colors">
+            <option value="off" ${state.settings.windowsColorMode === "off" ? "selected" : ""}>Aus</option>
+            <option value="subtle" ${state.settings.windowsColorMode !== "off" && state.settings.windowsColorMode !== "strong" ? "selected" : ""}>Dezent</option>
+            <option value="strong" ${state.settings.windowsColorMode === "strong" ? "selected" : ""}>Stark</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>Theme-Hintergrund beibehalten</td>
+        <td>Theme-Wallpaper auch ohne aktive Organizer-Oberfläche als Windows-Desktop verwenden</td>
+        <td><input id="set-keep-theme-wallpaper" type="checkbox" ${state.settings.keepThemeWallpaper === true ? "checked" : ""}></td>
       </tr>
       <tr>
         <td>壁紙</td>
@@ -4884,6 +5121,51 @@ function openSettings() {
         </td>
       </tr>
       <tr>
+        <td>Windows-Skalierzone</td>
+        <td>Geschützter Bereich für eingebettete Windows-Fenster und skalierbare Programme</td>
+        <td><input id="set-window-zone-enabled" type="checkbox" ${state.settings.windowZoneEnabled !== false ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Skalierzone-Ränder</td>
+        <td>Abstand der Zone vom linken, oberen, rechten und unteren Bildschirmrand in Prozent</td>
+        <td>
+          <label>L <input id="set-zone-left" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.left ?? 18)}">%</label>
+          <label>O <input id="set-zone-top" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.top ?? 8)}">%</label>
+          <label>R <input id="set-zone-right" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.right ?? 18)}">%</label>
+          <label>U <input id="set-zone-bottom" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.bottom ?? 8)}">%</label>
+        </td>
+      </tr>
+      <tr>
+        <td>Terminal-Zone</td>
+        <td>Festlegen, ob das Terminal am Rand oder innerhalb der Skalierzone erscheint</td>
+        <td>
+          <select id="set-zone-terminal">
+            <option value="edge" ${state.settings.panelZones?.terminal === "edge" ? "selected" : ""}>Randzone</option>
+            <option value="workspace" ${state.settings.panelZones?.terminal !== "edge" ? "selected" : ""}>Skalierzone</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>PuTTY-Zone</td>
+        <td>Festlegen, ob PuTTY am Rand oder innerhalb der Skalierzone erscheint</td>
+        <td>
+          <select id="set-zone-putty">
+            <option value="edge" ${state.settings.panelZones?.putty === "edge" ? "selected" : ""}>Randzone</option>
+            <option value="workspace" ${state.settings.panelZones?.putty !== "edge" ? "selected" : ""}>Skalierzone</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>File-Browser-Zone</td>
+        <td>Festlegen, ob der File-Browser am Rand oder innerhalb der Skalierzone erscheint</td>
+        <td>
+          <select id="set-zone-file-browser">
+            <option value="edge" ${state.settings.panelZones?.fileBrowser === "edge" ? "selected" : ""}>Randzone</option>
+            <option value="workspace" ${state.settings.panelZones?.fileBrowser !== "edge" ? "selected" : ""}>Skalierzone</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
         <td>網格大小</td>
         <td>以主顯示器為準，所有顯示器使用同一格距（像素）</td>
         <td><input id="set-grid" type="number" min="12" max="96" step="1" value="${settingsGridSize()}"></td>
@@ -4897,6 +5179,31 @@ function openSettings() {
         <td>顯示日期</td>
         <td>在時間下方另起一行顯示年月日</td>
         <td><input id="set-clock-date" type="checkbox" ${clockShowDate() ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>時間格式</td>
+        <td>12 小時或 24 小時制；可隱藏秒數</td>
+        <td>
+          <select id="set-clock-time-format">
+            <option value="24h-seconds" ${clockTimeFormat() === "24h-seconds" ? "selected" : ""}>24h · HH:MM:SS</option>
+            <option value="24h-short" ${clockTimeFormat() === "24h-short" ? "selected" : ""}>24h · HH:MM</option>
+            <option value="12h-seconds" ${clockTimeFormat() === "12h-seconds" ? "selected" : ""}>12h · hh:MM:SS</option>
+            <option value="12h-short" ${clockTimeFormat() === "12h-short" ? "selected" : ""}>12h · hh:MM</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>Datumsformat</td>
+        <td>Numerisches Format für die Datumszeile</td>
+        <td>
+          <select id="set-clock-date-format">
+            <option value="yy/m/d" ${clockDateFormat() === "yy/m/d" ? "selected" : ""}>YY/M/D</option>
+            <option value="dd/mm/yy" ${clockDateFormat() === "dd/mm/yy" ? "selected" : ""}>DD/MM/YY</option>
+            <option value="mm/dd/yy" ${clockDateFormat() === "mm/dd/yy" ? "selected" : ""}>MM/DD/YY</option>
+            <option value="dd.mm.yy" ${clockDateFormat() === "dd.mm.yy" ? "selected" : ""}>DD.MM.YY</option>
+            <option value="yyyy/mm/dd" ${clockDateFormat() === "yyyy/mm/dd" ? "selected" : ""}>YYYY/MM/DD</option>
+          </select>
+        </td>
       </tr>
       <tr>
         <td>時鐘高亮</td>
@@ -4986,6 +5293,14 @@ function openSettings() {
   modal.querySelector("#set-clock-date")?.addEventListener("change", (event) => {
     setClockShowDate(event.target.checked);
   });
+  modal.querySelector("#set-clock-time-format")?.addEventListener("change", (event) => {
+    state.settings = { ...state.settings, clockTimeFormat: event.target.value };
+    renderClock();
+  });
+  modal.querySelector("#set-clock-date-format")?.addEventListener("change", (event) => {
+    state.settings = { ...state.settings, clockDateFormat: event.target.value };
+    renderClock();
+  });
   modal.querySelector("#set-clock-scale")?.addEventListener("input", (event) => {
     const next = Number(event.target.value);
     if (!Number.isFinite(next)) return;
@@ -5073,6 +5388,10 @@ function openSettings() {
     state.settings = { ...state.settings, migrateFiles };
     state.iconView = modal.querySelector("#set-icon-view").value === "list" ? "list" : "grid";
     const themeName = modal.querySelector("#set-theme").value;
+    const windowsColorMode = ["off", "subtle", "strong"].includes(modal.querySelector("#set-windows-colors")?.value)
+      ? modal.querySelector("#set-windows-colors").value
+      : "subtle";
+    const keepThemeWallpaper = Boolean(modal.querySelector("#set-keep-theme-wallpaper")?.checked);
     const wallpaper = modal.querySelector("#set-wall").value;
     const uiScaleRaw = Number(modal.querySelector("#set-ui-scale").value);
     const uiScale = Number.isFinite(uiScaleRaw) ? Math.max(0.4, Math.min(1.2, uiScaleRaw)) : 1;
@@ -5090,6 +5409,12 @@ function openSettings() {
       || clockLedColor()
     );
     const clockDateValue = Boolean(modal.querySelector("#set-clock-date")?.checked);
+    const clockTimeValue = ["24h-seconds", "24h-short", "12h-seconds", "12h-short"].includes(modal.querySelector("#set-clock-time-format")?.value)
+      ? modal.querySelector("#set-clock-time-format").value
+      : "24h-seconds";
+    const clockDateFormatValue = ["yy/m/d", "dd/mm/yy", "mm/dd/yy", "dd.mm.yy", "yyyy/mm/dd"].includes(modal.querySelector("#set-clock-date-format")?.value)
+      ? modal.querySelector("#set-clock-date-format").value
+      : "yy/m/d";
     const rainFontRaw = Number(modal.querySelector("#set-rain-font").value);
     const rainFontValue = Number.isFinite(rainFontRaw)
       ? Math.max(8, Math.min(72, Math.round(rainFontRaw)))
@@ -5106,8 +5431,31 @@ function openSettings() {
       ? Boolean(modal.querySelector("#set-dock")?.checked)
       : false;
     const dockFrameValue = String(modal.querySelector("#set-dock-frame")?.value || state.settings?.dockFrameStyle || "rounded");
+    const zonePercent = (selector, fallback) => {
+      const value = Number(modal.querySelector(selector)?.value);
+      return Number.isFinite(value) ? Math.max(0, Math.min(45, Math.round(value))) : fallback;
+    };
+    const windowZoneEnabled = Boolean(modal.querySelector("#set-window-zone-enabled")?.checked);
+    const windowZoneMargins = {
+      left: zonePercent("#set-zone-left", 18),
+      top: zonePercent("#set-zone-top", 8),
+      right: zonePercent("#set-zone-right", 18),
+      bottom: zonePercent("#set-zone-bottom", 8)
+    };
+    const panelZones = {
+      terminal: modal.querySelector("#set-zone-terminal")?.value === "edge" ? "edge" : "workspace",
+      putty: modal.querySelector("#set-zone-putty")?.value === "edge" ? "edge" : "workspace",
+      fileBrowser: modal.querySelector("#set-zone-file-browser")?.value === "edge" ? "edge" : "workspace"
+    };
     const localeValue = window.edexI18n?.normalize?.(modal.querySelector("#set-locale")?.value) || "zh-Hant";
-    state.settings = { ...state.settings, dockEnabled: dockEnabledValue, dockFrameStyle: dockFrameValue };
+    state.settings = {
+      ...state.settings,
+      dockEnabled: dockEnabledValue,
+      dockFrameStyle: dockFrameValue,
+      windowZoneEnabled,
+      windowZoneMargins,
+      panelZones
+    };
     syncDockLayout(dockEnabledValue);
     window.dockPanel?.setFrameStyle?.(state, dockFrameValue);
     const result = await window.edex.saveSettings({
@@ -5118,16 +5466,23 @@ function openSettings() {
       clockScale: clockScaleValue,
       clockLedColor: clockLedValue,
       clockShowDate: clockDateValue,
+      clockTimeFormat: clockTimeValue,
+      clockDateFormat: clockDateFormatValue,
       rainFontSize: rainFontValue,
       rainSpeed: rainSpeedValue,
       searchFontSize: searchFontValue,
       layoutMode: layoutModeValue,
       uiScale,
       theme: themeName,
+      windowsColorMode,
+      keepThemeWallpaper,
       wallpaper,
       iconView: state.iconView,
       includeFolders: state.includeFolders,
       migrateFiles,
+      windowZoneEnabled,
+      windowZoneMargins,
+      panelZones,
       locale: localeValue
     });
     state.settings = result.settings;
@@ -5311,6 +5666,11 @@ window.addEventListener("keydown", (event) => {
 (async function start() {
   state.bootstrap = await window.edex.bootstrap();
   state.settings = state.bootstrap.settings || {};
+  try {
+    state.windowsColors = await window.edex.getWindowsColors?.();
+  } catch {
+    state.windowsColors = null;
+  }
   window.edexI18n?.setLocale?.(state.settings.locale || "zh-Hant");
   state.displays = state.bootstrap.displays || [];
   state.displayId = state.bootstrap.displayId ?? window.edex.displayId;
