@@ -75,6 +75,7 @@ const terminalPaneIds = [];
 const terminalBuffers = new Map();
 const terminalStarted = new Set();
 const terminalNativePanes = new Map();
+const terminalInstances = new Map();
 let terminalBridgeBound = false;
 
 const state = {
@@ -3240,25 +3241,37 @@ function bindTerminal() {
   if (!root) return;
   const grid = root.querySelector("[data-terminal-grid]");
   const status = root.querySelector("[data-terminal-status]");
-  if (!grid || !window.edex?.createTerminal) return;
+  if (!grid) return;
   if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
   grid.style.setProperty("--terminal-columns", terminalGridMode === "1x1" ? "1" : "2");
+  terminalInstances.forEach((terminal) => terminal.dispose());
+  terminalInstances.clear();
   grid.innerHTML = terminalPaneIds.map((id, index) => `
     <section class="terminal-pane" data-terminal-pane="${id}">
       <header class="terminal-pane-head"><span>TTY ${index + 1}</span><span class="terminal-pane-actions"><button type="button" data-terminal-putty title="PuTTY einbetten">PuTTY</button><button type="button" data-terminal-close title="Terminal schließen">×</button></span></header>
-      <pre class="terminal-output" data-terminal-output aria-live="polite"></pre>
-      <form class="terminal-command" data-terminal-form>
-        <span class="terminal-prompt" aria-hidden="true">PS&gt;</span>
-        <input type="text" data-terminal-input autocomplete="off" spellcheck="false" placeholder="Befehl …" />
-      </form>
+      <div class="terminal-output" data-terminal-output aria-label="Terminalausgabe"></div>
     </section>`).join("");
   terminalPaneIds.forEach((id) => {
     const pane = grid.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
     const output = pane?.querySelector("[data-terminal-output]");
-    const form = pane?.querySelector("[data-terminal-form]");
-    const input = pane?.querySelector("[data-terminal-input]");
-    if (!pane || !output || !form || !input) return;
-    output.textContent = terminalBuffers.get(id) || "";
+    if (!pane || !output) return;
+    const existing = terminalInstances.get(id);
+    const terminal = existing || (window.Terminal ? new window.Terminal({
+      cursorBlink: true,
+      convertEol: true,
+      fontFamily: '"Fira Mono", "Share Tech Mono", Consolas, monospace',
+      fontSize: 13,
+      theme: { background: "#01080b", foreground: "#00eaff", cursor: "#00ff75" },
+      scrollback: 5000
+    }) : null);
+    if (!terminal) return;
+    if (!existing) {
+      terminalInstances.set(id, terminal);
+      terminal.open(output);
+      terminal.loadAddon(new window.FitAddon.FitAddon());
+      terminal.onData((data) => window.edex.writeTerminal(id, data));
+      terminal.onResize(({ cols, rows }) => window.edex.resizeTerminal(id, cols, rows));
+    }
     const syncNativeBounds = () => {
       const embedded = terminalNativePanes.get(id);
       if (!embedded) return;
@@ -3297,23 +3310,13 @@ function bindTerminal() {
       terminalStarted.delete(id);
       terminalPaneIds.splice(terminalPaneIds.indexOf(id), 1);
       terminalBuffers.delete(id);
+      terminalInstances.get(id)?.dispose();
+      terminalInstances.delete(id);
       if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
       bindTerminal();
     });
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const value = input.value;
-      if (!value) return;
-      window.edex.writeTerminal(id, `${value}\r`);
-      input.value = "";
-    });
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Tab") {
-        event.preventDefault();
-        window.edex.writeTerminal(id, "\t");
-      }
-    });
-    if (!terminalStarted.has(id)) {
+    terminal.fit?.();
+    if (!terminalStarted.has(id) && window.edex?.createTerminal) {
       terminalStarted.add(id);
       window.edex.createTerminal(id).catch?.(() => terminalStarted.delete(id));
     }
@@ -3347,15 +3350,10 @@ function bindTerminal() {
     window.edex.onTerminalData(({ paneId, data }) => {
       const next = `${terminalBuffers.get(paneId) || ""}${data}`.slice(-100000);
       terminalBuffers.set(paneId, next);
-      const output = document.querySelector(`[data-terminal-pane="${CSS.escape(paneId)}"] [data-terminal-output]`);
-      if (output) {
-        output.textContent = next;
-        output.scrollTop = output.scrollHeight;
-      }
+      terminalInstances.get(paneId)?.write(data);
     });
     window.edex.onTerminalExit(({ paneId }) => {
-      const output = document.querySelector(`[data-terminal-pane="${CSS.escape(paneId)}"] [data-terminal-output]`);
-      if (output) output.textContent += "\n[Terminal beendet]\n";
+      terminalInstances.get(paneId)?.writeln("\r\n[Terminal beendet]");
     });
   }
   if (status) status.textContent = `${terminalPaneIds.length} PowerShell-Sitzung${terminalPaneIds.length === 1 ? "" : "en"}`;
@@ -5445,6 +5443,7 @@ window.addEventListener("keydown", (event) => {
 
   snapAllLayoutToGrid();
   buildLayout();
+  bindTerminal();
   window.edexI18n?.translatePage?.();
   setText("info_user", state.bootstrap.username);
   setText("info_host", state.bootstrap.hostname);

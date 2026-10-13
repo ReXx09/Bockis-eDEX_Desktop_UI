@@ -3,6 +3,12 @@ const { spawn } = require("child_process");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
+let nodePty = null;
+try {
+  nodePty = require("node-pty");
+} catch (error) {
+  console.warn("node-pty konnte nicht geladen werden:", error.message);
+}
 
 // A packaged GUI app can outlive the console that launched it.
 for (const stream of [process.stdout, process.stderr]) {
@@ -761,28 +767,28 @@ ipcMain.handle("terminal-run", async (event, command, cwd) => {
 });
 ipcMain.handle("terminal-create", (event, paneId, cwd) => {
   const win = requireTrustedWindow(event);
+  if (!nodePty) throw new Error("ConPTY ist nicht verfügbar. Bitte node-pty für Electron rebuilden.");
   const key = `${win.id}:${String(paneId || "default")}`;
   terminalSessions.get(key)?.kill();
   const workingDirectory = typeof cwd === "string" && fs.existsSync(cwd) && fs.statSync(cwd).isDirectory()
     ? cwd
     : os.homedir();
   const shell = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  const session = spawn(shell, ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "-"], {
+  const session = nodePty.spawn(shell, ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass"], {
     cwd: workingDirectory,
-    windowsHide: true,
-    stdio: ["pipe", "pipe", "pipe"]
+    name: "xterm-256color",
+    cols: 120,
+    rows: 32,
+    useConpty: true,
+    backend: "conpty",
+    env: { ...process.env, TERM: "xterm-256color" }
   });
   terminalSessions.set(key, session);
-  session.stdout.setEncoding("utf8");
-  session.stderr.setEncoding("utf8");
   const sendData = (data) => {
     if (!win.isDestroyed()) win.webContents.send("terminal-data", { paneId, data });
   };
-  session.stdout.on("data", sendData);
-  session.stderr.on("data", sendData);
-  session.on("error", (error) => sendData(`\r\n${error.message || "PowerShell-Fehler"}\r\n`));
-  session.stdin.write("$esc=[char]27; function prompt { $p=(Get-Location).Path; Write-Host -NoNewline (\"$esc[36m╭─$esc[32mPS$esc[36m in $esc[33m$p$esc[36m`r`n╰─$esc[36m> $esc[0m\"); return '' };\r");
-  session.on("close", (exitCode) => {
+  session.onData(sendData);
+  session.onExit(({ exitCode }) => {
     if (terminalSessions.get(key) === session) terminalSessions.delete(key);
     if (!win.isDestroyed()) win.webContents.send("terminal-exit", { paneId, exitCode: exitCode ?? 1 });
   });
@@ -791,7 +797,7 @@ ipcMain.handle("terminal-create", (event, paneId, cwd) => {
 ipcMain.on("terminal-input", (event, paneId, data) => {
   const win = getSenderWindow(event);
   const session = terminalSessions.get(`${win?.id}:${String(paneId || "default")}`);
-  if (session?.stdin && typeof data === "string" && !session.stdin.destroyed) session.stdin.write(data);
+  if (session && typeof data === "string") session.write(data);
 });
 ipcMain.on("terminal-resize", (event, paneId, cols, rows) => {
   const win = getSenderWindow(event);
@@ -799,9 +805,7 @@ ipcMain.on("terminal-resize", (event, paneId, cols, rows) => {
   if (!session) return;
   const nextCols = Math.max(20, Math.min(240, Number(cols) || 100));
   const nextRows = Math.max(5, Math.min(100, Number(rows) || 30));
-  // Standard PowerShell has no PTY resize API; keep the IPC contract for a later PTY backend.
-  void nextCols;
-  void nextRows;
+  session.resize(nextCols, nextRows);
 });
 ipcMain.on("terminal-close", (event, paneId) => {
   const win = getSenderWindow(event);

@@ -14,12 +14,14 @@
     "prepare-assets": "node scripts/prepare-assets.js",
     "prestart": "node scripts/prepare-assets.js",
     "start": "electron .",
-    "predist": "node scripts/prepare-assets.js",
+    "rebuild-native": "electron-rebuild -f -w node-pty",
+    "predist": "npm run rebuild-native && node scripts/prepare-assets.js",
     "dist": "electron-builder --win nsis --x64",
     "dist:dir": "electron-builder --win dir --x64"
   },
   "license": "GPL-3.0",
   "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
     "electron": "^44.7.0",
     "electron-builder": "^26.15.3"
   },
@@ -39,6 +41,7 @@
       "package.json"
     ],
     "asar": true,
+    "npmRebuild": true,
     "forceCodeSigning": false,
     "artifactName": "eDEX-Desktop-Organizer-Setup-${version}.${ext}",
     "win": {
@@ -77,5 +80,10 @@
   },
   "allowScripts": {
     "electron@44.7.0": true
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0"
   }
 }
