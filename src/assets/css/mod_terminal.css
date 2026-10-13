@@ -54,6 +54,11 @@
     padding: 0.15rem 0.4rem;
 }
 
+.terminal-grid-tools button[data-terminal-browser] {
+    color: #00ff75;
+    border-color: rgba(0, 255, 117, 0.42);
+}
+
 .terminal-grid {
     display: grid;
     flex: 1;

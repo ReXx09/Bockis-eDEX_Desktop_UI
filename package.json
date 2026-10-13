@@ -1,7 +1,7 @@
 {
   "name": "edex-desktop-organizer",
   "productName": "eDEX Desktop Organizer",
-  "version": "1.1.9",
+  "version": "1.2.0",
   "description": "Desktop organizer using the eDEX-UI sci-fi HUD layout",
   "main": "main.js",
   "author": "bananamax9113",

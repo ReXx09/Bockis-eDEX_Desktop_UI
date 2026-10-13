@@ -324,6 +324,7 @@ function panelBody(id) {
           <div class="terminal-toolbar">
             <span class="terminal-status" data-terminal-status>PowerShell Grid bereit</span>
             <div class="terminal-grid-tools">
+              <button type="button" data-terminal-browser title="Datei-Browser öffnen">FILES</button>
               <select data-terminal-layout aria-label="Terminal-Raster">
                 <option value="1x1" ${terminalGridMode === "1x1" ? "selected" : ""}>1×1</option>
                 <option value="2x1" ${terminalGridMode === "2x1" ? "selected" : ""}>2×1</option>
@@ -3321,6 +3322,12 @@ function bindTerminal() {
     if (terminalPaneIds.length >= 4) return;
     terminalPaneIds.push(`terminal-${terminalNextPane++}`);
     bindTerminal();
+  });
+  root.querySelector("[data-terminal-browser]")?.addEventListener("click", async () => {
+    const picked = await window.edex.pickFolder();
+    if (!picked) return;
+    await addPathCardAt(picked);
+    status.textContent = `Datei-Browser geöffnet: ${picked}`;
   });
   root.querySelector("[data-terminal-layout]")?.addEventListener("change", (event) => {
     terminalGridMode = event.target.value;
