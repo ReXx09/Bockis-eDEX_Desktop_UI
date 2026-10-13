@@ -78,6 +78,124 @@
     box-shadow: inset 0 0 0.8rem rgba(0, 246, 255, 0.04);
 }
 
+.terminal-pane-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+}
+
+.terminal-pane-files .terminal-output {
+    display: none;
+}
+
+.terminal-pane-putty .terminal-output {
+    display: none;
+}
+
+.terminal-native-slot {
+    flex: 1;
+    min-width: 10rem;
+    min-height: 0;
+    border-left: 1px solid rgba(0, 246, 255, 0.3);
+    background: rgba(0, 8, 11, 0.88);
+}
+
+.terminal-file-browser {
+    flex: 1;
+}
+
+.terminal-file-browser {
+    display: flex;
+    flex: 0 1 42%;
+    min-width: 10rem;
+    min-height: 0;
+    flex-direction: column;
+    border-left: 1px solid rgba(0, 246, 255, 0.3);
+    background: rgba(0, 8, 11, 0.88);
+    color: #9ffcff;
+    font-size: 0.78em;
+}
+
+.terminal-file-head {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 1.7rem;
+    padding: 0.15rem 0.3rem;
+    border-bottom: 1px solid rgba(0, 246, 255, 0.24);
+}
+
+.terminal-file-head span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-file-head button,
+.terminal-file-item {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+}
+
+.terminal-file-head button {
+    padding: 0.1rem 0.25rem;
+    color: #00ff75;
+}
+
+.terminal-file-list {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.15rem;
+}
+
+.terminal-file-item {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr) auto;
+    align-items: center;
+    width: 100%;
+    gap: 0.25rem;
+    padding: 0.16rem 0.2rem;
+    text-align: left;
+}
+
+.terminal-file-item:hover,
+.terminal-file-item:focus-visible,
+.terminal-file-head button:hover,
+.terminal-file-head button:focus-visible,
+.terminal-pane-actions button.on {
+    background: rgba(0, 246, 255, 0.16);
+    outline: none;
+}
+
+.terminal-file-icon {
+    color: #ffd23c;
+    text-align: center;
+}
+
+.terminal-file-name,
+.terminal-file-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-file-meta {
+    color: rgba(159, 252, 255, 0.48);
+    font-size: 0.85em;
+}
+
+.terminal-file-empty {
+    padding: 0.7rem;
+    color: rgba(159, 252, 255, 0.55);
+}
+
 .terminal-pane-head {
     display: flex;
     align-items: center;
@@ -94,6 +212,10 @@
     color: inherit;
     cursor: pointer;
     font: inherit;
+}
+
+.terminal-pane-head button.terminal-mode-action {
+    display: none;
 }
 
 .terminal-pane-actions {

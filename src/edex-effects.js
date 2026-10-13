@@ -117,6 +117,7 @@
         dayLength: 1000 * 45,
         introLinesDuration: 2000,
         introLinesColor: globeTheme.marker || color,
+        introLinesPersistent: true,
         maxPins: 300,
         maxMarkers: 100
       });
@@ -448,7 +449,7 @@
     return [...host.querySelectorAll(".cpu-core")];
   }
 
-  function drawMemGauge(canvas, usedPct, availPct) {
+  function drawMemGauge(canvas, usedPct, availPct, valueText = `${Math.round(usedPct)}%`, valueLabel = "USED") {
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
     const size = Math.max(72, Math.min(canvas.clientWidth || 120, canvas.clientHeight || 120));
@@ -490,13 +491,13 @@
     ctx.stroke();
 
     ctx.fillStyle = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
-    ctx.font = `600 ${Math.round(size * 0.22)}px Rajdhani, sans-serif`;
+    ctx.font = `600 ${Math.round(size * (String(valueText).length > 6 ? 0.16 : 0.22))}px Rajdhani, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${Math.round(usedPct)}%`, cx, cy - size * 0.02);
+    ctx.fillText(String(valueText), cx, cy - size * 0.02);
     ctx.globalAlpha = 0.55;
     ctx.font = `500 ${Math.round(size * 0.1)}px Rajdhani, sans-serif`;
-    ctx.fillText("USED", cx, cy + size * 0.16);
+    ctx.fillText(String(valueLabel), cx, cy + size * 0.16);
     ctx.globalAlpha = 1;
   }
 
@@ -584,14 +585,28 @@
     const total = Math.max(1, mem.total || 1);
     const used = Math.max(0, mem.used || 0);
     const free = Math.max(0, mem.free || 0);
-    const available = Math.max(0, Math.min(free, mem.available != null ? mem.available : free));
+    const available = Math.max(0, Math.min(total, mem.available != null ? mem.available : free));
+    const cached = Math.max(0, Math.min(total, mem.cached || 0));
     const usedPct = (used / total) * 100;
     const freePct = (free / total) * 100;
-    const availPct = Math.max(0, Math.min(freePct, (available / total) * 100 * 0.35));
+    const availablePct = Math.max(0, Math.min(100, (available / total) * 100));
+    const cachedPct = Math.max(0, Math.min(100, (cached / total) * 100));
+    const availPct = Math.max(0, Math.min(freePct, availablePct * 0.35));
     const freeRemain = Math.max(0, freePct - availPct);
 
+    const bytes = (value) => `${(value / 1073741824).toFixed(1)} GiB`;
+    const gaugeMode = document.documentElement.dataset.ramGaugeMode || "used";
+    const gaugeValues = {
+      used: { pct: usedPct, text: `${Math.round(usedPct)}%`, label: "USED" },
+      free: { pct: freePct, text: `${Math.round(freePct)}%`, label: "FREE" },
+      cached: { pct: cachedPct, text: `${Math.round(cachedPct)}%`, label: "CACHED" },
+      available: { pct: availablePct, text: `${Math.round(availablePct)}%`, label: "AVAIL" },
+      total: { pct: 100, text: bytes(total), label: "TOTAL" }
+    };
+    const gauge = gaugeValues[gaugeMode] || gaugeValues.used;
+
     memAnim += (usedPct - memAnim) * 0.28;
-    drawMemGauge(document.getElementById("mod_ramwatcher_gauge"), memAnim, availPct);
+    drawMemGauge(document.getElementById("mod_ramwatcher_gauge"), gauge.pct, availPct, gauge.text, gauge.label);
 
     const usedSeg = document.getElementById("mod_ramwatcher_used_seg");
     const availSeg = document.getElementById("mod_ramwatcher_avail_seg");
@@ -606,6 +621,9 @@
     setTxt("mod_ramwatcher_used_pct", usedPct);
     setTxt("mod_ramwatcher_avail_pct", availPct);
     setTxt("mod_ramwatcher_free_pct", freeRemain);
+    setTxt("mod_ramwatcher_cached_pct", cachedPct);
+    const totalValue = document.getElementById("mod_ramwatcher_total_value");
+    if (totalValue) totalValue.textContent = bytes(total);
 
     memHistory.push(usedPct);
     if (memHistory.length > 48) memHistory.shift();
@@ -648,13 +666,12 @@
       ctx.shadowBlur = 0;
     }
 
-    const gib = (v) => (v / 1073741824).toFixed(1);
     const info = document.getElementById("mod_ramwatcher_info");
-    if (info) info.textContent = `USING ${gib(used)} / ${gib(total)} GiB`;
+    if (info) info.textContent = `USING ${bytes(used)} / ${bytes(total)}`;
     const swapBar = document.getElementById("mod_ramwatcher_swapbar");
     const swapText = document.getElementById("mod_ramwatcher_swaptext");
     if (swapBar) swapBar.value = Math.min(100, usedPct);
-    if (swapText) swapText.textContent = `${gib(free)} GiB free`;
+    if (swapText) swapText.textContent = `${bytes(free)} free`;
   }
 
   async function refreshSys() {

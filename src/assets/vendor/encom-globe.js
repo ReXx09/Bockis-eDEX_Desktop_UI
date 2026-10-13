@@ -41749,9 +41749,12 @@ var addInitialData = function(){
 
 var createParticles = function(){
 
-    if(this.hexGrid){
-        this.scene.remove(this.hexGrid);
-    }
+	if(this.hexGrid){
+		this.scene.remove(this.hexGrid);
+	}
+	if(this.hexBorders){
+		this.scene.remove(this.hexBorders);
+	}
 
     var pointVertexShader = [
         "#define PI 3.141592653589793238462643",
@@ -41929,6 +41932,36 @@ var createParticles = function(){
     this.hexGrid = new THREE.Mesh( geometry, pointMaterial );
     this.scene.add( this.hexGrid );
 
+	var borderEdges = {};
+	var edgeKey = function(a, b){
+		var p = [a.x.toFixed(4), a.y.toFixed(4), a.z.toFixed(4)].join(",");
+		var q = [b.x.toFixed(4), b.y.toFixed(4), b.z.toFixed(4)].join(",");
+		return p < q ? p + "|" + q : q + "|" + p;
+	};
+	for(var tileIndex = 0; tileIndex < this.tiles.length; tileIndex++){
+		var boundary = this.tiles[tileIndex].b;
+		for(var edgeIndex = 0; edgeIndex < boundary.length; edgeIndex++){
+			var start = boundary[edgeIndex];
+			var end = boundary[(edgeIndex + 1) % boundary.length];
+			var key = edgeKey(start, end);
+			if(!borderEdges[key]) borderEdges[key] = { count: 0, start: start, end: end };
+			borderEdges[key].count++;
+		}
+	}
+	var borderGeometry = new THREE.Geometry();
+	for(var borderKey in borderEdges){
+		if(borderEdges[borderKey].count !== 1) continue;
+		borderGeometry.vertices.push(borderEdges[borderKey].start, borderEdges[borderKey].end);
+	}
+	var borderMaterial = new THREE.LineBasicMaterial({
+		color: this.baseColor,
+		transparent: true,
+		opacity: .38,
+		linewidth: 1
+	});
+	this.hexBorders = new THREE.Line(borderGeometry, borderMaterial, THREE.LinePieces);
+	this.scene.add(this.hexBorders);
+
 };
 
 var createIntroLines = function(){
@@ -41940,24 +41973,18 @@ var createIntroLines = function(){
         opacity: .5
     });
 
-    for(var i = 0; i<this.introLinesCount; i++){
+	for(var i = 0; i<this.introLinesCount; i++){
         var geometry = new THREE.Geometry();
 
-        var lat = Math.random()*180 + 90;
-        var lon =  Math.random()*5;
-        var lenBase = 4 + Math.floor(Math.random()*5);
+		var lat = Math.random()*160 - 80;
+		var lon = Math.random()*360 - 180;
+		var surfacePoint = utils.mapPoint(lat, lon);
+		var outerPoint = utils.mapPoint(lat, lon, 500 * this.introLinesAltitude);
 
-        if(Math.random()<.3){
-            lon = Math.random()*30 - 50;
-            lenBase = 3 + Math.floor(Math.random()*3);
-        }
-
-        for(var j = 0; j< lenBase; j++){
-            var thisPoint = utils.mapPoint(lat, lon - j * 5);
-            sPoint = new THREE.Vector3(thisPoint.x*this.introLinesAltitude, thisPoint.y*this.introLinesAltitude, thisPoint.z*this.introLinesAltitude);
-
-            geometry.vertices.push(sPoint);
-        }
+		geometry.vertices.push(
+			new THREE.Vector3(surfacePoint.x * 1.006, surfacePoint.y * 1.006, surfacePoint.z * 1.006),
+			new THREE.Vector3(outerPoint.x, outerPoint.y, outerPoint.z)
+		);
 
         this.introLines.add(new THREE.Line(geometry, introLinesMaterial));
 
@@ -42000,6 +42027,7 @@ function Globe(width, height, opts){
         introLinesDuration: 2000,
         introLinesColor: "#8FD8D8",
         introLinesCount: 60,
+		introLinesPersistent: false,
         scale: 1.0,
         dayLength: 28000,
         pointsPerDegree: 1.1,
@@ -42339,9 +42367,13 @@ Globe.prototype.tick = function(){
             this.introLines.children[0].material.opacity = 1;
         }
         this.introLines.rotateY((2 * Math.PI)/(this.introLinesDuration/renderTime));
-    } else if(this.introLines){
-        this.scene.remove(this.introLines);
-        delete[this.introLines];
+	} else if(this.introLines){
+		if(this.introLinesPersistent){
+			this.introLines.children[0].material.opacity = .5;
+		} else {
+			this.scene.remove(this.introLines);
+			delete[this.introLines];
+		}
     }
 
     // do the shaders

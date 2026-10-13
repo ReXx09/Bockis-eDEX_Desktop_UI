@@ -1290,6 +1290,28 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     position: relative;
 }
 
+.hud-card:not(.clock-bare) .card-body > #mod_clock {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
+}
+
+.hud-card:not(.clock-bare) .card-body > #mod_clock #mod_clock_led {
+    position: relative;
+    left: auto !important;
+    top: auto !important;
+}
+
+.hud-card.clock-bare .card-body > #mod_clock .analog-clock,
+.hud-card.clock-bare .card-body > #mod_clock .analog-clock-date {
+    margin-left: auto;
+    margin-right: auto;
+}
+
 #mod_clock {
     display: block;
     position: relative;
@@ -1471,6 +1493,45 @@ div.modal_popup > h1,
 .modal_popup h2 {
     margin: 1.2rem 0 0.6rem;
     opacity: 0.85;
+}
+
+.modal_popup .settings-section {
+    margin: 0 0 0.7rem;
+    border: 0.1rem solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.035);
+}
+
+.modal_popup .settings-section > summary {
+    padding: 0.55rem 0.7rem;
+    border-bottom: 0.1rem solid transparent;
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    cursor: pointer;
+    list-style: none;
+    letter-spacing: 0.04em;
+}
+
+.modal_popup .settings-section > summary::-webkit-details-marker {
+    display: none;
+}
+
+.modal_popup .settings-section > summary::before {
+    content: "+";
+    display: inline-block;
+    width: 1.2em;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+}
+
+.modal_popup .settings-section[open] > summary {
+    border-bottom-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.08);
+}
+
+.modal_popup .settings-section[open] > summary::before {
+    content: "−";
+}
+
+.modal_popup .settings-section-table {
+    margin: 0;
 }
 
 .path-card .card-actions {
@@ -1907,6 +1968,8 @@ div.modal_popup input[type="color"],
 .ram-stack-legend em.used { background: rgb(var(--color_r), var(--color_g), var(--color_b)); }
 .ram-stack-legend em.avail { background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.45); }
 .ram-stack-legend em.free { background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.18); }
+.ram-stack-legend em.cached { background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.3); }
+.ram-stack-legend em.total { background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7); }
 
 .ram-stack-legend b {
     font-weight: 600;

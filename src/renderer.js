@@ -39,24 +39,24 @@ const DEFAULT_DESKTOP_PRIMARY = { x: 18, y: 2, w: 47, h: 78 };
 const DEFAULT_DESKTOP_SECONDARY = { x: 8, y: 8, w: 84, h: 84 };
 
 const PANEL_META = {
-  clock: { title: "時鐘", box: { x: 1.2, y: 2, w: 16, h: 8 } },
-  coderain: { title: "瀑布代碼", box: { x: 34, y: 64, w: 16, h: 22 } },
-  cpu: { title: "處理器", box: { x: 1.2, y: 13, w: 16, h: 20 } },
-  ram: { title: "記憶體", box: { x: 1.2, y: 34, w: 16, h: 16 } },
-  toplist: { title: "進程", box: { x: 1.2, y: 51, w: 16, h: 18 } },
-  globe: { title: "地球視圖", box: { x: 82, y: 2, w: 16.5, h: 48 } },
-  conninfo: { title: "網路流量", box: { x: 82, y: 52, w: 16.5, h: 23 } },
-  calendar: { title: "日曆", box: { x: 66, y: 2, w: 15, h: 38 } },
-  drives: { title: "本機磁碟", box: { x: 66, y: 42, w: 15, h: 38 } },
-  filesearch: { title: "快速搜尋", box: { x: 18, y: 82, w: 47, h: 16 } },
-  terminal: { title: "終端機", box: { x: 19, y: 42, w: 31, h: 36 } },
-  weather: { title: "天氣", box: { x: 52, y: 42, w: 13, h: 28 } },
-  cockpit: { title: "駕駛室", box: { x: 20, y: 22, w: 38, h: 54 } },
-  cassette: { title: "音樂磁帶", box: { x: 28, y: 28, w: 36, h: 38 } },
+  clock: { title: "Uhr", box: { x: 1.2, y: 2, w: 16, h: 8 } },
+  coderain: { title: "Code-Regen", box: { x: 34, y: 64, w: 16, h: 22 } },
+  cpu: { title: "Prozessor", box: { x: 1.2, y: 13, w: 16, h: 20 } },
+  ram: { title: "Arbeitsspeicher", box: { x: 1.2, y: 34, w: 16, h: 16 } },
+  toplist: { title: "Prozesse", box: { x: 1.2, y: 51, w: 16, h: 18 } },
+  globe: { title: "Weltansicht", box: { x: 82, y: 2, w: 16.5, h: 48 } },
+  conninfo: { title: "Netzwerkverkehr", box: { x: 82, y: 52, w: 16.5, h: 23 } },
+  calendar: { title: "Kalender", box: { x: 66, y: 2, w: 15, h: 38 } },
+  drives: { title: "Laufwerke", box: { x: 66, y: 42, w: 15, h: 38 } },
+  filesearch: { title: "Schnellsuche", box: { x: 18, y: 82, w: 47, h: 16 } },
+  terminal: { title: "Terminal", box: { x: 19, y: 42, w: 31, h: 36 } },
+  weather: { title: "Wetter", box: { x: 52, y: 42, w: 13, h: 28 } },
+  cockpit: { title: "Cockpit", box: { x: 20, y: 22, w: 38, h: 54 } },
+  cassette: { title: "Musikkassette", box: { x: 28, y: 28, w: 36, h: 38 } },
   ddj: { title: "DDJ-1000", box: { x: 8, y: 6, w: 84, h: 86 } },
-  cpuRail: { title: "CPU 供電路徑", box: { x: 20, y: 28, w: 42, h: 40 } },
-  calculator: { title: "計算器", box: { x: 40, y: 18, w: 18, h: 48 } },
-  dock: { title: "底部 Dock", box: { x: 25, y: 94, w: 50, h: 6 } }
+  cpuRail: { title: "CPU-Versorgung", box: { x: 20, y: 28, w: 42, h: 40 } },
+  calculator: { title: "Rechner", box: { x: 40, y: 18, w: 18, h: 48 } },
+  dock: { title: "Dock", box: { x: 25, y: 94, w: 50, h: 6 } }
 };
 
 const MACOS_TAGS = [
@@ -77,6 +77,9 @@ const terminalBuffers = new Map();
 const terminalStarted = new Set();
 const terminalNativePanes = new Map();
 const terminalInstances = new Map();
+const terminalCwds = new Map();
+const terminalBrowserState = new Map();
+const terminalBrowserTimers = new Map();
 let terminalBridgeBound = false;
 
 const state = {
@@ -141,6 +144,17 @@ function panelBody(id) {
       return `
         <div id="mod_clock">
           <div id="mod_clock_led" class="led-matrix" aria-label="點陣時鐘"></div>
+          <div id="mod_clock_analog" class="analog-clock" aria-label="Analoge Uhr" hidden>
+            <span class="analog-clock-number number-12">12</span>
+            <span class="analog-clock-number number-3">3</span>
+            <span class="analog-clock-number number-6">6</span>
+            <span class="analog-clock-number number-9">9</span>
+            <span class="analog-clock-hand analog-clock-hour"></span>
+            <span class="analog-clock-hand analog-clock-minute"></span>
+            <span class="analog-clock-hand analog-clock-second"></span>
+            <span class="analog-clock-center"></span>
+          </div>
+          <div id="mod_clock_analog_date" class="analog-clock-date" hidden></div>
         </div>`;
     case "coderain":
       return `
@@ -232,6 +246,8 @@ function panelBody(id) {
                   <span><em class="used"></em>USED <b id="mod_ramwatcher_used_pct">—</b></span>
                   <span><em class="avail"></em>AVAIL <b id="mod_ramwatcher_avail_pct">—</b></span>
                   <span><em class="free"></em>FREE <b id="mod_ramwatcher_free_pct">—</b></span>
+                  <span><em class="cached"></em>CACHED <b id="mod_ramwatcher_cached_pct">—</b></span>
+                  <span><em class="total"></em>TOTAL <b id="mod_ramwatcher_total_value">—</b></span>
                 </div>
               </div>
             </div>
@@ -289,18 +305,18 @@ function panelBody(id) {
           <div id="mod_globe_innercontainer">
             <h1>WORLD VIEW<i>GLOBAL NETWORK MAP</i></h1>
             <h2>ENDPOINT LAT/LON<i class="mod_globe_headerInfo">0.0000, 0.0000</i></h2>
-            <div class="globe-filters" role="group" aria-label="Verbindungsfilter">
-              <button type="button" class="globe-filter on" data-globe-filter="world">WORLD</button>
-              <button type="button" class="globe-filter" data-globe-filter="outgoing">OUT</button>
-              <button type="button" class="globe-filter" data-globe-filter="incoming">IN</button>
-              <button type="button" class="globe-filter" data-globe-filter="local">LOCAL</button>
-            </div>
             <div class="globe-connection-legend" aria-label="Verbindungsarten">
               <span><i class="outgoing"></i>OUT</span>
               <span><i class="incoming"></i>IN</span>
               <span><i class="local"></i>LOCAL</span>
             </div>
             <div id="mod_globe_canvas_placeholder"></div>
+            <div class="globe-filters" role="group" aria-label="Verbindungsfilter">
+              <button type="button" class="globe-filter on" data-globe-filter="world">WORLD</button>
+              <button type="button" class="globe-filter" data-globe-filter="outgoing">OUT</button>
+              <button type="button" class="globe-filter" data-globe-filter="incoming">IN</button>
+              <button type="button" class="globe-filter" data-globe-filter="local">LOCAL</button>
+            </div>
             <h3>OFFLINE</h3>
           </div>
         </div>`;
@@ -731,6 +747,10 @@ function clockShowDate() {
   return state.settings?.clockShowDate !== false;
 }
 
+function clockDisplayMode() {
+  return state.settings?.clockDisplayMode === "analog" ? "analog" : "digital";
+}
+
 function clockTimeFormat() {
   const value = String(state.settings?.clockTimeFormat || "24h-seconds");
   return ["24h-seconds", "24h-short", "12h-seconds", "12h-short"].includes(value) ? value : "24h-seconds";
@@ -739,6 +759,19 @@ function clockTimeFormat() {
 function clockDateFormat() {
   const value = String(state.settings?.clockDateFormat || "yy/m/d");
   return ["yy/m/d", "dd/mm/yy", "mm/dd/yy", "dd.mm.yy", "yyyy/mm/dd"].includes(value) ? value : "yy/m/d";
+}
+
+function ramGaugeMode() {
+  const value = String(state.settings?.ramGaugeMode || "used");
+  return ["used", "free", "cached", "available", "total"].includes(value) ? value : "used";
+}
+
+async function setRamGaugeMode(mode) {
+  const next = ["used", "free", "cached", "available", "total"].includes(mode) ? mode : "used";
+  state.settings = { ...state.settings, ramGaugeMode: next };
+  document.documentElement.dataset.ramGaugeMode = next;
+  const result = await window.edex.saveSettings({ ramGaugeMode: next });
+  if (result?.settings) state.settings = result.settings;
 }
 
 function wallpaperGridPx() {
@@ -1300,6 +1333,11 @@ function alignClockToWallpaperGrid() {
   const card = document.getElementById("card_clock");
   const host = document.getElementById("mod_clock_led");
   if (!card || !host || card.classList.contains("dragging")) return;
+  if (!card.classList.contains("clock-bare")) {
+    host.style.left = "auto";
+    host.style.top = "auto";
+    return;
+  }
   const g = wallpaperGridCell();
   const scale = Number(state.scaleFactor) || 1;
   const originX = (Number(state.bounds?.x) || 0) * scale;
@@ -1322,9 +1360,25 @@ function alignClockToWallpaperGrid() {
 
 function renderClock() {
   const host = document.getElementById("mod_clock_led");
-  if (!host) return;
+  const analog = document.getElementById("mod_clock_analog");
+  const analogDate = document.getElementById("mod_clock_analog_date");
+  if (!host || !analog || !analogDate) return;
   applyClockMetrics();
   const now = new Date();
+  const isAnalog = clockDisplayMode() === "analog";
+  host.hidden = isAnalog;
+  analog.hidden = !isAnalog;
+  analogDate.hidden = !isAnalog || !clockShowDate();
+  if (isAnalog) {
+    const seconds = now.getSeconds() + now.getMilliseconds() / 1000;
+    const minute = now.getMinutes() + seconds / 60;
+    const hour = (now.getHours() % 12) + minute / 60;
+    analog.style.setProperty("--clock-hour-angle", `${hour * 30}deg`);
+    analog.style.setProperty("--clock-minute-angle", `${minute * 6}deg`);
+    analog.style.setProperty("--clock-second-angle", `${seconds * 6}deg`);
+    analogDate.textContent = `${String(now.getFullYear()).slice(-2)}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`;
+    return;
+  }
   const timeMode = clockTimeFormat();
   const hour24 = now.getHours();
   const hour12 = hour24 % 12 || 12;
@@ -1412,6 +1466,7 @@ function currentDisplayLayout() {
     pathCards: state.pathCards.map((card) => ({
       id: card.id,
       path: card.path,
+      name: card.name || "",
       x: card.x,
       y: card.y,
       w: card.w,
@@ -1800,6 +1855,7 @@ function makeInteractive(el, opts) {
 async function boot() {
   document.getElementById("boot_screen")?.remove();
   applyTheme(state.theme || state.bootstrap?.theme, state.settings.wallpaper || "grid");
+  document.documentElement.dataset.ramGaugeMode = ramGaugeMode();
 }
 
 function styleFromBox(box) {
@@ -1810,7 +1866,9 @@ function styleFromBox(box) {
 function panelHtml(id) {
   if (!state.layout[id] || !PANEL_META[id] || id === "status" || state.layout[id].minimized) return "";
   const locked = Boolean(state.layout[id].locked);
-  const extra = id === "clock" ? " clock-bare" : id === "dock" ? " dock-bare" : "";
+  const extra = id === "clock" && state.settings.clockPanelFrame !== true
+    ? " clock-bare"
+    : id === "dock" ? " dock-bare" : "";
   const forceLocked = locked || id === "dock";
   return `
     <section class="hud-card${extra}${forceLocked ? " locked" : ""}" id="card_${id}" data-panel-id="${id}" style="${styleFromBox(state.layout[id])}">
@@ -2123,6 +2181,22 @@ function menuItemsForCard(kind, ctx) {
       }
     );
   }
+  if (kind === "panel" && ctx.widgetId === "ram") {
+    const modes = [
+      ["used", "USED"],
+      ["free", "FREE"],
+      ["cached", "CACHED"],
+      ["available", "AVAIL"],
+      ["total", "TOTAL"]
+    ];
+    items.push(
+      { sep: true },
+      ...modes.map(([value, label]) => ({
+        label: `${ramGaugeMode() === value ? "● " : "○ "}GAUGE ${label}`,
+        action: () => setRamGaugeMode(value)
+      }))
+    );
+  }
   if (kind === "panel" && ctx.widgetId === "filesearch") {
     items.push(
       { sep: true },
@@ -2189,6 +2263,7 @@ function menuItemsForCard(kind, ctx) {
       { label: "開啟資料夾", action: () => window.edex.openPath(ctx.path) },
       { label: "在 VS Code 開啟", action: () => openInVsCode(ctx.path) },
       { label: "更換路徑", action: () => changePath(ctx.id) },
+      { label: "Panel-Namen ändern", action: () => renamePathPanel(ctx.id) },
       { label: "重新掃描", action: () => scanCard(state.pathCards.find((c) => c.id === ctx.id)) }
     );
   }
@@ -2594,40 +2669,40 @@ function openAddPicker() {
   modal.id = "addPickerModal";
   modal.className = "modal_popup info";
   modal.innerHTML = `
-    <h1>添加容器</h1>
-    <h2>插件開關</h2>
+    <h1>Container hinzufügen</h1>
+    <h2>Plugin-Schalter</h2>
     <div class="action-row" style="align-items:center;gap:0.8rem;flex-wrap:wrap;">
       ${state.primary
         ? `<label style="display:inline-flex;align-items:center;gap:0.45rem;cursor:pointer;">
             <input type="checkbox" id="toggle-dock" ${dockOn ? "checked" : ""}>
-            <span data-dock-label>${dockPosition === "top" ? "頂部 Dock（貼螢幕頂邊）" : "底部 Dock（貼螢幕底邊）"}</span>
+            <span data-dock-label>${dockPosition === "top" ? "Oberes Dock (am oberen Bildschirmrand)" : "Unteres Dock (am unteren Bildschirmrand)"}</span>
           </label>
           <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
-            <span>位置</span>
+            <span>Position</span>
             <select id="dock-position" ${dockOn ? "" : "disabled"}>
               <option value="bottom" ${dockPosition === "bottom" ? "selected" : ""}>Unten</option>
               <option value="top" ${dockPosition === "top" ? "selected" : ""}>Oben</option>
             </select>
           </label>
           <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
-            <span>外框</span>
+            <span>Rahmen</span>
             <select id="dock-frame-style" ${dockOn ? "" : "disabled"}>
-              <option value="rounded" ${dockFrame === "rounded" ? "selected" : ""}>圓角</option>
-              <option value="trapezoid" ${dockFrame === "trapezoid" ? "selected" : ""}>梯形</option>
-              <option value="rect" ${dockFrame === "rect" ? "selected" : ""}>直角</option>
+              <option value="rounded" ${dockFrame === "rounded" ? "selected" : ""}>Abgerundet</option>
+              <option value="trapezoid" ${dockFrame === "trapezoid" ? "selected" : ""}>Trapez</option>
+              <option value="rect" ${dockFrame === "rect" ? "selected" : ""}>Rechteckig</option>
             </select>
           </label>
           <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
-            <span>寬度</span>
+            <span>Breite</span>
             <input id="dock-width" type="number" min="200" max="2400" step="10" value="${dockW}" ${dockOn ? "" : "disabled"} style="width:5.5rem;">
             <span>px</span>
           </label>
           <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
-            <span>高度</span>
+            <span>Höhe</span>
             <input id="dock-height" type="number" min="40" max="160" step="2" value="${dockH}" ${dockOn ? "" : "disabled"} style="width:4.5rem;">
             <span>px</span>
           </label>`
-        : `<span style="opacity:.6">底部 Dock 僅主顯示器</span>`}
+        : `<span style="opacity:.6">Dock nur auf dem Hauptbildschirm</span>`}
     </div>
     <h2>Windows-Fenstereinbettung</h2>
     <div class="action-row" style="align-items:center;gap:0.5rem;flex-wrap:wrap;">
@@ -2638,24 +2713,24 @@ function openAddPicker() {
       <button type="button" id="embed-attach">Andocken</button>
       <button type="button" id="embed-release">Freigeben</button>
     </div>
-    <h2>插件面板${state.primary ? "" : "（副螢幕可選加，預設不帶插件）"}</h2>
+    <h2>Plugin-Panels${state.primary ? "" : " (für diesen Bildschirm auswählbar)"}</h2>
     <div class="action-row" id="addPicker">
       ${missing.length
         ? missing.map((id) =>
           `<button type="button" data-add-panel="${id}">${escapeHtml(PANEL_META[id].title)}</button>`
         ).join("")
-        : "<span style='opacity:.6'>本顯示器插件已全部添加</span>"}
+        : "<span style='opacity:.6'>Alle Plugin-Panels wurden bereits hinzugefügt</span>"}
     </div>
-    <h2>其他</h2>
+    <h2>Sonstige</h2>
     <div class="action-row">
       ${state.primary
-        ? `<button type="button" id="add-desktop" ${deskDisabled ? "disabled" : ""}>桌面容器</button>`
-        : `<span style="opacity:.6">系統桌面僅主顯示器</span>`}
-      <button type="button" id="add-path">路徑容器</button>
+        ? `<button type="button" id="add-desktop" ${deskDisabled ? "disabled" : ""}>Desktop-Container</button>`
+        : `<span style="opacity:.6">Systemdesktop nur auf dem Hauptbildschirm</span>`}
+      <button type="button" id="add-path">Ordner-Panel</button>
     </div>
-    <p style="opacity:.55;margin:1vh 0 0;font-size:0.85em;">可連續添加，完成後按「關閉」</p>
+    <p style="opacity:.55;margin:1vh 0 0;font-size:0.85em;">Du kannst mehrere Elemente hinzufügen und danach schließen.</p>
     <div style="margin-top:1.2vh;display:flex;justify-content:flex-end;">
-      <button type="button" id="add-cancel">關閉</button>
+      <button type="button" id="add-cancel">Schließen</button>
     </div>
   `;
 
@@ -3133,7 +3208,7 @@ function placeCentered(el, opts = {}) {
 }
 
 function pathTitle(card, index) {
-  return card.path ? card.path.split(/[/\\]/).filter(Boolean).pop() : `路徑 ${index + 1}`;
+  return card?.name?.trim() || (card?.path ? card.path.split(/[/\\]/).filter(Boolean).pop() : `路徑 ${index + 1}`);
 }
 
 function listingItems(listing) {
@@ -3341,10 +3416,19 @@ async function addPathCardAt(folderPath) {
     toast("此路徑容器已存在");
     return;
   }
+  const defaultName = picked.split(/[/\\]/).filter(Boolean).pop() || "Ordner-Panel";
+  const panelName = await promptTextInput({
+    title: "Ordner-Panel anlegen",
+    hint: "Panel-Name",
+    value: defaultName,
+    okLabel: "Hinzufügen"
+  });
+  if (panelName == null) return;
   const id = `p${Date.now()}`;
   const placed = findEmptyBox({
     id,
     path: picked,
+    name: panelName.trim() || defaultName,
     x: 18,
     y: 16,
     w: 46,
@@ -3358,6 +3442,21 @@ async function addPathCardAt(folderPath) {
   const card = state.pathCards.find((item) => item.id === id);
   await scanCard(card);
   toast(`已加入路徑容器 ${pathTitle(card, state.pathCards.length - 1)}`);
+}
+
+async function renamePathPanel(id) {
+  const card = state.pathCards.find((item) => item.id === id);
+  if (!card) return;
+  const next = await promptTextInput({
+    title: "Ordner-Panel umbenennen",
+    hint: "Panel-Name",
+    value: pathTitle(card, 0),
+    okLabel: "Speichern"
+  });
+  if (next == null) return;
+  card.name = next.trim() || pathTitle({ path: card.path }, 0);
+  persistLayout();
+  renderPathCards();
 }
 
 function desktopItems() {
@@ -3424,6 +3523,63 @@ async function fillDrivesStage() {
   }
 }
 
+function terminalParentPath(value) {
+  const target = String(value || "").replace(/[\\/]+$/, "");
+  const root = /^[A-Za-z]:$/.test(target) ? `${target}\\` : target.slice(0, Math.max(0, target.lastIndexOf("\\")));
+  return root || target;
+}
+
+async function refreshTerminalFileBrowser(id, pane) {
+  const browser = pane?.querySelector("[data-terminal-file-browser]");
+  if (!browser || !terminalBrowserState.get(id)?.open) return;
+  const state = terminalBrowserState.get(id);
+  const target = state.path || terminalCwds.get(id) || "";
+  if (!target) {
+    browser.innerHTML = `<div class="terminal-file-empty">Warte auf Arbeitsverzeichnis …</div>`;
+    return;
+  }
+  const requestId = (state.requestId || 0) + 1;
+  state.requestId = requestId;
+  try {
+    const listing = await window.edex.listFolder(target, { systemIcons: "fast" });
+    if (terminalBrowserState.get(id)?.requestId !== requestId) return;
+    state.path = listing.root;
+    browser.innerHTML = `
+      <div class="terminal-file-head">
+        <button type="button" data-terminal-file-up title="Übergeordneten Ordner öffnen">↑</button>
+        <span title="${escapeHtml(listing.root)}">${escapeHtml(listing.root)}</span>
+        <button type="button" data-terminal-file-refresh title="Ordner aktualisieren">↻</button>
+      </div>
+      <div class="terminal-file-list">
+        ${listing.items.map((item) => `
+          <button type="button" class="terminal-file-item" data-terminal-file-path="${escapeHtml(item.path)}" data-terminal-file-directory="${item.isDirectory ? "1" : "0"}">
+            <span class="terminal-file-icon">${item.isDirectory ? "▣" : "·"}</span>
+            <span class="terminal-file-name" title="${escapeHtml(item.name)}">${escapeHtml(item.displayName || item.name)}</span>
+            <span class="terminal-file-meta">${escapeHtml(item.sizeLabel || "")}</span>
+          </button>`).join("") || `<div class="terminal-file-empty">Ordner ist leer</div>`}
+      </div>`;
+    browser.querySelector("[data-terminal-file-up]")?.addEventListener("click", () => {
+      state.path = terminalParentPath(state.path);
+      refreshTerminalFileBrowser(id, pane);
+    });
+    browser.querySelector("[data-terminal-file-refresh]")?.addEventListener("click", () => refreshTerminalFileBrowser(id, pane));
+    browser.querySelectorAll("[data-terminal-file-path]").forEach((item) => item.addEventListener("dblclick", () => {
+      const nextPath = item.dataset.terminalFilePath;
+      if (item.dataset.terminalFileDirectory === "1") {
+        state.path = nextPath;
+        refreshTerminalFileBrowser(id, pane);
+      } else {
+        window.edex.openPath(nextPath);
+      }
+    }));
+    if (!terminalBrowserTimers.has(id)) {
+      terminalBrowserTimers.set(id, setInterval(() => refreshTerminalFileBrowser(id, pane), 2000));
+    }
+  } catch (error) {
+    browser.innerHTML = `<div class="terminal-file-empty">${escapeHtml(error.message || "Ordner konnte nicht gelesen werden")}</div>`;
+  }
+}
+
 function bindTerminal() {
   const root = document.querySelector(".terminal-root");
   if (!root) return;
@@ -3434,15 +3590,23 @@ function bindTerminal() {
   grid.style.setProperty("--terminal-columns", terminalGridMode === "1x1" ? "1" : "2");
   terminalInstances.forEach((terminal) => terminal.dispose());
   terminalInstances.clear();
+  terminalBrowserTimers.forEach((timer) => clearInterval(timer));
+  terminalBrowserTimers.clear();
   grid.innerHTML = terminalPaneIds.map((id, index) => `
     <section class="terminal-pane" data-terminal-pane="${id}">
-      <header class="terminal-pane-head"><span>TTY ${index + 1}</span><span class="terminal-pane-actions"><button type="button" data-terminal-browser title="Datei-Browser im Terminal öffnen">FILES</button><button type="button" data-terminal-putty title="PuTTY im Terminal einbetten">PuTTY</button><button type="button" data-terminal-shell title="Zur Shell zurückkehren">SHELL</button><button type="button" data-terminal-close title="Terminal schließen">×</button></span></header>
-      <div class="terminal-output" data-terminal-output aria-label="Terminalausgabe"></div>
+      <header class="terminal-pane-head"><span>TTY ${index + 1}</span><span class="terminal-pane-actions"><select data-terminal-mode aria-label="Ansicht für TTY ${index + 1}"><option value="shell">SHELL</option><option value="files">FILES</option><option value="putty">PuTTY</option></select><button type="button" class="terminal-mode-action" data-terminal-browser>FILES</button><button type="button" class="terminal-mode-action" data-terminal-putty>PuTTY</button><button type="button" class="terminal-mode-action" data-terminal-shell>SHELL</button><button type="button" data-terminal-close title="Terminal schließen">×</button></span></header>
+      <div class="terminal-pane-body">
+        <div class="terminal-output" data-terminal-output aria-label="Terminalausgabe"></div>
+        <aside class="terminal-file-browser" data-terminal-file-browser hidden></aside>
+        <aside class="terminal-native-slot" data-terminal-native-slot hidden></aside>
+      </div>
     </section>`).join("");
   terminalPaneIds.forEach((id) => {
     const pane = grid.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
     const output = pane?.querySelector("[data-terminal-output]");
-    if (!pane || !output) return;
+    const fileBrowser = pane?.querySelector("[data-terminal-file-browser]");
+    const nativeSlot = pane?.querySelector("[data-terminal-native-slot]");
+    if (!pane || !output || !fileBrowser || !nativeSlot) return;
     if (terminalNativePanes.has(id)) pane.classList.add("terminal-pane-native");
     const existing = terminalInstances.get(id);
     const terminal = existing || (window.Terminal ? new window.Terminal({
@@ -3464,12 +3628,13 @@ function bindTerminal() {
     const syncNativeBounds = () => {
       const embedded = terminalNativePanes.get(id);
       if (!embedded) return;
-      const rect = pane.getBoundingClientRect();
+      const rect = nativeSlot.getBoundingClientRect();
       window.edex.embedBounds({ hwnd: embedded.hwnd, kind: embedded.kind, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
     };
     const puttyButton = pane.querySelector("[data-terminal-putty]");
     const browserButton = pane.querySelector("[data-terminal-browser]");
     const shellButton = pane.querySelector("[data-terminal-shell]");
+    const modeSelect = pane.querySelector("[data-terminal-mode]");
     puttyButton?.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
       window.edex?.setMouseIgnore?.(false);
@@ -3482,37 +3647,53 @@ function bindTerminal() {
       if (!target?.trim()) return;
       const rect = pane.getBoundingClientRect();
       try {
-        window.edex.closeTerminal(id);
-        const result = await window.edex.embedPutty({ target: target.trim(), bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
+        const previous = terminalNativePanes.get(id);
+        if (previous) await window.edex.embedRelease({ hwnd: previous.hwnd });
+        terminalNativePanes.delete(id);
+        const browserState = terminalBrowserState.get(id);
+        if (browserState) browserState.open = false;
+        pane.classList.remove("terminal-pane-files");
+        fileBrowser.hidden = true;
+        nativeSlot.hidden = false;
+        const slotRect = nativeSlot.getBoundingClientRect();
+        const result = await window.edex.embedPutty({ target: target.trim(), bounds: { x: slotRect.left, y: slotRect.top, w: slotRect.width, h: slotRect.height } });
         if (!result?.ok) throw new Error(result?.message || "PuTTY konnte nicht eingebettet werden");
         terminalNativePanes.set(id, { hwnd: result.hwnd, kind: "putty" });
-        pane.classList.add("terminal-pane-native");
+        pane.classList.add("terminal-pane-putty");
         status.textContent = `PuTTY in TTY ${terminalPaneIds.indexOf(id) + 1}`;
+        syncNativeBounds();
       } catch (error) {
+        nativeSlot.hidden = true;
         status.textContent = error?.message || "PuTTY konnte nicht eingebettet werden";
       }
     });
     browserButton?.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const picked = await window.edex.pickFolder();
-      if (!picked) return;
-      status.textContent = "Datei-Browser wird gestartet …";
-      const rect = pane.getBoundingClientRect();
-      try {
-        const embedded = terminalNativePanes.get(id);
-        if (embedded) await window.edex.embedRelease({ hwnd: embedded.hwnd });
-        window.edex.closeTerminal(id);
-        const result = await window.edex.embedFileBrowser({
-          target: picked,
-          bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
-        });
-        if (!result?.ok) throw new Error(result?.message || "Datei-Browser konnte nicht eingebettet werden");
-        terminalNativePanes.set(id, { hwnd: result.hwnd, kind: "fileBrowser" });
-        pane.classList.add("terminal-pane-native");
-        status.textContent = `Datei-Browser in TTY ${terminalPaneIds.indexOf(id) + 1}`;
-      } catch (error) {
-        status.textContent = error?.message || "Datei-Browser konnte nicht eingebettet werden";
+      const embedded = terminalNativePanes.get(id);
+      if (embedded) {
+        await window.edex.embedRelease({ hwnd: embedded.hwnd });
+        terminalNativePanes.delete(id);
+        nativeSlot.hidden = true;
+        pane.classList.remove("terminal-pane-putty");
+      }
+      const browser = terminalBrowserState.get(id) || { open: false, path: "" };
+      browser.open = !browser.open;
+      terminalBrowserState.set(id, browser);
+      fileBrowser.hidden = !browser.open;
+      pane.classList.toggle("terminal-pane-files", browser.open);
+      pane.classList.remove("terminal-pane-putty");
+      if (modeSelect) modeSelect.value = browser.open ? "files" : "shell";
+      browserButton.classList.toggle("on", browser.open);
+      if (browser.open) refreshTerminalFileBrowser(id, pane);
+    });
+    modeSelect?.addEventListener("change", async () => {
+      if (modeSelect.value === "files") {
+        browserButton?.click();
+      } else if (modeSelect.value === "putty") {
+        puttyButton?.click();
+      } else {
+        shellButton?.click();
       }
     });
     shellButton?.addEventListener("click", async (event) => {
@@ -3521,6 +3702,12 @@ function bindTerminal() {
       const embedded = terminalNativePanes.get(id);
       if (embedded) await window.edex.embedRelease({ hwnd: embedded.hwnd });
       terminalNativePanes.delete(id);
+      const browserState = terminalBrowserState.get(id);
+      if (browserState) browserState.open = false;
+      nativeSlot.hidden = true;
+      pane.classList.remove("terminal-pane-putty");
+      pane.classList.remove("terminal-pane-files");
+      if (modeSelect) modeSelect.value = "shell";
       terminalStarted.delete(id);
       bindTerminal();
     });
@@ -3541,7 +3728,29 @@ function bindTerminal() {
     terminal.fit?.();
     if (!terminalStarted.has(id) && window.edex?.createTerminal) {
       terminalStarted.add(id);
-      window.edex.createTerminal(id).catch?.(() => terminalStarted.delete(id));
+      window.edex.createTerminal(id).then((result) => {
+        if (!result?.cwd) return;
+        terminalCwds.set(id, result.cwd);
+        const browserState = terminalBrowserState.get(id);
+        if (browserState?.open) {
+          browserState.path = result.cwd;
+          refreshTerminalFileBrowser(id, pane);
+        }
+      }).catch?.(() => terminalStarted.delete(id));
+    }
+    const browserState = terminalBrowserState.get(id);
+    if (browserState?.open) {
+      fileBrowser.hidden = false;
+      pane.classList.add("terminal-pane-files");
+      pane.querySelector("[data-terminal-browser]")?.classList.add("on");
+      if (modeSelect) modeSelect.value = "files";
+      refreshTerminalFileBrowser(id, pane);
+    }
+    if (terminalNativePanes.has(id)) {
+      nativeSlot.hidden = false;
+      pane.classList.add("terminal-pane-putty");
+      if (modeSelect) modeSelect.value = "putty";
+      syncNativeBounds();
     }
   });
   root.querySelector("[data-terminal-add]")?.addEventListener("click", () => {
@@ -3560,8 +3769,9 @@ function bindTerminal() {
     terminalPaneIds.forEach((id) => {
       const pane = root.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
       const embedded = terminalNativePanes.get(id);
-      if (!pane || !embedded) return;
-      const rect = pane.getBoundingClientRect();
+      const nativeSlot = pane?.querySelector("[data-terminal-native-slot]");
+      if (!pane || !nativeSlot || !embedded) return;
+      const rect = nativeSlot.getBoundingClientRect();
       window.edex.embedBounds({ hwnd: embedded.hwnd, kind: embedded.kind, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
     });
   }, { passive: true });
@@ -3571,6 +3781,14 @@ function bindTerminal() {
       const next = `${terminalBuffers.get(paneId) || ""}${data}`.slice(-100000);
       terminalBuffers.set(paneId, next);
       terminalInstances.get(paneId)?.write(data);
+    });
+    window.edex.onTerminalCwd(({ paneId, cwd }) => {
+      if (!paneId || !cwd) return;
+      terminalCwds.set(paneId, cwd);
+      const browserState = terminalBrowserState.get(paneId);
+      if (browserState) browserState.path = cwd;
+      const pane = root.querySelector(`[data-terminal-pane="${CSS.escape(paneId)}"]`);
+      if (pane && terminalBrowserState.get(paneId)?.open) refreshTerminalFileBrowser(paneId, pane);
     });
     window.edex.onTerminalExit(({ paneId }) => {
       terminalInstances.get(paneId)?.writeln("\r\n[Terminal beendet]");
@@ -5181,6 +5399,21 @@ function openSettings() {
         <td><input id="set-clock-date" type="checkbox" ${clockShowDate() ? "checked" : ""}></td>
       </tr>
       <tr>
+        <td>Uhr als Panel</td>
+        <td>Uhr und Datum mit sichtbarem Rahmen als normales verschiebbares Panel anzeigen</td>
+        <td><input id="set-clock-panel" type="checkbox" ${state.settings.clockPanelFrame === true ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Uhrdarstellung</td>
+        <td>Digitale LED-Anzeige oder analoge Zeigeruhr</td>
+        <td>
+          <select id="set-clock-display-mode">
+            <option value="digital" ${clockDisplayMode() === "digital" ? "selected" : ""}>Digital</option>
+            <option value="analog" ${clockDisplayMode() === "analog" ? "selected" : ""}>Analog</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
         <td>時間格式</td>
         <td>12 小時或 24 小時制；可隱藏秒數</td>
         <td>
@@ -5270,6 +5503,41 @@ function openSettings() {
       <button type="button" id="set-save">套用設定並保存佈局</button>
     </div>
   `;
+  const settingsTable = modal.querySelector("#settingsEditor");
+  if (settingsTable) {
+    const rows = [...settingsTable.querySelectorAll("tr")];
+    const header = rows.shift();
+    const rowContains = (row, id) => Boolean(row.querySelector(`#${id}`));
+    const firstRow = (id) => {
+      const index = rows.findIndex((row) => rowContains(row, id));
+      return index < 0 ? rows.length : index;
+    };
+    const cuts = [
+      ["Anzeige & Theme", 0, firstRow("set-grid"), true],
+      ["Uhr", firstRow("set-grid"), firstRow("set-search-font"), false],
+      ["Interface & Code-Regen", firstRow("set-search-font"), firstRow("set-migrate"), false],
+      ["Organizer", firstRow("set-migrate"), rows.length, false]
+    ];
+    const fragment = document.createDocumentFragment();
+    cuts.forEach(([title, start, end, open], index) => {
+      const table = settingsTable.cloneNode(false);
+      table.removeAttribute("id");
+      table.classList.add("settings-section-table");
+      if (index === 0) table.id = "settingsEditor";
+      const body = document.createElement("tbody");
+      if (header) body.appendChild(header.cloneNode(true));
+      rows.slice(start, end).forEach((row) => body.appendChild(row));
+      table.appendChild(body);
+      const details = document.createElement("details");
+      details.className = "settings-section";
+      details.open = open;
+      const summary = document.createElement("summary");
+      summary.textContent = title;
+      details.append(summary, table);
+      fragment.appendChild(details);
+    });
+    settingsTable.replaceWith(fragment);
+  }
   document.body.appendChild(modal);
   window.edexI18n?.translatePage?.(modal);
   placeCentered(modal);
@@ -5409,6 +5677,10 @@ function openSettings() {
       || clockLedColor()
     );
     const clockDateValue = Boolean(modal.querySelector("#set-clock-date")?.checked);
+    const clockPanelFrame = Boolean(modal.querySelector("#set-clock-panel")?.checked);
+    const clockDisplayModeValue = modal.querySelector("#set-clock-display-mode")?.value === "analog"
+      ? "analog"
+      : "digital";
     const clockTimeValue = ["24h-seconds", "24h-short", "12h-seconds", "12h-short"].includes(modal.querySelector("#set-clock-time-format")?.value)
       ? modal.querySelector("#set-clock-time-format").value
       : "24h-seconds";
@@ -5466,6 +5738,8 @@ function openSettings() {
       clockScale: clockScaleValue,
       clockLedColor: clockLedValue,
       clockShowDate: clockDateValue,
+      clockPanelFrame,
+      clockDisplayMode: clockDisplayModeValue,
       clockTimeFormat: clockTimeValue,
       clockDateFormat: clockDateFormatValue,
       rainFontSize: rainFontValue,
@@ -5795,7 +6069,9 @@ window.addEventListener("keydown", (event) => {
   }
 
   if (Array.isArray(saved?.pathCards) && saved.pathCards.length) {
-    state.pathCards = saved.pathCards.filter((card) => card?.path && card.id !== "desktop");
+    state.pathCards = saved.pathCards
+      .filter((card) => card?.path && card.id !== "desktop")
+      .map((card) => ({ ...card, name: String(card.name || "") }));
   } else {
     state.pathCards = [];
   }

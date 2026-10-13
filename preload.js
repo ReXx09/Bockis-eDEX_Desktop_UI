@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld("edex", {
   resizeTerminal: (paneId, cols, rows) => ipcRenderer.send("terminal-resize", paneId, cols, rows),
   closeTerminal: (paneId) => ipcRenderer.send("terminal-close", paneId),
   onTerminalData: (fn) => ipcRenderer.on("terminal-data", (_event, payload) => fn(payload)),
+  onTerminalCwd: (fn) => ipcRenderer.on("terminal-cwd", (_event, payload) => fn(payload)),
   onTerminalExit: (fn) => ipcRenderer.on("terminal-exit", (_event, payload) => fn(payload)),
   searchFiles: (query, limit) => ipcRenderer.invoke("search-files", query, limit),
   searchStatus: () => ipcRenderer.invoke("search-status"),

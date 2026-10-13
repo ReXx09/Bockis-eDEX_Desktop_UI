@@ -716,7 +716,7 @@ ipcMain.handle("get-theme", (_e, name) => loadTheme(name || settings.theme || "t
 ipcMain.handle("pick-folder", async (event) => {
   const win = getSenderWindow(event);
   const result = await dialog.showOpenDialog(win, {
-    title: "選擇要整理的資料夾",
+    title: "Ordner für den Organizer auswählen",
     defaultPath: currentRoot,
     properties: ["openDirectory"]
   });
@@ -799,7 +799,16 @@ ipcMain.handle("terminal-create", (event, paneId, cwd) => {
     env: { ...process.env, TERM: "xterm-256color" }
   });
   terminalSessions.set(key, session);
+  let lastCwd = workingDirectory;
   const sendData = (data) => {
+    const promptMatch = String(data).match(/(?:^|\r?\n)PS\s+([^\r\n>]+)>\s*$/m);
+    if (promptMatch) {
+      const nextCwd = String(promptMatch[1] || "").trim();
+      if (nextCwd && nextCwd !== lastCwd && fs.existsSync(nextCwd)) {
+        lastCwd = nextCwd;
+        if (!win.isDestroyed()) win.webContents.send("terminal-cwd", { paneId, cwd: nextCwd });
+      }
+    }
     if (!win.isDestroyed()) win.webContents.send("terminal-data", { paneId, data });
   };
   session.onData(sendData);
@@ -840,7 +849,7 @@ ipcMain.handle("search-rebuild", async () => fileSearch.rebuild());
 ipcMain.handle("pick-search-root", async (event) => {
   const win = getSenderWindow(event);
   const result = await dialog.showOpenDialog(win, {
-    title: "選擇要索引的資料夾或網路磁碟",
+    title: "Ordner oder Netzlaufwerk für die Suche auswählen",
     properties: ["openDirectory"]
   });
   if (result.canceled || !result.filePaths[0]) return null;
@@ -1202,7 +1211,7 @@ ipcMain.handle("open-path", async (event, target) => {
 ipcMain.handle("pick-program", async (event) => {
   const win = getSenderWindow(event);
   const result = await dialog.showOpenDialog(win, {
-    title: "選擇要嵌入的程式",
+    title: "Programm zum Einbetten auswählen",
     properties: ["openFile"],
     filters: [
       { name: "程式／捷徑", extensions: ["exe", "lnk", "bat", "cmd", "msc"] },

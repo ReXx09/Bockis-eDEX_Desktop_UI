@@ -1,7 +1,7 @@
 {
   "name": "edex-desktop-organizer",
   "productName": "eDEX Desktop Organizer",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Desktop organizer using the eDEX-UI sci-fi HUD layout",
   "main": "main.js",
   "author": "bananamax9113",
@@ -65,10 +65,12 @@
       "shortcutName": "eDEX Desktop Organizer",
       "deleteAppDataOnUninstall": false,
       "installerLanguages": [
+        "de_DE",
         "zh_TW",
         "en_US"
       ],
-      "language": "1028"
+      "language": "1031",
+      "include": "build/installer.nsh"
     },
     "publish": [
       {

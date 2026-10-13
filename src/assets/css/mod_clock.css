@@ -48,3 +48,90 @@ div#mod_clock em {
 div#mod_clock.mod_clock_twelve h1 span:last-child {
     font-size: 1.5vh;
 }
+
+#mod_clock .analog-clock {
+    --clock-accent: rgb(var(--color_r), var(--color_g), var(--color_b));
+    position: relative;
+    width: min(24vh, 14vw, 13rem);
+    min-width: 7rem;
+    aspect-ratio: 1;
+    border: 0.14rem solid var(--clock-accent);
+    border-radius: 50%;
+    box-shadow: 0 0 0.45rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.5), inset 0 0 1.1rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.12);
+    color: var(--clock-accent);
+    background: rgba(0, 0, 0, 0.14);
+    box-sizing: border-box;
+}
+
+#mod_clock .analog-clock[hidden],
+#mod_clock .analog-clock-date[hidden] {
+    display: none;
+}
+
+#mod_clock .analog-clock-number {
+    position: absolute;
+    margin: 0;
+    width: 1.5em;
+    height: 1.5em;
+    font: 600 clamp(0.65rem, 1.1vw, 0.95rem)/1.5 var(--font_main_light);
+    text-align: center;
+}
+
+#mod_clock .number-12 { top: 0.35em; left: calc(50% - 0.75em); }
+#mod_clock .number-3 { top: calc(50% - 0.75em); right: 0.35em; }
+#mod_clock .number-6 { bottom: 0.35em; left: calc(50% - 0.75em); }
+#mod_clock .number-9 { top: calc(50% - 0.75em); left: 0.35em; }
+
+#mod_clock .analog-clock-hand {
+    position: absolute;
+    left: calc(50% - 0.08rem);
+    bottom: 50%;
+    width: 0.16rem;
+    height: 31%;
+    border-radius: 0.2rem;
+    background: var(--clock-accent);
+    transform-origin: 50% 100%;
+    transform: rotate(0deg);
+}
+
+#mod_clock .analog-clock-minute {
+    width: 0.12rem;
+    height: 40%;
+}
+
+#mod_clock .analog-clock-second {
+    width: 0.06rem;
+    height: 43%;
+    background: #ffb347;
+}
+
+#mod_clock .analog-clock-hour {
+    transform: rotate(var(--clock-hour-angle, 0deg));
+}
+
+#mod_clock .analog-clock-minute {
+    transform: rotate(var(--clock-minute-angle, 0deg));
+}
+
+#mod_clock .analog-clock-second {
+    transform: rotate(var(--clock-second-angle, 0deg));
+}
+
+#mod_clock .analog-clock-center {
+    position: absolute;
+    top: calc(50% - 0.28rem);
+    left: calc(50% - 0.28rem);
+    width: 0.56rem;
+    height: 0.56rem;
+    border-radius: 50%;
+    background: var(--clock-accent);
+    box-shadow: 0 0 0.35rem var(--clock-accent);
+}
+
+#mod_clock .analog-clock-date {
+    margin-top: 0.3rem;
+    color: var(--clock-accent);
+    font: 600 0.75rem/1 var(--font_mono);
+    letter-spacing: 0.08em;
+    text-align: center;
+}

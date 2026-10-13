@@ -68,7 +68,9 @@ div#mod_globe i.mod_globe_headerInfo {
     gap: 0.35vh;
     align-self: flex-start;
     width: 98%;
-    margin-top: 0.25vh;
+    margin-top: 0.45vh;
+    margin-bottom: 0.15vh;
+    flex-shrink: 0;
 }
 
 .globe-filter {
