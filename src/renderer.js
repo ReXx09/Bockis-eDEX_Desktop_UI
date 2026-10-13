@@ -1,0 +1,5504 @@
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const FILE_FORMAT_FILTERS = [
+  { id: "documents", label: "Dokumente" },
+  { id: "images", label: "Bilder" },
+  { id: "videos", label: "Videos" },
+  { id: "audio", label: "Audio" },
+  { id: "archives", label: "Archive" },
+  { id: "apps", label: "Anwendungen" },
+  { id: "other", label: "Sonstige" }
+];
+
+const DESK_FILTERS = [
+  { id: "all", label: "Alle" },
+  { id: "folders", label: "Ordner" },
+  { id: "icons", label: "Symbole" },
+  ...FILE_FORMAT_FILTERS
+];
+
+const REMOVED_PANELS = new Set(["sysinfo", "hw", "netstat", "shortcuts"]);
+
+const DEFAULT_WIDGETS_PRIMARY = {
+  clock: { x: 1.2, y: 2, w: 16, h: 8 },
+  cpu: { x: 1.2, y: 13, w: 16, h: 20 },
+  ram: { x: 1.2, y: 34, w: 16, h: 16 },
+  toplist: { x: 1.2, y: 51, w: 16, h: 18 },
+  globe: { x: 82, y: 2, w: 16.5, h: 48 },
+  conninfo: { x: 82, y: 52, w: 16.5, h: 23 },
+  calendar: { x: 66, y: 2, w: 15, h: 38 },
+  drives: { x: 66, y: 42, w: 15, h: 38 },
+  filesearch: { x: 18, y: 82, w: 47, h: 16 },
+  dock: { x: 25, y: 94, w: 50, h: 6, locked: true }
+};
+
+// Plugins only default on primary — secondary starts empty.
+const DEFAULT_WIDGETS_SECONDARY = {};
+
+const DEFAULT_DESKTOP_PRIMARY = { x: 18, y: 2, w: 47, h: 78 };
+const DEFAULT_DESKTOP_SECONDARY = { x: 8, y: 8, w: 84, h: 84 };
+
+const PANEL_META = {
+  clock: { title: "時鐘", box: { x: 1.2, y: 2, w: 16, h: 8 } },
+  coderain: { title: "瀑布代碼", box: { x: 34, y: 64, w: 16, h: 22 } },
+  cpu: { title: "處理器", box: { x: 1.2, y: 13, w: 16, h: 20 } },
+  ram: { title: "記憶體", box: { x: 1.2, y: 34, w: 16, h: 16 } },
+  toplist: { title: "進程", box: { x: 1.2, y: 51, w: 16, h: 18 } },
+  globe: { title: "地球視圖", box: { x: 82, y: 2, w: 16.5, h: 48 } },
+  conninfo: { title: "網路流量", box: { x: 82, y: 52, w: 16.5, h: 23 } },
+  calendar: { title: "日曆", box: { x: 66, y: 2, w: 15, h: 38 } },
+  drives: { title: "本機磁碟", box: { x: 66, y: 42, w: 15, h: 38 } },
+  filesearch: { title: "快速搜尋", box: { x: 18, y: 82, w: 47, h: 16 } },
+  terminal: { title: "終端機", box: { x: 19, y: 42, w: 31, h: 36 } },
+  cockpit: { title: "駕駛室", box: { x: 20, y: 22, w: 38, h: 54 } },
+  cassette: { title: "音樂磁帶", box: { x: 28, y: 28, w: 36, h: 38 } },
+  ddj: { title: "DDJ-1000", box: { x: 8, y: 6, w: 84, h: 86 } },
+  cpuRail: { title: "CPU 供電路徑", box: { x: 20, y: 28, w: 42, h: 40 } },
+  calculator: { title: "計算器", box: { x: 40, y: 18, w: 18, h: 48 } },
+  dock: { title: "底部 Dock", box: { x: 25, y: 94, w: 50, h: 6 } }
+};
+
+const MACOS_TAGS = [
+  { id: "red", label: "紅色", color: "#ff3b30" },
+  { id: "orange", label: "橙色", color: "#ff9500" },
+  { id: "yellow", label: "黃色", color: "#ffcc00" },
+  { id: "green", label: "綠色", color: "#28cd41" },
+  { id: "blue", label: "藍色", color: "#007aff" },
+  { id: "purple", label: "紫色", color: "#af52de" },
+  { id: "gray", label: "灰色", color: "#8e8e93" }
+];
+
+const fileStageCtx = new WeakMap();
+let terminalGridMode = "2x2";
+let terminalNextPane = 1;
+const terminalPaneIds = [];
+const terminalBuffers = new Map();
+const terminalStarted = new Set();
+const terminalNativePanes = new Map();
+let terminalBridgeBound = false;
+
+const state = {
+  bootstrap: null,
+  settings: {},
+  displays: [],
+  displayId: null,
+  displayIndex: 0,
+  primary: true,
+  bounds: null,
+  scaleFactor: 1,
+  physicalSize: null,
+  themes: [],
+  wallpapers: [],
+  themeName: "tron",
+  theme: null,
+  scan: null,
+  plan: null,
+  includeFolders: false,
+  iconView: "grid",
+  busy: false,
+  pathCards: [],
+  activePathId: null,
+  layout: { ...DEFAULT_WIDGETS_PRIMARY },
+  desktopStage: { ...DEFAULT_DESKTOP_PRIMARY },
+  desktopEnabled: true,
+  desktopLocked: false,
+  desktopFilter: "all",
+  desktopGrouped: false,
+  desktopTabId: "classify",
+  desktopFolderTabs: [],
+  iconPositions: {},
+  zTop: 10,
+  clockTimer: null,
+  calCursor: new Date(),
+  calSelected: null,
+  calNotes: {},
+  desktopListing: null,
+  cockpitRaf: null,
+  cockpitMatrixTimer: null,
+  cassetteRaf: null,
+  ddjRaf: null,
+  ddjResizeObs: null,
+  cpuRailRaf: null,
+  dockTimer: null,
+  dockRaf: null
+};
+
+function defaultWidgets() {
+  return JSON.parse(JSON.stringify(state.primary ? DEFAULT_WIDGETS_PRIMARY : DEFAULT_WIDGETS_SECONDARY));
+}
+
+function defaultDesktop() {
+  return { ...(state.primary ? DEFAULT_DESKTOP_PRIMARY : DEFAULT_DESKTOP_SECONDARY) };
+}
+
+function panelBody(id) {
+  switch (id) {
+    case "clock":
+      return `
+        <div id="mod_clock">
+          <div id="mod_clock_led" class="led-matrix" aria-label="點陣時鐘"></div>
+        </div>`;
+    case "coderain":
+      return `
+        <div id="mod_coderain">
+          <div id="mod_coderain_inner">
+            <h1>CODE RAIN<i id="mod_coderain_meta">BOOT LOG / CMATRIX</i></h1>
+            <section id="mod_coderain_stream">
+              <canvas id="mod_coderain_canvas"></canvas>
+            </section>
+          </div>
+        </div>`;
+    case "sysinfo":
+      return `
+        <div id="mod_sysinfo">
+          <div data-edex-sys>
+            <h1 id="sys_year">—</h1>
+            <h2 id="sys_month">—</h2>
+          </div>
+          <div data-edex-sys>
+            <h1>UPTIME</h1>
+            <h2 id="sys_uptime">0:0:0</h2>
+          </div>
+          <div data-edex-sys>
+            <h1>TYPE</h1>
+            <h2 id="sys_type">—</h2>
+          </div>
+          <div data-edex-sys>
+            <h1>POWER</h1>
+            <h2 id="sys_power">AC</h2>
+          </div>
+        </div>`;
+    case "hw":
+      return `
+        <div id="mod_hardwareInspector">
+          <div id="mod_hardwareInspector_inner">
+            <div>
+              <h1>MANUFACTURER</h1>
+              <h2 id="mod_hardwareInspector_manufacturer">NONE</h2>
+            </div>
+            <div>
+              <h1>MODEL</h1>
+              <h2 id="mod_hardwareInspector_model">NONE</h2>
+            </div>
+            <div>
+              <h1>CHASSIS</h1>
+              <h2 id="mod_hardwareInspector_chassis">NONE</h2>
+            </div>
+          </div>
+        </div>`;
+    case "toplist":
+      return `
+        <div id="mod_toplist">
+          <h1><span class="toplist-title">TOP PROCESSES</span>
+            <span class="toplist-filters" role="group" aria-label="Prozessfilter">
+              <button type="button" class="toplist-filter on" data-top-sort="cpu">CPU</button>
+              <button type="button" class="toplist-filter" data-top-sort="mem">MEM</button>
+              <button type="button" class="toplist-filter" data-top-sort="energy">ENERGY</button>
+              <button type="button" class="toplist-filter" data-top-sort="conn">CONN</button>
+            </span>
+          </h1>
+          <div class="toplist-columns">PID | NAME | VALUE</div>
+          <table id="mod_toplist_table"></table>
+        </div>`;
+    case "ram":
+      return `
+        <div id="mod_ramwatcher">
+          <div id="mod_ramwatcher_inner">
+            <h1>MEMORY<i id="mod_ramwatcher_info"></i></h1>
+            <div id="mod_ramwatcher_visual">
+              <canvas id="mod_ramwatcher_gauge"></canvas>
+              <div id="mod_ramwatcher_stack">
+                <div class="ram-stack-track">
+                  <i id="mod_ramwatcher_used_seg" class="ram-seg used"></i>
+                  <i id="mod_ramwatcher_avail_seg" class="ram-seg avail"></i>
+                  <i id="mod_ramwatcher_free_seg" class="ram-seg free"></i>
+                </div>
+                <div class="ram-stack-legend">
+                  <span><em class="used"></em>USED <b id="mod_ramwatcher_used_pct">—</b></span>
+                  <span><em class="avail"></em>AVAIL <b id="mod_ramwatcher_avail_pct">—</b></span>
+                  <span><em class="free"></em>FREE <b id="mod_ramwatcher_free_pct">—</b></span>
+                </div>
+              </div>
+            </div>
+            <canvas id="mod_ramwatcher_wave"></canvas>
+            <div id="mod_ramwatcher_swapcontainer">
+              <h1>SWAP</h1>
+              <progress id="mod_ramwatcher_swapbar" max="100" value="0"></progress>
+              <h3 id="mod_ramwatcher_swaptext">0.0 GiB</h3>
+            </div>
+          </div>
+        </div>`;
+    case "cpu":
+      return `
+        <div id="mod_cpuinfo">
+          <div id="mod_cpuinfo_innercontainer">
+            <h1>CPU USAGE<i id="mod_cpuinfo_name">—</i></h1>
+            <div class="cpu-total-row">
+              <div class="cpu-total-load" data-cpu-level="ok">
+                <span class="cpu-total-label">TOTAL LOAD</span>
+                <strong id="mod_cpuinfo_total">—%</strong>
+              </div>
+              <div id="mod_cpuinfo_pointmap" class="edex-pointmap" data-cols="48" data-rows="12" aria-hidden="true"></div>
+            </div>
+            <div class="cpu-meta-row">
+              <div>
+                <h1>CORES<br><i id="mod_cpuinfo_temp">—</i></h1>
+              </div>
+              <div>
+                <h1>SPD<br><i id="mod_cpuinfo_speed_min">--GHz</i></h1>
+              </div>
+              <div>
+                <h1>MAX<br><i id="mod_cpuinfo_speed_max">--GHz</i></h1>
+              </div>
+              <div>
+                <h1>TASKS<br><i id="mod_cpuinfo_tasks">—</i></h1>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    case "netstat":
+      return `
+        <div id="mod_netstat">
+          <div id="mod_netstat_inner">
+            <h1>NETWORK STATUS<i id="mod_netstat_iname">Interface: —</i></h1>
+            <div id="mod_netstat_innercontainer">
+              <div><h1>STATE</h1><h2 id="mod_netstat_state">UNKNOWN</h2></div>
+              <div><h1>IPv4</h1><h2 id="mod_netstat_ip">--.--.--.--</h2></div>
+              <div><h1>PING</h1><h2 id="mod_netstat_ping">--ms</h2></div>
+            </div>
+          </div>
+        </div>`;
+    case "globe":
+      return `
+        <div id="mod_globe">
+          <div id="mod_globe_innercontainer">
+            <h1>WORLD VIEW<i>GLOBAL NETWORK MAP</i></h1>
+            <h2>ENDPOINT LAT/LON<i class="mod_globe_headerInfo">0.0000, 0.0000</i></h2>
+            <div id="mod_globe_canvas_placeholder"></div>
+            <h3>OFFLINE</h3>
+          </div>
+        </div>`;
+    case "conninfo":
+      return `
+        <div id="mod_conninfo">
+          <div id="mod_conninfo_innercontainer">
+            <h1>NETWORK TRAFFIC<i>UP / DOWN</i></h1>
+            <h2>TOTAL<i>— / —</i></h2>
+            <div class="conn-pointmap-block">
+              <div class="conn-pointmap-label">UP</div>
+              <div id="mod_conninfo_pointmap_up" class="edex-pointmap edex-pointmap-up" data-cols="48" data-rows="10" aria-hidden="true"></div>
+            </div>
+            <div class="conn-pointmap-block">
+              <div class="conn-pointmap-label">DOWN</div>
+              <div id="mod_conninfo_pointmap_down" class="edex-pointmap edex-pointmap-down" data-cols="48" data-rows="10" aria-hidden="true"></div>
+            </div>
+            <h3>OFFLINE</h3>
+          </div>
+        </div>`;
+    case "calendar":
+      return `
+        <div class="cal-root">
+          <div class="cal-toolbar">
+            <button type="button" id="cal_prev">‹</button>
+            <h1 id="cal_title">—</h1>
+            <button type="button" id="cal_next">›</button>
+          </div>
+          <div class="cal-weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span class="sun">日</span></div>
+          <div id="cal_grid" class="cal-grid"></div>
+        </div>`;
+    case "drives":
+      return `<div id="drives-stage" class="drives-stage"></div>`;
+    case "filesearch":
+      return `
+        <div class="fs-root">
+          <div class="fs-toolbar">
+            <input id="fs_query" type="search" spellcheck="false" placeholder="搜尋本機／局域網檔名…" />
+            <button type="button" id="fs_go">搜尋</button>
+          </div>
+          <div class="fs-status" id="fs_status">輸入關鍵字開始搜尋</div>
+          <div class="fs-results" id="fs_results"></div>
+        </div>`;
+    case "terminal":
+      return `
+        <div class="terminal-root">
+          <div class="terminal-toolbar">
+            <span class="terminal-status" data-terminal-status>PowerShell Grid bereit</span>
+            <div class="terminal-grid-tools">
+              <select data-terminal-layout aria-label="Terminal-Raster">
+                <option value="1x1" ${terminalGridMode === "1x1" ? "selected" : ""}>1×1</option>
+                <option value="2x1" ${terminalGridMode === "2x1" ? "selected" : ""}>2×1</option>
+                <option value="2x2" ${terminalGridMode === "2x2" ? "selected" : ""}>2×2</option>
+              </select>
+              <button type="button" data-terminal-add title="Terminal hinzufügen">＋</button>
+            </div>
+          </div>
+          <div class="terminal-grid" data-terminal-grid></div>
+        </div>`;
+    case "cockpit":
+      return window.cockpitPanel?.bodyHtml?.() || `<div class="path-empty">駕駛室模組未載入</div>`;
+    case "cassette":
+      return window.cassettePanel?.bodyHtml?.() || `<div class="path-empty">磁帶模組未載入</div>`;
+    case "ddj":
+      return window.ddjPanel?.bodyHtml?.() || `<div class="path-empty">DDJ 模組未載入</div>`;
+    case "cpuRail":
+      return window.cpuRailPanel?.bodyHtml?.() || `<div class="path-empty">CPU 供電路徑模組未載入</div>`;
+    case "calculator":
+      return window.calculatorPanel?.bodyHtml?.() || `<div class="path-empty">計算器模組未載入</div>`;
+    case "dock":
+      return window.dockPanel?.bodyHtml?.() || `<div class="path-empty">底部 Dock 模組未載入</div>`;
+    default:
+      return "";
+  }
+}
+
+function cardToolsHtml({ allowMinimize = true } = {}) {
+  return `
+    <span class="card-tools">
+      ${allowMinimize ? '<button type="button" class="card-tool minimize-btn" data-card-act="minimize" title="In den Dock minimieren">−</button>' : ""}
+      <button type="button" class="card-tool more-btn" data-card-act="more" title="更多操作">⋯</button>
+    </span>`;
+}
+
+function closeCardMenus() {
+  document.querySelectorAll(".card-menu, .color-palette").forEach((m) => m.remove());
+}
+
+function openCardMenu(anchorBtn, items, pos) {
+  closeCardMenus();
+  const menu = document.createElement("div");
+  menu.className = "card-menu";
+  menu.innerHTML = items.map((item, i) => {
+    if (item.sep) return `<div class="card-menu-sep"></div>`;
+    if (item.kind === "tags") {
+      const selected = new Set(item.tags || []);
+      const dots = MACOS_TAGS.map((tag) => `
+        <button type="button" class="macos-tag${selected.has(tag.id) ? " on" : ""}" data-tag="${tag.id}" title="${escapeHtml(tag.label)}" style="--tag:${tag.color}"></button>
+      `).join("");
+      return `<div class="macos-tags" data-tags-idx="${i}">
+        <div class="macos-tags-label">標記</div>
+        <div class="macos-tags-row">${dots}<button type="button" class="macos-tag none" data-tag="" title="無">×</button></div>
+      </div>`;
+    }
+    return `<button type="button" data-menu-idx="${i}">${escapeHtml(item.label)}</button>`;
+  }).join("");
+  document.body.appendChild(menu);
+  window.edexI18n?.translatePage?.(menu);
+  const mw = menu.offsetWidth;
+  const mh = menu.offsetHeight;
+  let left;
+  let top;
+  if (pos) {
+    left = pos.x;
+    top = pos.y;
+  } else {
+    const rect = anchorBtn.getBoundingClientRect();
+    left = rect.right - mw;
+    top = rect.bottom + 4;
+  }
+  if (left + mw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - mw - 8);
+  if (left < 8) left = 8;
+  if (top + mh > window.innerHeight - 8) top = Math.max(8, (pos ? pos.y : top) - mh - 4);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.querySelectorAll("[data-menu-idx]").forEach((btn) => {
+    btn.onclick = (event) => {
+      event.stopPropagation();
+      const item = items[Number(btn.dataset.menuIdx)];
+      closeCardMenus();
+      item?.action?.();
+    };
+  });
+  menu.querySelectorAll("[data-tags-idx]").forEach((box) => {
+    const item = items[Number(box.dataset.tagsIdx)];
+    let current = [...(item.tags || [])];
+    box.addEventListener("pointerdown", (event) => event.stopPropagation());
+    box.querySelectorAll("[data-tag]").forEach((btn) => {
+      btn.onclick = async (event) => {
+        event.stopPropagation();
+        const id = btn.dataset.tag;
+        if (!id) current = [];
+        else if (current.includes(id)) current = current.filter((t) => t !== id);
+        else current = [...current, id];
+        box.querySelectorAll("[data-tag]").forEach((dot) => {
+          if (!dot.dataset.tag) return;
+          dot.classList.toggle("on", current.includes(dot.dataset.tag));
+        });
+        try {
+          await item.onChange?.(current);
+          item.tags = current;
+        } catch (err) {
+          toast(err.message || "無法更新標記");
+        }
+      };
+    });
+  });
+  const dismiss = (event) => {
+    if (!menu.contains(event.target) && event.target !== anchorBtn) {
+      closeCardMenus();
+      window.removeEventListener("pointerdown", dismiss, true);
+    }
+  };
+  setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const HUD_HIT_SEL = ".hud-card, .path-card, .program-card, .desktop-card, .card-menu, .color-palette, #fab-bar, .modal_popup, .round-fab, .toast";
+
+function pointHitsHud(x, y) {
+  if (document.body.classList.contains("is-ui-hold")) return true;
+  try {
+    const stack = document.elementsFromPoint(x, y) || [];
+    for (const el of stack) {
+      if (el?.closest?.(HUD_HIT_SEL)) return true;
+    }
+  } catch {
+    // ignore
+  }
+  for (const node of document.querySelectorAll(HUD_HIT_SEL)) {
+    // Dock backdrop is decorative / click-through (under transparent taskbar).
+    if (node.classList?.contains("dock-bare") || node.id === "card_dock") continue;
+    const r = node.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
+  }
+  return false;
+}
+
+function deskIconAt(x, y) {
+  try {
+    const stack = document.elementsFromPoint(x, y) || [];
+    for (const el of stack) {
+      const icon = el?.closest?.(".desk-icon[data-path]");
+      if (icon) return icon;
+    }
+  } catch {
+    // ignore
+  }
+  for (const icon of document.querySelectorAll(".desk-icon[data-path]")) {
+    const r = icon.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return icon;
+  }
+  return null;
+}
+
+function setupDesktopClickThrough() {
+  if (!window.edex?.setMouseIgnore) return;
+  let ignoring = true;
+  window.edex.setMouseIgnore(true);
+  const forceCapture = () => {
+    if (ignoring) {
+      ignoring = false;
+      window.edex.setMouseIgnore(false);
+    }
+  };
+  const applyAt = (x, y) => {
+    if (document.body.classList.contains("is-ui-hold")) {
+      forceCapture();
+      return;
+    }
+    if (document.body.classList.contains("is-file-dragging")) return;
+    const overHud = pointHitsHud(x, y);
+    if (document.body.classList.contains("is-file-drag-armed") && overHud) {
+      forceCapture();
+      return;
+    }
+    const blocking = document.querySelector(
+      ".dragging, .is-file-dragging, .card-menu, .modal_popup, .drop-target, .color-palette"
+    );
+    const nextIgnore = !overHud && !blocking;
+    if (nextIgnore === ignoring) return;
+    ignoring = nextIgnore;
+    window.edex.setMouseIgnore(nextIgnore);
+  };
+  // Poll OS cursor even while click-through — forwarded mousemove alone is unreliable
+  // for the first click on desktop icons (ignore still true → click falls to wallpaper).
+  const poll = () => {
+    if (document.visibilityState === "hidden") return;
+    if (fileDragBlocksHitPoll()) return;
+    const pt = window.edex.getCursorClientPoint?.();
+    if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
+    applyAt(pt.x, pt.y);
+  };
+  clearInterval(setupDesktopClickThrough._timer);
+  // ~12Hz is enough for hit-testing; 32ms (~31Hz) burned CPU for little gain.
+  setupDesktopClickThrough._timer = setInterval(poll, 80);
+  document.addEventListener("pointermove", (event) => {
+    applyAt(event.clientX, event.clientY);
+  }, { capture: true, passive: true });
+  document.addEventListener("pointerdown", (event) => {
+    applyAt(event.clientX, event.clientY);
+  }, true);
+  window.addEventListener("dragover", (event) => {
+    if (![...event.dataTransfer.types].includes("Files")) return;
+    if (pointHitsHud(event.clientX, event.clientY)) forceCapture();
+  }, true);
+}
+
+function fileDragBlocksHitPoll() {
+  return document.body.classList.contains("is-file-dragging");
+}
+
+function itemFromDeskNode(icon) {
+  if (!icon) return null;
+  try {
+    if (icon.dataset.itemJson) return JSON.parse(icon.dataset.itemJson);
+  } catch {
+    // fall through
+  }
+  return itemFromIcon(icon);
+}
+
+function bindDesktopIconClicks() {
+  if (document.documentElement.dataset.iconClicksBound === "1") return;
+  document.documentElement.dataset.iconClicksBound = "1";
+  let pairCtrl = false;
+  let lastPath = "";
+  let lastAt = 0;
+  const runActivate = (icon, ctrl) => {
+    if (!icon) return;
+    holdOverlayHits(500);
+    activateDesktopItem(itemFromDeskNode(icon), { ctrl });
+  };
+  // Prefer native detail===2; also accept a timed second click (some overlay builds drop detail).
+  document.addEventListener("click", (event) => {
+    if (event.button !== 0) return;
+    const icon = event.target?.closest?.(".desk-icon[data-path]") || deskIconAt(event.clientX, event.clientY);
+    if (!icon) return;
+    holdOverlayHits(1500);
+    if (event.ctrlKey || event.metaKey) pairCtrl = true;
+    const path = icon.dataset.path || "";
+    const now = Date.now();
+    const timedDbl = now - lastAt < 500 && lastPath === path;
+    lastAt = now;
+    lastPath = path;
+    if (event.detail !== 2 && !timedDbl) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const ctrl = event.ctrlKey || event.metaKey || pairCtrl;
+    pairCtrl = false;
+    runActivate(icon, ctrl);
+  }, true);
+  document.addEventListener("dblclick", (event) => {
+    const icon = event.target?.closest?.(".desk-icon[data-path]") || deskIconAt(event.clientX, event.clientY);
+    if (!icon) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    runActivate(icon, event.ctrlKey || event.metaKey || pairCtrl);
+    pairCtrl = false;
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const selected = document.querySelector(
+      "#desktop-stage .desk-icon.selected[data-path], .path-stage .desk-icon.selected[data-path]"
+    );
+    if (!selected) return;
+    event.preventDefault();
+    runActivate(selected, event.ctrlKey || event.metaKey);
+  }, true);
+}
+
+let overlayHoldTimer = 0;
+function holdOverlayHits(ms = 800) {
+  document.body.classList.add("is-ui-hold");
+  window.edex?.setMouseIgnore?.(false);
+  clearTimeout(overlayHoldTimer);
+  overlayHoldTimer = setTimeout(() => {
+    document.body.classList.remove("is-ui-hold");
+  }, ms);
+}
+
+function activateDesktopItem(item, { ctrl = false } = {}) {
+  if (!item?.path && !item?.targetPath) {
+    toast("無法開啟此項目");
+    return;
+  }
+  document.body.classList.remove("is-file-drag-armed", "is-file-dragging");
+  window.edex?.setFileDragArmed?.(false);
+  window.edex?.cancelFileDragPrepare?.();
+  hideFileDragGhost();
+  holdOverlayHits(500);
+  const folder = resolveFolderForTab(item);
+  if (ctrl) {
+    if (folder) {
+      openFolderInDesktopTab(folder);
+      return;
+    }
+    toast("請對資料夾（或資料夾捷徑）使用 Ctrl+雙擊");
+    return;
+  }
+  const openPath = folder?.path || item.targetPath || item.path;
+  if (!openPath) {
+    toast("無法開啟此項目");
+    return;
+  }
+  const title = folder?.name || itemLabel(item) || "項目";
+  // Fire-and-forget: no “正在開啟” toast; only report hard failures.
+  Promise.resolve(window.edex.openPath(openPath))
+    .then((result) => {
+      if (result && result.ok === false) {
+        toast(result.message || `無法開啟「${title}」`);
+      }
+    })
+    .catch((err) => {
+      toast(err?.message || "開啟失敗");
+    });
+}
+
+async function openInVsCode(target) {
+  const value = String(target || "").trim();
+  if (!value || !window.edex?.openInVsCode) return;
+  try {
+    const result = await window.edex.openInVsCode(value);
+    if (!result?.ok) toast(result?.message || "VS Code konnte nicht geöffnet werden");
+  } catch (err) {
+    toast(err?.message || "VS Code konnte nicht geöffnet werden");
+  }
+}
+
+function toast(message) {
+  document.querySelector(".toast")?.remove();
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = window.edexI18n?.translateDynamic?.(message) || message;
+  document.body.appendChild(el);
+  el.style.left = "50%";
+  el.style.top = "auto";
+  el.style.bottom = "9vh";
+  el.style.transform = "translateX(-50%)";
+  setTimeout(() => el.remove(), 2400);
+}
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function gridSize() {
+  const cell = settingsGridSize();
+  const fit = layoutFitScale();
+  return Math.max(4, Math.round(cell * fit));
+}
+
+function settingsGridSize() {
+  const raw = Number(state.settings?.gridSize);
+  if (!Number.isFinite(raw)) return 32;
+  return Math.max(12, Math.min(96, Math.round(raw)));
+}
+
+function clockScale() {
+  const raw = Number(state.settings?.clockScale);
+  if (!Number.isFinite(raw)) return 1;
+  return Math.max(0.25, Math.min(2, Math.round(raw * 20) / 20));
+}
+
+function clockLedColor() {
+  return toHex6(state.settings?.clockLedColor || "#ffffff");
+}
+
+function clockShowDate() {
+  return state.settings?.clockShowDate !== false;
+}
+
+function wallpaperGridPx() {
+  const raw = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--grid-size"));
+  if (Number.isFinite(raw) && raw > 4) return raw;
+  return gridSize();
+}
+
+function searchFontSize() {
+  const raw = Number(state.settings?.searchFontSize);
+  if (!Number.isFinite(raw)) return 12;
+  return Math.max(8, Math.min(72, Math.round(raw)));
+}
+
+function rainFontSize() {
+  const raw = Number(state.settings?.rainFontSize);
+  if (!Number.isFinite(raw)) return 14;
+  return Math.max(8, Math.min(72, Math.round(raw)));
+}
+
+function rainSpeed() {
+  const raw = Number(state.settings?.rainSpeed);
+  if (!Number.isFinite(raw)) return 1;
+  return Math.max(0.1, Math.min(8, Math.round(raw * 10) / 10));
+}
+
+function applyClockMetrics() {
+  const cell = Math.max(2, Math.round(gridSize() * clockScale()));
+  document.documentElement.style.setProperty("--clock-scale", String(clockScale()));
+  document.documentElement.style.setProperty("--clock-cell", `${cell}px`);
+  document.documentElement.style.setProperty("--clock-led", clockLedColor());
+  const host = document.getElementById("mod_clock_led");
+  if (host) host.style.setProperty("--clock-led", clockLedColor());
+}
+
+function applyRainMetrics() {
+  const font = rainFontSize();
+  const speed = rainSpeed();
+  document.documentElement.style.setProperty("--rain-font", `${font}px`);
+  document.documentElement.style.setProperty("--rain-speed", String(speed));
+  window.edexEffects?.setRainOptions?.({
+    fontSize: font,
+    speed
+  });
+  const meta = document.getElementById("mod_coderain_meta");
+  if (meta) meta.textContent = `${font}PX · ${speed.toFixed(1)}×`;
+}
+
+/* 5×7 LED glyphs — lit cells map onto the wallpaper grid. */
+const LED_GLYPHS = {
+  "0": ["111", "101", "101", "101", "111"],
+  "1": ["010", "110", "010", "010", "111"],
+  "2": ["111", "001", "111", "100", "111"],
+  "3": ["111", "001", "111", "001", "111"],
+  "4": ["101", "101", "111", "001", "001"],
+  "5": ["111", "100", "111", "001", "111"],
+  "6": ["111", "100", "111", "101", "111"],
+  "7": ["111", "001", "010", "010", "010"],
+  "8": ["111", "101", "111", "101", "111"],
+  "9": ["111", "101", "111", "001", "111"],
+  ":": ["0", "1", "0", "1", "0"],
+  ".": ["0", "0", "0", "0", "1"],
+  "/": ["001", "001", "010", "100", "100"],
+  " ": ["0", "0", "0", "0", "0"]
+};
+
+const LED_ROWS = 5;
+
+function snapGap() {
+  return gridSize();
+}
+
+function alignGrid(value) {
+  const g = gridSize();
+  return Math.round(value / g) * g;
+}
+
+function gridCells(px) {
+  return Math.max(0, Math.round(px / gridSize()));
+}
+
+function cellsPx(count) {
+  return Math.max(0, Math.round(count)) * gridSize();
+}
+
+function alignGridSpan(size, minCells = 2) {
+  const g = gridSize();
+  const cells = Math.max(minCells, Math.round(Math.max(0, size) / g));
+  return cells * g;
+}
+
+function snapExclusiveEdge(px) {
+  return Math.round(px / gridSize()) * gridSize();
+}
+
+function gridLineOf(exclusiveEdge) {
+  return snapExclusiveEdge(exclusiveEdge) - 1;
+}
+
+function pxFromBox(box) {
+  const g = gridSize();
+  if (Number.isFinite(Number(box?.gx)) && Number.isFinite(Number(box?.gw))) {
+    return {
+      x: cellsPx(box.gx),
+      y: cellsPx(box.gy),
+      w: cellsPx(Math.max(2, box.gw)),
+      h: cellsPx(Math.max(2, box.gh))
+    };
+  }
+  const x = alignGrid(pxFromVw(box?.x || 0));
+  const y = alignGrid(pxFromVh(box?.y || 0));
+  return {
+    x,
+    y,
+    w: alignGridSpan(pxFromVw(box?.w || 16), 2),
+    h: alignGridSpan(pxFromVh(box?.h || 10), 2)
+  };
+}
+
+function boxToPx(box) {
+  return pxFromBox(box);
+}
+
+function snapBoxVwVh(box) {
+  const px = pxFromBox(box);
+  return { ...box, ...pxToGridFields(px.x, px.y, px.w, px.h) };
+}
+
+function pxToGridFields(x, y, w, h) {
+  const g = gridSize();
+  const gx = gridCells(x);
+  const gy = gridCells(y);
+  const gw = Math.max(2, gridCells(w));
+  const gh = Math.max(2, gridCells(h));
+  return {
+    gx,
+    gy,
+    gw,
+    gh,
+    x: vw(gx * g),
+    y: vh(gy * g),
+    w: vw(gw * g),
+    h: vh(gh * g)
+  };
+}
+
+function applyBoxPx(target, x, y, w, h) {
+  Object.assign(target, pxToGridFields(x, y, w, h));
+  return target;
+}
+
+function rectsTooClose(a, b) {
+  const gap = gridSize();
+  return a.x < b.x + b.w + gap && a.x + a.w + gap > b.x && a.y < b.y + b.h + gap && a.y + a.h + gap > b.y;
+}
+
+function otherCardRects(excludeEl) {
+  return [...document.querySelectorAll(".hud-card, .path-card, .desktop-card")]
+    .filter((el) => el && el !== excludeEl)
+    .map((el) => ({
+      x: alignGrid(el.offsetLeft),
+      y: alignGrid(el.offsetTop),
+      w: alignGridSpan(el.offsetWidth, 2),
+      h: alignGridSpan(el.offsetHeight, 2)
+    }));
+}
+
+function overlapsAny(rect, others) {
+  return others.some((other) => rectsTooClose(rect, other));
+}
+
+function resolveMoveNoOverlap(el, x, y, w, h, fallback) {
+  const g = gridSize();
+  const ws = workspaceRect();
+  const others = otherCardRects(el);
+  x = alignGrid(x);
+  y = alignGrid(y);
+  w = alignGridSpan(w, 2);
+  h = alignGridSpan(h, 2);
+  const wanted = { x, y, w, h };
+  if (!overlapsAny(wanted, others)) return { x, y, w, h };
+
+  const candidates = [];
+  if (fallback) candidates.push({ x: alignGrid(fallback.x), y: alignGrid(fallback.y) });
+  others.forEach((o) => {
+    candidates.push(
+      { x: alignGrid(o.x + o.w + g), y: alignGrid(o.y) },
+      { x: alignGrid(o.x - w - g), y: alignGrid(o.y) },
+      { x: alignGrid(o.x), y: alignGrid(o.y + o.h + g) },
+      { x: alignGrid(o.x), y: alignGrid(o.y - h - g) },
+      { x: alignGrid(o.x + o.w + g), y },
+      { x: alignGrid(o.x - w - g), y },
+      { x, y: alignGrid(o.y + o.h + g) },
+      { x, y: alignGrid(o.y - h - g) }
+    );
+  });
+
+  let best = fallback ? { x: alignGrid(fallback.x), y: alignGrid(fallback.y), w, h } : wanted;
+  let bestD = Infinity;
+  candidates.forEach((c) => {
+    if (c.x < 0 || c.y < 0 || c.x + w > ws.width + g || c.y + h > ws.height + g) return;
+    const rect = { x: c.x, y: c.y, w, h };
+    if (overlapsAny(rect, others)) return;
+    const d = (c.x - x) ** 2 + (c.y - y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = rect;
+    }
+  });
+  if (overlapsAny(best, others) && fallback) {
+    return { x: alignGrid(fallback.x), y: alignGrid(fallback.y), w, h };
+  }
+  return best;
+}
+
+function clampResizeNoOverlap(el, left, top, w, h, minW, minH) {
+  const g = gridSize();
+  w = alignGridSpan(w, gridCells(minW || g * 2));
+  h = alignGridSpan(h, gridCells(minH || g * 2));
+  const others = otherCardRects(el);
+  others.forEach((o) => {
+    const hitsX = left < o.x + o.w + g && left + w + g > o.x;
+    const hitsY = top < o.y + o.h + g && top + h + g > o.y;
+    if (!hitsX || !hitsY) return;
+    if (left <= o.x && left + w + g > o.x) {
+      w = alignGridSpan(Math.min(w, o.x - g - left), gridCells(minW || g * 2));
+    }
+    if (top <= o.y && top + h + g > o.y) {
+      h = alignGridSpan(Math.min(h, o.y - g - top), gridCells(minH || g * 2));
+    }
+  });
+  while (w > (minW || g * 2) && overlapsAny({ x: left, y: top, w, h }, others)) w -= g;
+  while (h > (minH || g * 2) && overlapsAny({ x: left, y: top, w, h }, others)) h -= g;
+  return {
+    w: Math.max(minW || g * 2, w),
+    h: Math.max(minH || g * 2, h)
+  };
+}
+
+function snapAllLayoutToGrid() {
+  Object.keys(state.layout).forEach((id) => {
+    state.layout[id] = { ...state.layout[id], ...snapBoxVwVh(state.layout[id]) };
+  });
+  if (state.desktopStage) {
+    state.desktopStage = { ...state.desktopStage, ...snapBoxVwVh(state.desktopStage) };
+  }
+  state.pathCards.forEach((card) => {
+    Object.assign(card, snapBoxVwVh(card));
+  });
+  separateLayoutRects();
+}
+
+function separateLayoutRects() {
+  const g = gridSize();
+  const ws = workspaceRect();
+  const entries = [];
+  Object.keys(state.layout).forEach((id) => {
+    if (!state.layout[id] || id === "status") return;
+    entries.push({
+      px: pxFromBox(state.layout[id]),
+      apply: (px) => applyBoxPx(state.layout[id], px.x, px.y, px.w, px.h)
+    });
+  });
+  if (state.desktopEnabled !== false && state.desktopStage) {
+    entries.push({
+      px: pxFromBox(state.desktopStage),
+      apply: (px) => applyBoxPx(state.desktopStage, px.x, px.y, px.w, px.h)
+    });
+  }
+  state.pathCards.forEach((card) => {
+    entries.push({
+      px: pxFromBox(card),
+      apply: (px) => applyBoxPx(card, px.x, px.y, px.w, px.h)
+    });
+  });
+  entries.forEach((entry, index) => {
+    const others = entries.filter((_, i) => i !== index).map((item) => item.px);
+    let { x, y, w, h } = entry.px;
+    x = alignGrid(x);
+    y = alignGrid(y);
+    w = alignGridSpan(w, 2);
+    h = alignGridSpan(h, 2);
+    if (overlapsAny({ x, y, w, h }, others)) {
+      let found = false;
+      for (let dy = 0; dy < 48 && !found; dy += 1) {
+        for (let dx = 0; dx < 48 && !found; dx += 1) {
+          const cx = x + dx * g;
+          const cy = y + dy * g;
+          if (cx < 0 || cy < 0 || cx + w > ws.width || cy + h > ws.height) continue;
+          if (!overlapsAny({ x: cx, y: cy, w, h }, others)) {
+            x = cx;
+            y = cy;
+            found = true;
+          }
+        }
+      }
+    }
+    entry.px = { x, y, w, h };
+    entry.apply(entry.px);
+  });
+}
+
+/** Occupied card rects from layout state (DOM may not exist yet during add). */
+function occupiedLayoutRects(exclude = {}) {
+  const rects = [];
+  Object.keys(state.layout).forEach((id) => {
+    if (id === "status" || !state.layout[id]) return;
+    if (exclude.panelId === id) return;
+    rects.push(pxFromBox(state.layout[id]));
+  });
+  if (state.desktopEnabled !== false && state.desktopStage && !exclude.desktop) {
+    rects.push(pxFromBox(state.desktopStage));
+  }
+  (state.pathCards || []).forEach((card) => {
+    if (exclude.pathId === card.id) return;
+    rects.push(pxFromBox(card));
+  });
+  return rects;
+}
+
+/**
+ * Place a new card in the first free grid slot (row-major), preferring the
+ * suggested box when it does not overlap existing containers/plugins.
+ */
+function findEmptyBox(preferredBox, exclude = {}) {
+  const g = gridSize();
+  const ws = workspaceRect();
+  const base = snapBoxVwVh({ ...(preferredBox || {}) });
+  let { x, y, w, h } = pxFromBox(base);
+  w = alignGridSpan(w, 2);
+  h = alignGridSpan(h, 2);
+  const others = occupiedLayoutRects(exclude);
+  const fits = (rect) => (
+    rect.x >= 0
+    && rect.y >= 0
+    && rect.x + rect.w <= ws.width + g
+    && rect.y + rect.h <= ws.height + g
+    && !overlapsAny(rect, others)
+  );
+  if (fits({ x, y, w, h })) {
+    return snapBoxVwVh({ ...base, ...pxToGridFields(x, y, w, h) });
+  }
+  const maxDx = Math.max(0, Math.floor(Math.max(0, ws.width - w) / g));
+  const maxDy = Math.max(0, Math.floor(Math.max(0, ws.height - h) / g));
+  for (let dy = 0; dy <= maxDy; dy += 1) {
+    for (let dx = 0; dx <= maxDx; dx += 1) {
+      const rect = { x: dx * g, y: dy * g, w, h };
+      if (!fits(rect)) continue;
+      return snapBoxVwVh({ ...base, ...pxToGridFields(rect.x, rect.y, rect.w, rect.h) });
+    }
+  }
+  // Workspace full — keep preferred snapped position (user can drag later).
+  return snapBoxVwVh({ ...base, ...pxToGridFields(x, y, w, h) });
+}
+
+function workspaceRect() {
+  const ws = document.getElementById("workspace");
+  return {
+    width: ws?.clientWidth || window.innerWidth,
+    height: ws?.clientHeight || Math.floor(window.innerHeight * 0.86)
+  };
+}
+
+function vw(px) {
+  const den = layoutProfile().w * layoutFitScale();
+  return den > 0 ? (px / den) * 100 : 0;
+}
+
+function vh(px) {
+  const den = layoutProfile().h * layoutFitScale();
+  return den > 0 ? (px / den) * 100 : 0;
+}
+
+function pxFromVw(v) {
+  return (v / 100) * layoutProfile().w * layoutFitScale();
+}
+
+function pxFromVh(v) {
+  return (v / 100) * layoutProfile().h * layoutFitScale();
+}
+
+const LAYOUT_PROFILES = {
+  "2k": { id: "2k", label: "2K（2560×1440）", w: 2560, h: 1440 },
+  "4k": { id: "4k", label: "4K（3840×2160）", w: 3840, h: 2160 }
+};
+
+function pageSize() {
+  const phys = state.physicalSize;
+  const cssW = window.innerWidth;
+  const cssH = window.innerHeight;
+  return {
+    width: Math.max(cssW, phys?.width || 0),
+    height: Math.max(cssH, phys?.height || 0)
+  };
+}
+
+function defaultLayoutMode() {
+  const primary = (state.displays || []).find((d) => d.primary) || state.displays?.[0];
+  const width = Number(primary?.physicalSize?.width) || pageSize().width;
+  const height = Number(primary?.physicalSize?.height) || pageSize().height;
+  return (width >= 3200 || height >= 2000) ? "4k" : "2k";
+}
+
+function layoutMode() {
+  const raw = state.settings?.layoutMode;
+  if (raw === "4k" || raw === "2k") return raw;
+  return defaultLayoutMode();
+}
+
+function layoutProfile() {
+  return LAYOUT_PROFILES[layoutMode()];
+}
+
+function layoutFitScale() {
+  const primary = (state.displays || []).find((d) => d.primary) || state.displays?.[0];
+  const pw = Number(primary?.physicalSize?.width);
+  const ph = Number(primary?.physicalSize?.height);
+  const mine = state.physicalSize;
+  const width = Number(mine?.width) || pageSize().width;
+  const height = Number(mine?.height) || pageSize().height;
+  if (!(pw > 4 && ph > 4 && width > 4 && height > 4)) return 1;
+  const short = Math.min(width, height) / Math.min(pw, ph);
+  const long = Math.max(width, height) / Math.max(pw, ph);
+  const scale = Math.min(short, long);
+  if (!Number.isFinite(scale) || scale <= 0) return 1;
+  return Math.min(1, scale);
+}
+
+function displayUiScale() {
+  const raw = Number(state.settings?.uiScale);
+  if (raw === 0.72 || !Number.isFinite(raw) || raw <= 0) return 1;
+  return Math.max(0.4, Math.min(1.5, raw));
+}
+
+function applyUiMetrics() {
+  const user = displayUiScale();
+  const design = layoutProfile();
+  const fit = layoutFitScale();
+  document.documentElement.style.setProperty("--ui-scale", String(user * fit));
+  document.documentElement.style.setProperty("--disp-h", `${design.h}px`);
+  document.documentElement.style.setProperty("--disp-w", `${design.w}px`);
+  document.documentElement.style.setProperty("--grid-size", `${gridSize()}px`);
+  document.documentElement.style.setProperty("--snap-gap", `${gridSize()}px`);
+  document.documentElement.style.setProperty("--search-font", `${searchFontSize()}px`);
+  applyClockMetrics();
+}
+
+function applyTheme(theme, wallpaperId) {
+  state.theme = theme;
+  const c = theme.colors || {};
+  document.documentElement.style.setProperty("--color_r", c.r ?? 170);
+  document.documentElement.style.setProperty("--color_g", c.g ?? 207);
+  document.documentElement.style.setProperty("--color_b", c.b ?? 209);
+  document.documentElement.style.setProperty("--color_black", c.black || "#000000");
+  document.documentElement.style.setProperty("--color_light_black", c.light_black || "#05080d");
+  document.documentElement.style.setProperty("--color_grey", c.grey || "#262828");
+  document.documentElement.style.setProperty("--color_red", c.red || "#ff3c3c");
+  document.documentElement.style.setProperty("--color_yellow", c.yellow || "#ffd23c");
+  document.documentElement.style.setProperty("--snap-gap", `${snapGap()}px`);
+  applyUiMetrics();
+  window.__edexTheme = theme;
+
+  const wp = wallpaperId || state.settings.wallpaper || "grid";
+  document.body.className = `desktop-shell wp-${wp}`;
+}
+
+function ledGlyph(ch) {
+  return LED_GLYPHS[ch] || LED_GLYPHS[" "];
+}
+
+function pushLedCols(rows, count) {
+  for (let i = 0; i < count; i += 1) rows.forEach((row) => row.push(0));
+}
+
+function buildLedLine(text) {
+  const rows = Array.from({ length: LED_ROWS }, () => []);
+  [...String(text || "")].forEach((ch, i) => {
+    const glyph = ledGlyph(ch);
+    const w = glyph[0].length;
+    const prev = i ? text[i - 1] : "";
+    if (ch === ":" || ch === ".") pushLedCols(rows, 2);
+    else if (prev === ":" || prev === ".") pushLedCols(rows, 2);
+    else if (i) pushLedCols(rows, 1);
+    for (let r = 0; r < LED_ROWS; r += 1) {
+      const bits = glyph[r] || "".padEnd(w, "0");
+      for (let c = 0; c < w; c += 1) rows[r].push(bits[c] === "1" ? 1 : 0);
+    }
+  });
+  return rows;
+}
+
+function buildLedMatrix(lines) {
+  const blocks = (lines || []).filter(Boolean).map((line) => buildLedLine(line));
+  if (!blocks.length) return [[]];
+  const width = Math.max(...blocks.map((block) => block[0].length));
+  const pad = (block) => block.map((row) => {
+    const next = row.slice();
+    while (next.length < width) next.push(0);
+    return next;
+  });
+  const grid = [];
+  blocks.forEach((block, i) => {
+    if (i) grid.push(Array(width).fill(0));
+    grid.push(...pad(block));
+  });
+  return grid;
+}
+
+function parseLedColor(color) {
+  const s = String(color || "#ffffff").trim();
+  const hex = s.replace(/^#/, "");
+  if (/^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(hex)) {
+    const r = Number.parseInt(hex.slice(0, 2), 16);
+    const g = Number.parseInt(hex.slice(2, 4), 16);
+    const b = Number.parseInt(hex.slice(4, 6), 16);
+    return { r, g, b, css: `rgb(${r}, ${g}, ${b})` };
+  }
+  const fill = colorToFill(s) || "rgb(255,255,255)";
+  const m = fill.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+  if (m) {
+    const r = Number(m[1]);
+    const g = Number(m[2]);
+    const b = Number(m[3]);
+    return { r, g, b, css: `rgb(${r}, ${g}, ${b})` };
+  }
+  return { r: 255, g: 255, b: 255, css: "rgb(255, 255, 255)" };
+}
+
+function toHex6(color) {
+  const parsed = parseLedColor(color);
+  const h = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${h(parsed.r)}${h(parsed.g)}${h(parsed.b)}`;
+}
+
+function wallpaperGridCell() {
+  return Math.max(1, Math.round(gridSize()));
+}
+
+function alignClockToWallpaperGrid() {
+  const card = document.getElementById("card_clock");
+  const host = document.getElementById("mod_clock_led");
+  if (!card || !host || card.classList.contains("dragging")) return;
+  const g = wallpaperGridCell();
+  const scale = Number(state.scaleFactor) || 1;
+  const originX = (Number(state.bounds?.x) || 0) * scale;
+  const originY = (Number(state.bounds?.y) || 0) * scale;
+  const rect = host.getBoundingClientRect();
+  const worldX = originX + rect.left;
+  const worldY = originY + rect.top;
+  const dx = Math.round(worldX / g) * g - worldX;
+  const dy = Math.round(worldY / g) * g - worldY;
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+    host.style.left = host.style.left || "0px";
+    host.style.top = host.style.top || "0px";
+    return;
+  }
+  const left = Number.parseFloat(host.style.left) || 0;
+  const top = Number.parseFloat(host.style.top) || 0;
+  host.style.left = `${Math.round(left + dx)}px`;
+  host.style.top = `${Math.round(top + dy)}px`;
+}
+
+function renderClock() {
+  const host = document.getElementById("mod_clock_led");
+  if (!host) return;
+  applyClockMetrics();
+  const now = new Date();
+  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${Math.floor(now.getMilliseconds() / 100)}`;
+  const date = `${now.getFullYear() % 100}/${now.getMonth() + 1}/${now.getDate()}`;
+  const matrix = buildLedMatrix(clockShowDate() ? [time, date] : [time]);
+  const rows = matrix.length;
+  const cols = matrix[0]?.length || 0;
+  if (!cols) return;
+
+  const cell = Math.max(2, Math.round(wallpaperGridCell() * clockScale()));
+  const led = clockLedColor();
+  host.style.setProperty("--led-cell", `${cell}px`);
+  host.style.setProperty("--clock-led", led);
+  host.style.width = `${cols * cell}px`;
+  host.style.height = `${rows * cell}px`;
+  host.style.gridTemplateColumns = `repeat(${cols}, ${cell}px)`;
+  host.style.gridTemplateRows = `repeat(${rows}, ${cell}px)`;
+
+  const total = rows * cols;
+  const layoutKey = `${cols}x${rows}`;
+  if (host.dataset.ledLayout !== layoutKey || host.childElementCount !== total) {
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < total; i += 1) {
+      frag.appendChild(document.createElement("span"));
+    }
+    host.replaceChildren(frag);
+    host.dataset.ledLayout = layoutKey;
+  }
+  const nodes = host.children;
+  let i = 0;
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const on = Boolean(matrix[r][c]);
+      nodes[i].className = on ? "on" : "";
+      if (on) nodes[i].style.setProperty("background-color", led, "important");
+      else nodes[i].style.removeProperty("background-color");
+      i += 1;
+    }
+  }
+  alignClockToWallpaperGrid();
+}
+
+function iconSvg(icon) {
+  if (!icon) return "";
+  if (icon.dataUrl) {
+    const dataUrl = String(icon.dataUrl);
+    if (!/^data:image\//i.test(dataUrl)) return "";
+    return `<img class="sys-icon" src="${escapeHtml(dataUrl)}" alt="" width="${escapeHtml(icon.width || 32)}" height="${escapeHtml(icon.height || 32)}" draggable="false" />`;
+  }
+  if (!icon.svg) return "";
+  const color = "rgb(var(--color_r), var(--color_g), var(--color_b))";
+  return `<svg viewBox="0 0 ${icon.width} ${icon.height}" fill="${color}">${icon.svg}</svg>`;
+}
+
+function itemLabel(item) {
+  return item?.displayName || item?.name || "";
+}
+
+function currentDisplayLayout() {
+  return {
+    layout: state.layout,
+    desktopStage: state.desktopStage,
+    desktopEnabled: state.desktopEnabled !== false,
+    desktopLocked: Boolean(state.desktopLocked),
+    desktopFilter: state.desktopFilter || "all",
+    desktopGrouped: Boolean(state.desktopGrouped),
+    desktopTabId: state.desktopTabId || "classify",
+    desktopFolderTabs: (state.desktopFolderTabs || []).map((tab) => ({
+      id: tab.id,
+      path: tab.path,
+      name: tab.name
+    })),
+    pathCards: state.pathCards.map((card) => ({
+      id: card.id,
+      path: card.path,
+      x: card.x,
+      y: card.y,
+      w: card.w,
+      h: card.h,
+      gx: card.gx,
+      gy: card.gy,
+      gw: card.gw,
+      gh: card.gh,
+      locked: Boolean(card.locked),
+      minimized: Boolean(card.minimized),
+      iconView: card.iconView === "list" ? "list" : "grid",
+      bg: card.bg || ""
+    })),
+    desktopBg: state.desktopStage?.bg || "",
+    iconPositions: state.iconPositions,
+    iconView: state.iconView
+  };
+}
+
+function persistLayout() {
+  return window.edex.saveDisplayLayout(currentDisplayLayout());
+}
+
+function clearSnapGuides() {
+  const box = document.getElementById("snap-guides");
+  if (!box) return;
+  box.classList.remove("on");
+  box.innerHTML = "";
+}
+
+function showSnapGuides(guides) {
+  const box = document.getElementById("snap-guides");
+  if (!box) return;
+  const g = gridSize();
+  box.classList.add("on");
+  box.style.backgroundSize = `${g}px ${g}px`;
+  box.innerHTML = (guides || []).map((item) => {
+    const pos = gridLineOf(item.line == null ? item.pos : item.line + 1);
+    const cls = `snap-guide ${item.type}${item.ref ? " ref" : ""}${item.match ? " match" : ""}`;
+    const label = item.label
+      ? `<span class="snap-label">${escapeHtml(item.label)}</span>`
+      : "";
+    return item.type === "v"
+      ? `<div class="${cls}" style="left:${pos}px">${label}</div>`
+      : `<div class="${cls}" style="top:${pos}px">${label}</div>`;
+  }).join("");
+}
+
+function collectSnapTargets(excludeEl) {
+  const gap = snapGap();
+  const ws = workspaceRect();
+  const edgesX = [];
+  const edgesY = [];
+  document.querySelectorAll(".hud-card, .path-card, .desktop-card").forEach((el) => {
+    if (el === excludeEl) return;
+    const left = alignGrid(el.offsetLeft);
+    const top = alignGrid(el.offsetTop);
+    const right = left + alignGridSpan(el.offsetWidth, 2);
+    const bottom = top + alignGridSpan(el.offsetHeight, 2);
+    edgesX.push({ left, right });
+    edgesY.push({ top, bottom });
+  });
+  return { edgesX, edgesY, gap, ws };
+}
+
+function referenceGuides(ws) {
+  const midX = snapExclusiveEdge(ws.width / 2);
+  const midY = snapExclusiveEdge(ws.height / 2);
+  return [
+    { type: "v", pos: midX, ref: true, label: "中" },
+    { type: "h", pos: midY, ref: true, label: "中" }
+  ];
+}
+
+function neighborDisplay(direction) {
+  const mine = state.displays.find((d) => d.id === state.displayId);
+  if (!mine) return null;
+  const candidates = state.displays.filter((d) => d.id !== state.displayId);
+  if (direction === "left") {
+    return candidates
+      .filter((d) => d.bounds.x + d.bounds.width <= mine.bounds.x + 48)
+      .sort((a, b) => b.bounds.x - a.bounds.x)[0] || null;
+  }
+  if (direction === "right") {
+    return candidates
+      .filter((d) => d.bounds.x >= mine.bounds.x + mine.bounds.width - 48)
+      .sort((a, b) => a.bounds.x - b.bounds.x)[0] || null;
+  }
+  if (direction === "up") {
+    return candidates
+      .filter((d) => d.bounds.y + d.bounds.height <= mine.bounds.y + 48)
+      .sort((a, b) => b.bounds.y - a.bounds.y)[0] || null;
+  }
+  return candidates
+    .filter((d) => d.bounds.y >= mine.bounds.y + mine.bounds.height - 48)
+    .sort((a, b) => a.bounds.y - b.bounds.y)[0] || null;
+}
+
+async function maybeTransferCard(el, x, y, w, h, opts) {
+  const g = gridSize();
+  const ws = workspaceRect();
+  let target = null;
+  let placeX = g;
+  let placeY = g;
+  const outLeft = x <= -g || (opts.clientX != null && opts.clientX < 12);
+  const outRight = x + w >= ws.width + g || (opts.clientX != null && opts.clientX > window.innerWidth - 12);
+  const outUp = y <= -g || (opts.clientY != null && opts.clientY < 12);
+  const outDown = y + h >= ws.height + g || (opts.clientY != null && opts.clientY > window.innerHeight - 12);
+  if (outLeft) {
+    target = neighborDisplay("left");
+    placeX = Math.max(g, alignGrid(ws.width - w - g));
+  } else if (outRight) {
+    target = neighborDisplay("right");
+    placeX = g;
+  } else if (outUp) {
+    target = neighborDisplay("up");
+    placeY = Math.max(g, alignGrid(ws.height - h - g));
+  } else if (outDown) {
+    target = neighborDisplay("down");
+    placeY = g;
+  }
+  if (!target || !opts.widgetType) return false;
+  if (opts.widgetType === "desktop" && !target.primary) {
+    toast("系統桌面僅能顯示在主顯示器");
+    return false;
+  }
+
+  const placed = pxToGridFields(placeX, placeY, w, h);
+  const widget = {
+    type: opts.widgetType,
+    id: opts.widgetId,
+    data: opts.widgetData,
+    ...placed
+  };
+  const result = await window.edex.transferWidget(target.id, widget);
+  if (result?.ok) {
+    opts.onTransferred?.();
+    toast(`已移至 ${target.label}`);
+    return true;
+  }
+  if (result?.message) toast(result.message);
+  return false;
+}
+
+function magneticSnap(el, x, y, w, h, pointer) {
+  const { edgesX, edgesY, gap, ws } = collectSnapTargets(el);
+  const nearLeft = pointer && pointer.x < 40;
+  const nearRight = pointer && pointer.x > window.innerWidth - 40;
+  const nearTop = pointer && pointer.y < 40;
+  const nearBottom = pointer && pointer.y > window.innerHeight - 40;
+  w = alignGridSpan(w, 2);
+  h = alignGridSpan(h, 2);
+  let nextX = alignGrid(x);
+  let nextY = alignGrid(y);
+  const guides = [];
+  const threshold = gap * 0.55;
+
+  for (const edge of edgesX) {
+    const dockRight = edge.right + gap;
+    const dockLeft = edge.left - gap - w;
+    if (Math.abs(nextX - dockRight) <= threshold) {
+      nextX = dockRight;
+      guides.push({ type: "v", pos: dockRight });
+    } else if (Math.abs(nextX - dockLeft) <= threshold) {
+      nextX = dockLeft;
+      guides.push({ type: "v", pos: nextX + w });
+    }
+  }
+  for (const edge of edgesY) {
+    const dockBelow = edge.bottom + gap;
+    const dockAbove = edge.top - gap - h;
+    if (Math.abs(nextY - dockBelow) <= threshold) {
+      nextY = dockBelow;
+      guides.push({ type: "h", pos: dockBelow });
+    } else if (Math.abs(nextY - dockAbove) <= threshold) {
+      nextY = dockAbove;
+      guides.push({ type: "h", pos: nextY + h });
+    }
+  }
+
+  if (!(nearLeft || nearRight)) nextX = Math.max(0, Math.min(alignGrid(ws.width - w), nextX));
+  if (!(nearTop || nearBottom)) nextY = Math.max(0, Math.min(alignGrid(ws.height - h), nextY));
+  nextX = alignGrid(nextX);
+  nextY = alignGrid(nextY);
+  if (!(nearLeft || nearRight || nearTop || nearBottom)) {
+    const resolved = resolveMoveNoOverlap(el, nextX, nextY, w, h, {
+      x: el.offsetLeft,
+      y: el.offsetTop
+    });
+    nextX = resolved.x;
+    nextY = resolved.y;
+  }
+  guides.push(
+    { type: "v", pos: nextX, match: true },
+    { type: "v", pos: nextX + w, match: true },
+    { type: "h", pos: nextY, match: true },
+    { type: "h", pos: nextY + h, match: true }
+  );
+  return { x: nextX, y: nextY, guides: [...referenceGuides(ws), ...guides] };
+}
+
+function gridMinSize(px) {
+  const g = gridSize();
+  return Math.max(g * 2, alignGridSpan(px, 2));
+}
+
+function magneticResize(el, w, h, left, top, minWPx, minHPx) {
+  const { edgesX, edgesY, gap, ws } = collectSnapTargets(el);
+  const g = gridSize();
+  const threshold = g * 0.55;
+  const minW = gridMinSize(minWPx || g * 2);
+  const minH = gridMinSize(minHPx || g * 2);
+  let right = left + w;
+  let bottom = top + h;
+  const guides = [...referenceGuides(ws)];
+
+  for (const edge of edgesX) {
+    const dockToLeft = edge.left - gap;
+    if (Math.abs(right - dockToLeft) <= threshold) {
+      right = dockToLeft;
+      guides.push({ type: "v", pos: dockToLeft, match: true });
+    }
+  }
+  for (const edge of edgesY) {
+    const dockAbove = edge.top - gap;
+    if (Math.abs(bottom - dockAbove) <= threshold) {
+      bottom = dockAbove;
+      guides.push({ type: "h", pos: dockAbove, match: true });
+    }
+  }
+
+  right = snapExclusiveEdge(right);
+  bottom = snapExclusiveEdge(bottom);
+  let nextW = Math.max(minW, right - left);
+  let nextH = Math.max(minH, bottom - top);
+  nextW = alignGridSpan(nextW, gridCells(minW));
+  nextH = alignGridSpan(nextH, gridCells(minH));
+  const maxW = alignGridSpan(Math.max(minW, snapExclusiveEdge(ws.width) - left), gridCells(minW));
+  const maxH = alignGridSpan(Math.max(minH, snapExclusiveEdge(ws.height) - top), gridCells(minH));
+  nextW = Math.min(maxW, nextW);
+  nextH = Math.min(maxH, nextH);
+  const clamped = clampResizeNoOverlap(el, left, top, nextW, nextH, minW, minH);
+  nextW = clamped.w;
+  nextH = clamped.h;
+  guides.push({ type: "v", pos: left + nextW, match: true });
+  guides.push({ type: "h", pos: top + nextH, match: true });
+  return { w: nextW, h: nextH, guides };
+}
+
+function isCardLocked(el) {
+  return el?.classList.contains("locked");
+}
+
+function makeInteractive(el, opts) {
+  const handle = el.classList.contains("clock-bare") ? el : (el.querySelector(".card-title") || el);
+  const resize = el.querySelector(".resize-handle");
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(
+      "button, .resize-handle, .view-toggle, .card-tools, .card-tool, input, " +
+      ".cockpit-root, .cockpit-knob, .cockpit-pad-btn, .cockpit-fader, .cockpit-radar-wrap, .cockpit-sector, " +
+      "#mod_ddj, .ddj-jog, .ddj-knob, .ddj-tempo, .ddj-ch-fader, .ddj-h-fader, .ddj-xfader, .ddj-pad, .ddj-round, .ddj-chcue, " +
+      "#mod_cassette, .cass-btn, .cass-reel"
+    )) return;
+    if (isCardLocked(el)) return;
+    event.preventDefault();
+    el.classList.add("dragging");
+    el.style.zIndex = String(++state.zTop);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origX = alignGrid(el.offsetLeft);
+    const origY = alignGrid(el.offsetTop);
+    const w = alignGridSpan(el.offsetWidth, 2);
+    const h = alignGridSpan(el.offsetHeight, 2);
+    document.body.classList.add("is-card-dragging");
+    el.style.left = `${origX}px`;
+    el.style.top = `${origY}px`;
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+    let lastRawX = 0;
+    let lastClientX = startX;
+    let lastClientY = startY;
+    let lastX = origX;
+    let lastY = origY;
+
+    const move = (ev) => {
+      let x = origX + (ev.clientX - startX);
+      let y = origY + (ev.clientY - startY);
+      lastRawX = ev.clientX - startX;
+      lastClientX = ev.clientX;
+      lastClientY = ev.clientY;
+      const snapped = magneticSnap(el, x, y, w, h, { x: ev.clientX, y: ev.clientY });
+      lastX = snapped.x;
+      lastY = snapped.y;
+      el.style.left = `${snapped.x}px`;
+      el.style.top = `${snapped.y}px`;
+      showSnapGuides(snapped.guides);
+      opts.onMove?.(snapped.x, snapped.y, w, h);
+    };
+    const up = async () => {
+      el.classList.remove("dragging");
+      document.body.classList.remove("is-card-dragging");
+      clearSnapGuides();
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const x = lastX;
+      const y = lastY;
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      const transferred = await maybeTransferCard(el, x, y, w, h, {
+        rawX: lastRawX,
+        clientX: lastClientX,
+        clientY: lastClientY,
+        widgetType: opts.widgetType,
+        widgetId: opts.widgetId,
+        widgetData: opts.widgetData?.(),
+        onTransferred: opts.onTransferred
+      });
+      if (!transferred) {
+        opts.onEnd?.();
+        persistLayout();
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+
+  if (resize && opts.resizable !== false) {
+    resize.addEventListener("pointerdown", (event) => {
+      if (isCardLocked(el)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      window.edex?.setMouseIgnore?.(false);
+      el.style.zIndex = String(++state.zTop);
+      el.classList.add("dragging");
+      document.body.classList.add("is-card-dragging");
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const g = gridSize();
+      const left = alignGrid(el.offsetLeft);
+      const top = alignGrid(el.offsetTop);
+      const minW = gridMinSize(opts.minW || g * 4);
+      const minH = gridMinSize(opts.minH || g * 3);
+      const origW = alignGridSpan(el.offsetWidth, gridCells(minW));
+      const origH = alignGridSpan(el.offsetHeight, gridCells(minH));
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.width = `${origW}px`;
+      el.style.height = `${origH}px`;
+      let lastW = origW;
+      let lastH = origH;
+
+      const move = (ev) => {
+        const right = snapExclusiveEdge(left + origW + (ev.clientX - startX));
+        const bottom = snapExclusiveEdge(top + origH + (ev.clientY - startY));
+        const snapped = magneticResize(el, right - left, bottom - top, left, top, minW, minH);
+        lastW = snapped.w;
+        lastH = snapped.h;
+        el.style.width = `${snapped.w}px`;
+        el.style.height = `${snapped.h}px`;
+        showSnapGuides(snapped.guides);
+        opts.onMove?.(left, top, snapped.w, snapped.h);
+      };
+      const up = () => {
+        el.classList.remove("dragging");
+        document.body.classList.remove("is-card-dragging");
+        clearSnapGuides();
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        const finalW = snapExclusiveEdge(left + lastW) - left;
+        const finalH = snapExclusiveEdge(top + lastH) - top;
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+        el.style.width = `${Math.max(minW, finalW)}px`;
+        el.style.height = `${Math.max(minH, finalH)}px`;
+        opts.onMove?.(left, top, Math.max(minW, finalW), Math.max(minH, finalH));
+        opts.onEnd?.();
+        persistLayout();
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  }
+}
+
+async function boot() {
+  document.getElementById("boot_screen")?.remove();
+  applyTheme(state.theme || state.bootstrap?.theme, state.settings.wallpaper || "grid");
+}
+
+function styleFromBox(box) {
+  const px = boxToPx(box);
+  return `left:${px.x}px;top:${px.y}px;width:${px.w}px;height:${px.h}px;box-sizing:border-box`;
+}
+
+function panelHtml(id) {
+  if (!state.layout[id] || !PANEL_META[id] || id === "status" || state.layout[id].minimized) return "";
+  const locked = Boolean(state.layout[id].locked);
+  const extra = id === "clock" ? " clock-bare" : id === "dock" ? " dock-bare" : "";
+  const forceLocked = locked || id === "dock";
+  return `
+    <section class="hud-card${extra}${forceLocked ? " locked" : ""}" id="card_${id}" data-panel-id="${id}" style="${styleFromBox(state.layout[id])}">
+      <h3 class="card-title">
+        <span class="card-title-text">${PANEL_META[id].title}</span>
+        ${cardToolsHtml({ allowMinimize: id !== "dock" })}
+      </h3>
+      <div class="card-body">${panelBody(id)}</div>
+      <div class="resize-handle"></div>
+    </section>`;
+}
+
+function dockIcon(kind, id) {
+  if (kind === "desktop" || kind === "path") return "folders";
+  const icons = {
+    clock: "clock", cpu: "cpu", ram: "ram", toplist: "processes", globe: "world", conninfo: "network",
+    calendar: "clock", drives: "drive", filesearch: "folders"
+  };
+  return icons[id] || "fallback";
+}
+
+function renderDockItems() {
+  const host = document.querySelector("[data-dock-items]");
+  if (!host) return;
+  const items = [];
+  Object.keys(PANEL_META).forEach((id) => {
+    if (id !== "dock" && state.layout[id]?.minimized) {
+      items.push({ kind: "panel", id, label: PANEL_META[id].title });
+    }
+  });
+  if (state.desktopEnabled !== false && state.desktopStage?.minimized) {
+    items.push({ kind: "desktop", id: "desktop", label: "系統桌面" });
+  }
+  state.pathCards.forEach((card, index) => {
+    if (card.minimized) items.push({ kind: "path", id: card.id, label: pathTitle(card, index) });
+  });
+  host.innerHTML = items.map((item) => `
+    <button type="button" class="dock-item" data-dock-kind="${item.kind}" data-dock-restore="${escapeHtml(item.id)}" title="${escapeHtml(item.label)}">
+      <span class="dock-item-icon dock-item-icon-${dockIcon(item.kind, item.id)}" aria-hidden="true"></span>
+      <span class="dock-item-label">${escapeHtml(item.label)}</span>
+    </button>`).join("");
+  window.edexI18n?.translatePage?.(host);
+  host.querySelectorAll("[data-dock-restore]").forEach((button) => {
+      button.addEventListener("click", async () => {
+      const kind = button.dataset.dockKind;
+      const id = button.dataset.dockRestore;
+      if (!id) return;
+      if (kind === "panel" && state.layout[id]) {
+        state.layout[id] = { ...state.layout[id], minimized: false };
+      } else if (kind === "desktop" && state.desktopStage) {
+        state.desktopStage = { ...state.desktopStage, minimized: false };
+      } else if (kind === "path") {
+        const card = state.pathCards.find((item) => item.id === id);
+        if (!card) return;
+        card.minimized = false;
+      } else {
+        return;
+      }
+      state.dockForeground = true;
+      await window.edex?.raiseOverlay?.();
+      persistLayout();
+      rebuildWorkspace();
+    });
+  });
+}
+
+function setCardLocked(el, locked) {
+  el.classList.toggle("locked", locked);
+  toast(locked ? "已鎖定容器" : "已解鎖容器");
+}
+
+async function setClockScale(value) {
+  const next = Math.max(0.25, Math.min(2, Math.round(Number(value) * 20) / 20));
+  if (!Number.isFinite(next)) {
+    toast("請輸入 0.25–2.0 之間的數字");
+    return;
+  }
+  state.settings = { ...state.settings, clockScale: next };
+  applyClockMetrics();
+  renderClock();
+  try {
+    const result = await window.edex.saveSettings({ clockScale: next });
+    if (result?.settings) state.settings = { ...result.settings, clockScale: next };
+  } catch {
+    // Keep local value if save fails.
+  }
+  toast(`時鐘字格 ${next.toFixed(2)}×`);
+}
+
+async function setClockShowDate(show) {
+  const next = Boolean(show);
+  state.settings = { ...state.settings, clockShowDate: next };
+  const host = document.getElementById("mod_clock_led");
+  if (host) host.dataset.ledLayout = "";
+  renderClock();
+  try {
+    const result = await window.edex.saveSettings({ clockShowDate: next });
+    if (result?.settings) state.settings = { ...result.settings, clockShowDate: next };
+  } catch {
+    // keep local
+  }
+  toast(next ? "已顯示日期" : "已隱藏日期");
+}
+
+async function setClockLedColor(color) {
+  const next = toHex6(color);
+  state.settings = { ...state.settings, clockLedColor: next };
+  applyClockMetrics();
+  renderClock();
+  try {
+    const result = await window.edex.saveSettings({ clockLedColor: next });
+    if (result?.settings) state.settings = { ...result.settings, clockLedColor: next };
+  } catch {
+    // Keep local value if save fails.
+  }
+  toast(`高亮已改為 ${next}`);
+}
+
+function pickClockLedColor(ctx) {
+  closeCardMenus();
+  window.edex?.setMouseIgnore?.(false);
+  const palette = document.createElement("div");
+  palette.className = "color-palette";
+  const swatches = [
+    { label: "白", color: "#ffffff" },
+    { label: "主題色", color: rgbToHex(state.theme?.colors?.r, state.theme?.colors?.g, state.theme?.colors?.b) },
+    ...themeColorSwatches().filter((s) => s.label !== "深底" && s.label !== "黑"),
+    { label: "青", color: "#2ee6c7" },
+    { label: "琥珀", color: "#ffb347" }
+  ];
+  const seen = new Set();
+  const list = swatches.filter((item) => {
+    const key = toHex6(item.color);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const current = clockLedColor();
+  palette.innerHTML = `
+    <div class="color-palette-title">時鐘高亮</div>
+    <label class="color-palette-custom">自訂
+      <input type="color" id="clock_led_picker" value="${escapeHtml(current)}">
+    </label>
+    <div class="color-palette-grid">
+      ${list.map((item, i) => {
+        const fill = toHex6(item.color);
+        return `<button type="button" class="color-swatch" data-idx="${i}" title="${escapeHtml(item.label)}" style="background:${escapeHtml(fill)}"></button>`;
+      }).join("")}
+    </div>
+  `;
+  document.body.appendChild(palette);
+  window.edexI18n?.translatePage?.(palette);
+  const rect = ctx.el?.getBoundingClientRect?.() || { right: 80, top: 80 };
+  const pw = palette.offsetWidth;
+  const ph = palette.offsetHeight;
+  let left = rect.left;
+  let top = rect.top + 36;
+  if (left < 8) left = 8;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (top + ph > window.innerHeight - 8) top = Math.max(8, rect.top - ph - 8);
+  palette.style.left = `${left}px`;
+  palette.style.top = `${top}px`;
+
+  const apply = (color) => {
+    if (!color) return;
+    setClockLedColor(color);
+  };
+
+  window.edexI18n?.translatePage?.(palette);
+  palette.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    window.edex?.setMouseIgnore?.(false);
+  }, true);
+  palette.querySelectorAll("[data-idx]").forEach((btn) => {
+    const choose = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const item = list[Number(btn.dataset.idx)];
+      if (item?.color) apply(item.color);
+      closeCardMenus();
+    };
+    btn.addEventListener("click", choose);
+  });
+  const picker = palette.querySelector("#clock_led_picker");
+  picker?.addEventListener("input", () => apply(picker.value));
+  picker?.addEventListener("change", () => {
+    apply(picker.value);
+    closeCardMenus();
+  });
+  const dismiss = (event) => {
+    if (palette.contains(event.target)) return;
+    closeCardMenus();
+    window.removeEventListener("pointerdown", dismiss, true);
+  };
+  setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
+}
+
+function fabBarHtml() {
+  const addBtn = `<button type="button" class="round-fab" id="add-fab" title="添加容器">+</button>`;
+  if (!state.primary) return addBtn;
+  return `
+    ${addBtn}
+    <button type="button" class="round-fab" id="settings-fab" title="設定">⚙</button>
+    <button type="button" class="round-fab danger" id="quit-fab" title="退出程式">⏻</button>
+  `;
+}
+
+function menuItemsForCard(kind, ctx) {
+  const locked = Boolean(ctx.locked);
+  const items = [
+    {
+      label: locked ? "解鎖" : "鎖定",
+      action: () => ctx.onLock?.()
+    },
+    {
+      label: "背景顏色",
+      action: () => pickCardBackground(ctx)
+    },
+    {
+      label: "添加容器",
+      action: () => openAddPicker()
+    }
+  ];
+  if ((kind === "panel" && ctx.widgetId !== "dock") || kind === "desktop" || kind === "path") {
+    items.splice(2, 0, {
+      label: "最小化到 Dock",
+      action: () => minimizeContainer(kind, ctx.widgetId)
+    });
+  }
+  const others = (state.displays || []).filter((d) => {
+    if (d.id === state.displayId) return false;
+    // 系統桌面 only on the primary monitor.
+    if (ctx.widgetType === "desktop" && !d.primary) return false;
+    return true;
+  });
+  if (others.length && ctx.widgetType) {
+    items.push({ sep: true });
+    others.forEach((d) => {
+      items.push({
+        label: `移至 ${d.label || `顯示器 ${d.id}`}`,
+        action: async () => {
+          const el = ctx.el;
+          if (!el) return;
+          if (isCardLocked(el)) {
+            toast("請先解鎖再移動");
+            return;
+          }
+          const box = pxToGridFields(el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight);
+          const result = await window.edex.transferWidget(d.id, {
+            type: ctx.widgetType,
+            id: ctx.widgetId,
+            data: ctx.widgetData?.(),
+            ...box
+          });
+          if (result?.ok) {
+            ctx.onTransferred?.();
+            toast(`已移至 ${d.label}`);
+          } else {
+            toast(result?.message || "無法移至該顯示器");
+          }
+        }
+      });
+    });
+  }
+  if (kind === "panel" && ctx.widgetId === "clock") {
+    const accent = rgbToHex(state.theme?.colors?.r, state.theme?.colors?.g, state.theme?.colors?.b);
+    items.push(
+      { sep: true },
+      {
+        label: clockShowDate() ? "隱藏日期" : "顯示日期",
+        action: () => setClockShowDate(!clockShowDate())
+      },
+      { label: "高亮：白", action: () => setClockLedColor("#ffffff") },
+      { label: "高亮：主題色", action: () => setClockLedColor(accent) },
+      { label: "高亮：紅", action: () => setClockLedColor("#ff3c3c") },
+      { label: "高亮：黃", action: () => setClockLedColor("#ffd23c") },
+      { label: "高亮：青", action: () => setClockLedColor("#2ee6c7") },
+      {
+        label: `自訂高亮（${clockLedColor()}）`,
+        action: () => {
+          const next = window.prompt("時鐘高亮色碼（#RRGGBB）", clockLedColor());
+          if (next == null) return;
+          setClockLedColor(next);
+        }
+      },
+      {
+        label: "時鐘較小",
+        action: () => setClockScale(clockScale() - 0.05)
+      },
+      {
+        label: "時鐘較大",
+        action: () => setClockScale(clockScale() + 0.05)
+      },
+      {
+        label: `字格 ${clockScale().toFixed(2)}×（可縮小）`,
+        action: () => {
+          const next = window.prompt("時鐘字格倍率（0.25–2.0，1.0 = 一格壁紙網格）", String(clockScale()));
+          if (next == null) return;
+          setClockScale(Number(next));
+        }
+      }
+    );
+  }
+  if (kind === "panel" && ctx.widgetId === "drives") {
+    items.push(
+      { sep: true },
+      {
+        label: "重新整理",
+        action: () => fillDrivesStage()
+      }
+    );
+  }
+  if (kind === "panel" && ctx.widgetId === "filesearch") {
+    items.push(
+      { sep: true },
+      { label: "新增資料夾／網路磁碟", action: () => addSearchFolder() },
+      { label: "新增局域網路徑", action: () => openLanPathPrompt() },
+      { label: "管理搜尋路徑", action: () => openSearchRootsEditor() },
+      { label: "重建索引", action: () => rebuildFileSearch() }
+    );
+  }
+  if (kind === "desktop") {
+    items.push(
+      { sep: true },
+      {
+        label: state.iconView === "list" ? "切換為網格" : "切換為列表",
+        action: () => toggleIconView("desktop")
+      },
+      {
+        label: "重新掃描",
+        action: () => doScan()
+      },
+      {
+        label: "在 VS Code 開啟桌面資料夾",
+        action: () => openInVsCode(state.bootstrap?.desktop)
+      },
+      {
+        label: "預覽整理",
+        action: async () => {
+          try {
+            const scan = await window.edex.scan(state.bootstrap.desktop);
+            state.scan = scan;
+            await refreshPlan();
+            const migrate = Boolean(state.settings?.migrateFiles);
+            toast(migrate
+              ? `預覽遷移 ${state.plan?.count || 0} 筆`
+              : `預覽篩選 ${desktopItems().length} 項（按格式大類，不移動檔案）`);
+          } catch (err) {
+            toast(err.message || "無法預覽");
+          }
+        }
+      },
+      {
+        label: "執行整理",
+        action: () => runOrganize()
+      },
+      {
+        label: "還原上次",
+        action: async () => {
+          const result = await window.edex.undo();
+          toast(result.message);
+          await doScan();
+        }
+      }
+    );
+  }
+  if (kind === "path") {
+    const view = ctx.iconView === "list" ? "list" : "grid";
+    items.push(
+      { sep: true },
+      {
+        label: view === "list" ? "切換為網格" : "切換為列表",
+        action: () => toggleIconView("path", ctx.id)
+      },
+      { label: "啟用此路徑", action: () => setActivePath(ctx.id) },
+      { label: "開啟資料夾", action: () => window.edex.openPath(ctx.path) },
+      { label: "在 VS Code 開啟", action: () => openInVsCode(ctx.path) },
+      { label: "更換路徑", action: () => changePath(ctx.id) },
+      { label: "重新掃描", action: () => scanCard(state.pathCards.find((c) => c.id === ctx.id)) }
+    );
+  }
+  items.push(
+    { sep: true },
+    {
+      label: "關閉容器",
+      action: () => {
+        if (locked) {
+          toast("請先解鎖再關閉");
+          return;
+        }
+        ctx.onClose?.();
+      }
+    }
+  );
+  return items;
+}
+
+function bindCardTools(el, getItems) {
+  el.querySelectorAll('[data-card-act="minimize"]').forEach((btn) => {
+    btn.addEventListener("pointerdown", (event) => event.stopPropagation());
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const cardId = el.id || "";
+      if (cardId === "card_desktop") {
+        minimizeContainer("desktop", "desktop");
+      } else if (cardId.startsWith("path_")) {
+        minimizeContainer("path", cardId.slice(5));
+      } else if (cardId.startsWith("card_")) {
+        minimizeContainer("panel", cardId.slice(5));
+      }
+    });
+  });
+  el.querySelectorAll('[data-card-act="more"]').forEach((btn) => {
+    btn.addEventListener("pointerdown", (event) => event.stopPropagation());
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openCardMenu(btn, getItems());
+    });
+  });
+  el.addEventListener("contextmenu", (event) => {
+    if (event.target.closest(".path-stage, #desktop-stage, #shortcuts-stage, .desk-icon, .fs-row, .drives-stage, .drive-row")) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  });
+}
+
+function applyCardBg(el, color) {
+  if (!el) return;
+  const value = colorToFill(color);
+  el.classList.toggle("has-custom-bg", Boolean(value));
+  if (!value) {
+    el.style.removeProperty("--card-bg");
+    el.style.removeProperty("background");
+    el.style.removeProperty("background-color");
+    el.querySelectorAll(".card-title, .card-body, .path-stage, #desktop-stage").forEach((node) => {
+      node.style.removeProperty("background");
+      node.style.removeProperty("background-color");
+    });
+    return;
+  }
+  el.style.setProperty("--card-bg", value);
+  el.style.background = value;
+  el.style.backgroundColor = value;
+  el.querySelectorAll(":scope > .card-title, :scope > .card-body").forEach((node) => {
+    node.style.background = value;
+    node.style.backgroundColor = value;
+  });
+}
+
+function colorToFill(color) {
+  if (color == null || color === false) return "";
+  const s = String(color).trim();
+  if (!s || s === "transparent" || s === "none") return "";
+  const rgba = s.match(/^rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/i);
+  if (rgba) {
+    return `rgba(${Math.round(Number(rgba[1]))}, ${Math.round(Number(rgba[2]))}, ${Math.round(Number(rgba[3]))}, ${Number(rgba[4])})`;
+  }
+  const rgb = s.match(/^rgb\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/i);
+  if (rgb) {
+    return `rgb(${Math.round(Number(rgb[1]))}, ${Math.round(Number(rgb[2]))}, ${Math.round(Number(rgb[3]))})`;
+  }
+  const hex = s.replace("#", "");
+  if (hex.length === 3) {
+    const r = hex[0] + hex[0];
+    const g = hex[1] + hex[1];
+    const b = hex[2] + hex[2];
+    return `#${r}${g}${b}`;
+  }
+  if (hex.length === 6 || hex.length === 8) return `#${hex.slice(0, 6)}`;
+  const parsed = parseLedColor(s);
+  if (parsed) return rgbToHex(parsed.r, parsed.g, parsed.b);
+  return s;
+}
+
+function rgbToHex(r, g, b) {
+  const h = (n) => Math.max(0, Math.min(255, Number(n) || 0)).toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+function themeColorSwatches() {
+  const colors = state.theme?.colors || {};
+  const term = state.theme?.terminal || {};
+  const globe = state.theme?.globe || {};
+  const accent = rgbToHex(colors.r, colors.g, colors.b);
+  const list = [
+    { label: "主題色", color: accent },
+    { label: "主題色 55%", color: `rgba(${Number(colors.r) || 170}, ${Number(colors.g) || 207}, ${Number(colors.b) || 209}, 0.55)` },
+    { label: "深底", color: colors.light_black || "#05080d" },
+    { label: "黑", color: colors.black || "#000000" },
+    { label: "灰", color: colors.grey || "#262828" },
+    { label: "終端前景", color: term.foreground },
+    { label: "終端背景", color: term.background },
+    { label: "地球", color: globe.base },
+    { label: "標記", color: globe.marker },
+    { label: "紅", color: "#ff3c3c" },
+    { label: "黃", color: "#ffd23c" }
+  ].filter((item) => item.color);
+  const seen = new Set();
+  return list.filter((item) => {
+    const key = String(item.color).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function pickCardBackground(ctx) {
+  closeCardMenus();
+  window.edex?.setMouseIgnore?.(false);
+  const palette = document.createElement("div");
+  palette.className = "color-palette";
+  const swatches = [...themeColorSwatches(), { label: "預設", color: "" }];
+  const current = colorToFill(ctx.getBg?.()) || "#05080d";
+  const pickerValue = current.startsWith("#") ? current : (toHex6(current) || "#05080d");
+  palette.innerHTML = `
+    <div class="color-palette-title">容器背景</div>
+    <label class="color-palette-custom">自訂
+      <input type="color" id="card_bg_picker" value="${escapeHtml(pickerValue)}">
+    </label>
+    <div class="color-palette-grid">
+      ${swatches.map((item, i) => {
+        const fill = item.color ? colorToFill(item.color) : "transparent";
+        const extra = item.color ? "" : " none";
+        return `<button type="button" class="color-swatch${extra}" data-idx="${i}" title="${escapeHtml(item.label)}" style="background:${escapeHtml(fill)}">${item.color ? "" : "×"}</button>`;
+      }).join("")}
+    </div>
+  `;
+  document.body.appendChild(palette);
+  const rect = ctx.el?.getBoundingClientRect?.() || { right: 80, top: 80 };
+  const pw = palette.offsetWidth;
+  const ph = palette.offsetHeight;
+  let left = rect.right - pw;
+  let top = rect.top + 36;
+  if (left < 8) left = 8;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (top + ph > window.innerHeight - 8) top = Math.max(8, rect.top - ph - 8);
+  palette.style.left = `${left}px`;
+  palette.style.top = `${top}px`;
+  let picking = false;
+  const paint = (color) => {
+    ctx.setBg?.(color);
+    applyCardBg(ctx.el, color);
+    persistLayout();
+  };
+  palette.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    window.edex?.setMouseIgnore?.(false);
+  }, true);
+  palette.querySelectorAll("[data-idx]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const item = swatches[Number(btn.dataset.idx)];
+      paint(item?.color || "");
+      closeCardMenus();
+    });
+  });
+  const picker = palette.querySelector("#card_bg_picker");
+  picker?.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    picking = true;
+    window.edex?.setMouseIgnore?.(false);
+  });
+  picker?.addEventListener("input", () => paint(picker.value));
+  picker?.addEventListener("change", () => {
+    paint(picker.value);
+    picking = false;
+    closeCardMenus();
+  });
+  const dismiss = (event) => {
+    if (picking || palette.contains(event.target)) return;
+    closeCardMenus();
+    window.removeEventListener("pointerdown", dismiss, true);
+  };
+  setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
+}
+
+function bindFileDrop(el, getDest, onDone) {
+  el.addEventListener("dragover", (event) => {
+    if (![...event.dataTransfer.types].includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    el.classList.add("drop-target");
+  });
+  el.addEventListener("dragleave", (event) => {
+    if (!el.contains(event.relatedTarget)) el.classList.remove("drop-target");
+  });
+  el.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    el.classList.remove("drop-target");
+    const dest = getDest?.();
+    const files = [...(event.dataTransfer.files || [])]
+      .map((f) => window.edex.pathForFile?.(f) || f.path)
+      .filter(Boolean);
+    if (!dest || !files.length) {
+      toast("此容器無法接收檔案");
+      return;
+    }
+    try {
+      const result = await window.edex.importFiles(dest, files);
+      toast(`已加入 ${result.count} 個項目`);
+      // Refresh immediately so dropped files appear without waiting on a slow full scan.
+      await onDone?.(result);
+    } catch (err) {
+      toast(err.message || "加入失敗");
+    }
+  });
+}
+
+function closePanel(id) {
+  if (id === "cockpit") {
+    if (state.cockpitRaf) cancelAnimationFrame(state.cockpitRaf);
+    if (state.cockpitMatrixTimer) clearInterval(state.cockpitMatrixTimer);
+    state.cockpitRaf = null;
+    state.cockpitMatrixTimer = null;
+  }
+  if (id === "cassette" && state.cassetteRaf) {
+    cancelAnimationFrame(state.cassetteRaf);
+    state.cassetteRaf = null;
+  }
+  if (id === "ddj") {
+    if (state.ddjRaf) cancelAnimationFrame(state.ddjRaf);
+    state.ddjRaf = null;
+    try { state.ddjResizeObs?.disconnect?.(); } catch { /* ignore */ }
+    state.ddjResizeObs = null;
+  }
+  if (id === "cpuRail") {
+    if (state.cpuRailRaf) {
+      cancelAnimationFrame(state.cpuRailRaf);
+      state.cpuRailRaf = null;
+    }
+    if (state.cpuRailTimer) {
+      clearInterval(state.cpuRailTimer);
+      state.cpuRailTimer = null;
+    }
+    try { state.cpuRailResizeObs?.disconnect?.(); } catch { /* ignore */ }
+    state.cpuRailResizeObs = null;
+    if (state.cpuRailVisHandler) {
+      document.removeEventListener("visibilitychange", state.cpuRailVisHandler);
+      state.cpuRailVisHandler = null;
+    }
+  }
+  if (id === "dock") {
+    window.dockPanel?.unbind?.(state);
+    state.settings = { ...state.settings, dockEnabled: false };
+    window.edex?.saveSettings?.({ dockEnabled: false }).catch?.(() => {});
+  }
+  delete state.layout[id];
+  document.querySelectorAll(`#card_${id}, [data-panel-id="${id}"]`).forEach((el) => el.remove());
+  // Persist current display first, then strip this id from every saved layout.
+  Promise.resolve(persistLayout())
+    .then(() => purgePanelFromSavedLayouts(id))
+    .catch(() => {});
+  toast(`已關閉「${PANEL_META[id]?.title || id}」`);
+}
+
+function minimizeContainer(kind, id) {
+  if (kind === "panel") {
+    if (!state.layout[id] || id === "dock") return;
+    state.layout[id] = { ...state.layout[id], minimized: true };
+  } else if (kind === "desktop") {
+    if (!state.desktopStage) return;
+    state.desktopStage = { ...state.desktopStage, minimized: true };
+  } else if (kind === "path") {
+    const card = state.pathCards.find((item) => item.id === id);
+    if (!card) return;
+    card.minimized = true;
+  } else {
+    return;
+  }
+  persistLayout();
+  rebuildWorkspace();
+  const label = kind === "panel" ? PANEL_META[id]?.title : kind === "desktop" ? "系統桌面" : pathTitle(state.pathCards.find((item) => item.id === id), 0);
+  toast(`已最小化「${label || id}」`);
+}
+
+function closeDesktopCard() {
+  state.desktopEnabled = false;
+  document.getElementById("card_desktop")?.remove();
+  persistLayout();
+  toast("已關閉桌面容器");
+}
+
+/** Keep「添加容器」open across rebuildWorkspace so users can add multiple items. */
+let keepAddPicker = false;
+
+function ensureDesktopCard() {
+  if (!state.primary) {
+    toast("系統桌面僅能顯示在主顯示器");
+    return;
+  }
+  if (state.desktopEnabled !== false) {
+    toast("桌面容器已存在");
+    return;
+  }
+  state.desktopEnabled = true;
+  state.desktopStage = findEmptyBox(state.desktopStage || defaultDesktop(), { desktop: true });
+  persistLayout();
+  rebuildWorkspace();
+  toast("已添加桌面容器");
+}
+
+function dockEnabled() {
+  return state.primary && state.settings?.dockEnabled !== false;
+}
+
+function syncDockLayout(enabled) {
+  if (!state.primary || !PANEL_META.dock) {
+    if (state.layout.dock) delete state.layout.dock;
+    window.dockPanel?.unbind?.(state);
+    return;
+  }
+  if (enabled) {
+    if (!state.layout.dock) {
+      state.layout.dock = { ...PANEL_META.dock.box, locked: true };
+    } else {
+      state.layout.dock = { ...state.layout.dock, locked: true };
+    }
+  } else if (state.layout.dock) {
+    delete state.layout.dock;
+    window.dockPanel?.unbind?.(state);
+  }
+}
+
+async function setDockEnabled(on) {
+  if (!state.primary) {
+    toast("底部 Dock 僅主螢幕可用");
+    return;
+  }
+  const enabled = Boolean(on);
+  state.settings = { ...state.settings, dockEnabled: enabled };
+  syncDockLayout(enabled);
+  try {
+    await window.edex.saveSettings({ dockEnabled: enabled });
+  } catch {
+    // keep local
+  }
+  await persistLayout();
+  rebuildWorkspace();
+  toast(enabled ? `已開啟${state.settings.dockPosition === "top" ? "頂部" : "底部"} Dock` : "已關閉 Dock");
+}
+
+function addPanel(id) {
+  if (!PANEL_META[id]) return;
+  if (id === "dock") {
+    setDockEnabled(true);
+    return;
+  }
+  if (state.layout[id]) {
+    toast("此顯示器已有該插件");
+    return;
+  }
+  state.layout[id] = findEmptyBox({ ...PANEL_META[id].box }, { panelId: id });
+  persistLayout();
+  rebuildWorkspace();
+  toast(`已添加「${PANEL_META[id].title}」`);
+}
+
+function openAddPicker() {
+  document.getElementById("addPickerModal")?.remove();
+  document.getElementById("addPicker")?.closest(".modal_popup")?.remove();
+  keepAddPicker = true;
+  // Dock is toggled separately — not listed as a placeable panel.
+  const missing = Object.keys(PANEL_META).filter((id) => {
+    if (id === "status" || id === "dock" || state.layout[id]) return false;
+    return true;
+  });
+  const deskDisabled = !state.primary || state.desktopEnabled !== false;
+  const dockOn = dockEnabled();
+  const dockFrame = String(state.settings?.dockFrameStyle || "rounded");
+  const dockPosition = String(state.settings?.dockPosition || "bottom");
+  const dockW = window.dockPanel?.dockWidth?.(state)
+    ?? (Number(state.settings?.dockWidth) || 720);
+  const dockH = window.dockPanel?.dockHeight?.(state)
+    ?? (Number(state.settings?.dockHeight) || 72);
+  const modal = document.createElement("div");
+  modal.id = "addPickerModal";
+  modal.className = "modal_popup info";
+  modal.innerHTML = `
+    <h1>添加容器</h1>
+    <h2>插件開關</h2>
+    <div class="action-row" style="align-items:center;gap:0.8rem;flex-wrap:wrap;">
+      ${state.primary
+        ? `<label style="display:inline-flex;align-items:center;gap:0.45rem;cursor:pointer;">
+            <input type="checkbox" id="toggle-dock" ${dockOn ? "checked" : ""}>
+            <span data-dock-label>${dockPosition === "top" ? "頂部 Dock（貼螢幕頂邊）" : "底部 Dock（貼螢幕底邊）"}</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
+            <span>位置</span>
+            <select id="dock-position" ${dockOn ? "" : "disabled"}>
+              <option value="bottom" ${dockPosition === "bottom" ? "selected" : ""}>Unten</option>
+              <option value="top" ${dockPosition === "top" ? "selected" : ""}>Oben</option>
+            </select>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
+            <span>外框</span>
+            <select id="dock-frame-style" ${dockOn ? "" : "disabled"}>
+              <option value="rounded" ${dockFrame === "rounded" ? "selected" : ""}>圓角</option>
+              <option value="trapezoid" ${dockFrame === "trapezoid" ? "selected" : ""}>梯形</option>
+              <option value="rect" ${dockFrame === "rect" ? "selected" : ""}>直角</option>
+            </select>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
+            <span>寬度</span>
+            <input id="dock-width" type="number" min="200" max="2400" step="10" value="${dockW}" ${dockOn ? "" : "disabled"} style="width:5.5rem;">
+            <span>px</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
+            <span>高度</span>
+            <input id="dock-height" type="number" min="40" max="160" step="2" value="${dockH}" ${dockOn ? "" : "disabled"} style="width:4.5rem;">
+            <span>px</span>
+          </label>`
+        : `<span style="opacity:.6">底部 Dock 僅主顯示器</span>`}
+    </div>
+    <h2>Windows-Fenstereinbettung</h2>
+    <div class="action-row" style="align-items:center;gap:0.5rem;flex-wrap:wrap;">
+      <button type="button" id="embed-refresh">Fenster laden</button>
+      <select id="embed-window" aria-label="Fenster auswählen" style="min-width:16rem;max-width:100%;">
+        <option value="">Noch keine Fenster geladen</option>
+      </select>
+      <button type="button" id="embed-attach">Andocken</button>
+      <button type="button" id="embed-release">Freigeben</button>
+    </div>
+    <h2>插件面板${state.primary ? "" : "（副螢幕可選加，預設不帶插件）"}</h2>
+    <div class="action-row" id="addPicker">
+      ${missing.length
+        ? missing.map((id) =>
+          `<button type="button" data-add-panel="${id}">${escapeHtml(PANEL_META[id].title)}</button>`
+        ).join("")
+        : "<span style='opacity:.6'>本顯示器插件已全部添加</span>"}
+    </div>
+    <h2>其他</h2>
+    <div class="action-row">
+      ${state.primary
+        ? `<button type="button" id="add-desktop" ${deskDisabled ? "disabled" : ""}>桌面容器</button>`
+        : `<span style="opacity:.6">系統桌面僅主顯示器</span>`}
+      <button type="button" id="add-path">路徑容器</button>
+    </div>
+    <p style="opacity:.55;margin:1vh 0 0;font-size:0.85em;">可連續添加，完成後按「關閉」</p>
+    <div style="margin-top:1.2vh;display:flex;justify-content:flex-end;">
+      <button type="button" id="add-cancel">關閉</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  window.edexI18n?.translatePage?.(modal);
+  placeCentered(modal, { width: Math.min(520, window.innerWidth * 0.45), topRatio: 0.18 });
+  modal.querySelector("#add-cancel").onclick = () => {
+    keepAddPicker = false;
+    modal.remove();
+  };
+  modal.querySelector("#toggle-dock")?.addEventListener("change", (event) => {
+    setDockEnabled(event.target.checked);
+  });
+  modal.querySelector("#dock-position")?.addEventListener("change", (event) => {
+    const next = event.target.value === "top" ? "top" : "bottom";
+    window.dockPanel?.setPosition?.(state, next);
+    const label = modal.querySelector("[data-dock-label]");
+    if (label) label.textContent = next === "top" ? "頂部 Dock（貼螢幕頂邊）" : "底部 Dock（貼螢幕底邊）";
+    toast(`Dock-Position: ${next === "top" ? "oben" : "unten"}`);
+  });
+  modal.querySelector("#dock-frame-style")?.addEventListener("change", (event) => {
+    window.dockPanel?.setFrameStyle?.(state, event.target.value);
+    toast(`Dock 外框：${event.target.selectedOptions?.[0]?.text || event.target.value}`);
+  });
+  const applyDockSizeFromInputs = () => {
+    const wEl = modal.querySelector("#dock-width");
+    const hEl = modal.querySelector("#dock-height");
+    window.dockPanel?.setSize?.(state, {
+      width: Number(wEl?.value),
+      height: Number(hEl?.value)
+    });
+  };
+  modal.querySelector("#dock-width")?.addEventListener("change", applyDockSizeFromInputs);
+  modal.querySelector("#dock-height")?.addEventListener("change", applyDockSizeFromInputs);
+  const embedSelect = modal.querySelector("#embed-window");
+  const refreshEmbedWindows = async () => {
+    if (!embedSelect) return;
+    embedSelect.replaceChildren(new Option("Fenster werden geladen ...", ""));
+    try {
+      const result = await window.edex?.listEmbedWindows?.();
+      embedSelect.replaceChildren();
+      for (const item of result?.items || []) {
+        const option = new Option(`${item.title} (${item.process || "unbekannt"})`, item.hwnd);
+        option.dataset.pid = String(item.pid || 0);
+        embedSelect.append(option);
+      }
+      if (!embedSelect.options.length) embedSelect.append(new Option("Keine Fenster gefunden", ""));
+    } catch {
+      embedSelect.replaceChildren(new Option("Fensterliste nicht verfügbar", ""));
+    }
+  };
+  modal.querySelector("#embed-refresh")?.addEventListener("click", refreshEmbedWindows);
+  modal.querySelector("#embed-attach")?.addEventListener("click", async () => {
+    const option = embedSelect?.selectedOptions?.[0];
+    const bounds = window.dockPanel?.embedBounds?.();
+    if (!option?.value || !bounds) return toast("Bitte zuerst ein Fenster laden und auswählen");
+    if (state.dockEmbed?.hwnd) await window.edex?.embedRelease?.({ hwnd: state.dockEmbed.hwnd });
+    try {
+      const result = await window.edex.embedAttach({
+        hwnd: option.value,
+        pid: Number(option.dataset.pid) || 0,
+        bounds
+      });
+      if (!result?.ok) throw new Error("Andocken fehlgeschlagen");
+      state.dockEmbed = { hwnd: option.value, pid: Number(option.dataset.pid) || 0 };
+      toast("Fenster im Dock angedockt");
+      window.dockPanel?.syncEmbedBounds?.(state);
+    } catch (error) {
+      toast(error?.message || "Andocken fehlgeschlagen");
+    }
+  });
+  modal.querySelector("#embed-release")?.addEventListener("click", async () => {
+    const hwnd = state.dockEmbed?.hwnd;
+    if (!hwnd) return toast("Kein Fenster angedockt");
+    await window.edex?.embedRelease?.({ hwnd });
+    delete state.dockEmbed;
+    toast("Fenster freigegeben");
+  });
+  modal.querySelectorAll("[data-add-panel]").forEach((btn) => {
+    btn.onclick = () => {
+      addPanel(btn.dataset.addPanel);
+    };
+  });
+  modal.querySelector("#add-desktop")?.addEventListener("click", () => {
+    ensureDesktopCard();
+  });
+  modal.querySelector("#add-path").onclick = async () => {
+    // Folder dialog steals focus; reopen picker after pick completes.
+    modal.style.visibility = "hidden";
+    await addPathCard();
+    if (keepAddPicker) openAddPicker();
+  };
+}
+
+function stopPluginRuntimes() {
+  if (state.cockpitRaf) {
+    cancelAnimationFrame(state.cockpitRaf);
+    state.cockpitRaf = null;
+  }
+  if (state.cockpitMatrixTimer) {
+    clearInterval(state.cockpitMatrixTimer);
+    state.cockpitMatrixTimer = null;
+  }
+  if (state.cassetteRaf) {
+    cancelAnimationFrame(state.cassetteRaf);
+    state.cassetteRaf = null;
+  }
+  if (state.ddjRaf) {
+    cancelAnimationFrame(state.ddjRaf);
+    state.ddjRaf = null;
+  }
+  try { state.ddjResizeObs?.disconnect?.(); } catch { /* ignore */ }
+  state.ddjResizeObs = null;
+  if (state.cpuRailRaf) {
+    cancelAnimationFrame(state.cpuRailRaf);
+    state.cpuRailRaf = null;
+  }
+  if (state.cpuRailTimer) {
+    clearInterval(state.cpuRailTimer);
+    state.cpuRailTimer = null;
+  }
+  try { state.cpuRailResizeObs?.disconnect?.(); } catch { /* ignore */ }
+  state.cpuRailResizeObs = null;
+  if (state.cpuRailVisHandler) {
+    document.removeEventListener("visibilitychange", state.cpuRailVisHandler);
+    state.cpuRailVisHandler = null;
+  }
+  window.dockPanel?.unbind?.(state);
+  if (state.dockRaf) {
+    cancelAnimationFrame(state.dockRaf);
+    state.dockRaf = null;
+  }
+}
+
+function buildLayout() {
+  if (state.clockTimer) {
+    clearInterval(state.clockTimer);
+    cancelAnimationFrame(state.clockTimer);
+    state.clockTimer = null;
+  }
+  stopPluginRuntimes();
+  window.edexEffects?.stop?.();
+  delete state.layout.status;
+
+  const panels = Object.keys(PANEL_META).map((id) => panelHtml(id)).join("");
+  const deskLocked = Boolean(state.desktopLocked);
+  const desktop = state.desktopEnabled === false || state.desktopStage?.minimized ? "" : `
+      <section class="desktop-card${deskLocked ? " locked" : ""}" id="card_desktop" style="${styleFromBox(state.desktopStage)}">
+        <h3 class="card-title">
+          <span class="card-title-text">Systemdesktop</span>
+          ${cardToolsHtml()}
+        </h3>
+        <div class="card-body">
+          <p class="path-text" id="desktop-path-text" title="${escapeHtml(state.bootstrap?.desktop || "")}">${escapeHtml(state.bootstrap?.desktop || "")}</p>
+          <div class="desk-tab-bar" id="desk-tab-bar"></div>
+          <div class="desk-filter-bar" id="desk-filter-bar">
+            ${DESK_FILTERS.map((item) => `<button type="button" data-desk-filter="${item.id}">${item.label}</button>`).join("")}
+          </div>
+          <div id="desktop-stage" class="view-${state.iconView}"></div>
+        </div>
+        <div class="resize-handle"></div>
+      </section>`;
+
+  document.body.innerHTML = `
+    <div id="workspace">
+      <div id="snap-guides"></div>
+      ${desktop}
+      ${panels}
+    </div>
+    <div id="fab-bar">${fabBarHtml()}</div>
+  `;
+  renderDockItems();
+
+  Object.keys(state.layout).forEach((id) => {
+    if (id === "status") return;
+    const el = document.getElementById(`card_${id}`);
+    if (!el) return;
+    bindCardTools(el, () => menuItemsForCard("panel", {
+      el,
+      locked: Boolean(state.layout[id]?.locked),
+      widgetType: "panel",
+      widgetId: id,
+      widgetData: () => ({ panelId: id, box: state.layout[id] }),
+      getBg: () => state.layout[id]?.bg || "",
+      setBg: (color) => {
+        state.layout[id] = { ...state.layout[id], bg: color };
+        persistLayout();
+      },
+      onTransferred: () => {
+        delete state.layout[id];
+        el.remove();
+        persistLayout();
+        window.edexEffects?.stop?.();
+        window.edexEffects?.start?.();
+      },
+      onLock: () => {
+        state.layout[id] = { ...state.layout[id], locked: !state.layout[id].locked };
+        setCardLocked(el, Boolean(state.layout[id].locked));
+        persistLayout();
+      },
+      onClose: () => closePanel(id)
+    }));
+    applyCardBg(el, state.layout[id]?.bg);
+    makeInteractive(el, {
+      widgetType: "panel",
+      widgetId: id,
+      widgetData: () => ({ panelId: id, box: state.layout[id] }),
+      onTransferred: () => {
+        delete state.layout[id];
+        el.remove();
+        persistLayout();
+        window.edexEffects?.stop?.();
+        window.edexEffects?.start?.();
+      },
+      onMove: (x, y, w, h) => {
+        applyBoxPx(state.layout[id], x, y, w, h);
+      }
+    });
+  });
+
+  const desk = document.getElementById("card_desktop");
+  if (desk) {
+    bindCardTools(desk, () => menuItemsForCard("desktop", {
+      el: desk,
+      locked: state.desktopLocked,
+      widgetType: "desktop",
+      widgetId: "desktop",
+      widgetData: () => ({ box: state.desktopStage }),
+      getBg: () => state.desktopStage?.bg || "",
+      setBg: (color) => {
+        state.desktopStage = { ...state.desktopStage, bg: color };
+        persistLayout();
+      },
+      onTransferred: () => {
+        state.desktopEnabled = false;
+        persistLayout();
+        desk.remove();
+      },
+      onLock: () => {
+        state.desktopLocked = !state.desktopLocked;
+        setCardLocked(desk, state.desktopLocked);
+        persistLayout();
+      },
+      onClose: () => closeDesktopCard()
+    }));
+    applyCardBg(desk, state.desktopStage?.bg);
+    bindDeskTabs(desk);
+    bindDeskFilters(desk);
+    bindFileDrop(desk, () => activeDesktopDropDir(), async () => {
+      await refreshActiveDesktopView();
+    });
+    makeInteractive(desk, {
+      minW: 280,
+      minH: 200,
+      widgetType: "desktop",
+      widgetId: "desktop",
+      widgetData: () => ({ box: state.desktopStage }),
+      onTransferred: () => {
+        state.desktopEnabled = false;
+        persistLayout();
+        desk.remove();
+      },
+      onMove: (x, y, w, h) => {
+        applyBoxPx(state.desktopStage, x, y, w, h);
+      },
+      onEnd: () => persistLayout()
+    });
+  }
+
+  document.getElementById("add-fab")?.addEventListener("click", () => openAddPicker());
+  if (state.primary) {
+    document.getElementById("settings-fab")?.addEventListener("click", () => openSettings());
+    document.getElementById("quit-fab")?.addEventListener("click", () => {
+      if (window.confirm("Desktop Organizer wirklich beenden?")) window.edex.quitApp();
+    });
+  }
+
+  applyClockMetrics();
+  renderClock();
+  if (state.clockTimer) {
+    clearInterval(state.clockTimer);
+    cancelAnimationFrame(state.clockTimer);
+  }
+  // 4Hz is enough for LED tenths; 10Hz was rewriting hundreds of DOM nodes.
+  state.clockTimer = setInterval(renderClock, 250);
+  window.__edexTheme = state.theme;
+  applyRainMetrics();
+  window.edexEffects?.start?.();
+  applyRainMetrics();
+  bindCalendar();
+  fillDrivesStage();
+  bindFileSearch();
+  bindPluginPanels();
+}
+
+/** Wire optional plugin modules after their card DOM exists. */
+function bindPluginPanels() {
+  if (state.layout.cockpit) window.cockpitPanel?.bind?.(state);
+  if (state.layout.cassette) window.cassettePanel?.bind?.(state);
+  if (state.layout.ddj) window.ddjPanel?.bind?.(state);
+  if (state.layout.cpuRail) window.cpuRailPanel?.bind?.(state);
+  if (state.layout.calculator) window.calculatorPanel?.bind?.(state);
+  if (state.layout.dock && state.primary) window.dockPanel?.bind?.(state);
+  else window.dockPanel?.unbind?.(state);
+}
+
+function updateDesktopViewToggle() {
+  // View toggle moved into the more-actions menu.
+}
+
+function toggleIconView(kind, pathId) {
+  if (kind === "path") {
+    const card = state.pathCards.find((item) => item.id === pathId);
+    if (!card) return;
+    card.iconView = card.iconView === "list" ? "grid" : "list";
+    fillPathStage(card);
+    persistLayout();
+    toast(card.iconView === "list" ? "已切換為列表" : "已切換為網格");
+    return;
+  }
+  state.iconView = state.iconView === "list" ? "grid" : "list";
+  arrangeDesktop();
+  persistLayout();
+  toast(state.iconView === "list" ? "已切換為列表" : "已切換為網格");
+}
+
+function localBounds() {
+  return {
+    x: 0,
+    y: 0,
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+}
+
+function modalDialogWidth() {
+  return Math.min(760, window.innerWidth * 0.62);
+}
+
+function placeCentered(el, opts = {}) {
+  if (!el) return;
+  const b = localBounds();
+  const width = Math.min(opts.width || modalDialogWidth(), b.width * 0.92);
+  const maxH = Math.floor(b.height * 0.9);
+  el.style.width = `${width}px`;
+  el.style.maxWidth = "92vw";
+  el.style.maxHeight = `${maxH}px`;
+  el.style.left = `${(b.width - width) / 2}px`;
+  el.style.top = `${Math.max(16, (b.height - Math.min(el.offsetHeight || maxH, maxH)) / 2)}px`;
+  el.style.transform = "none";
+  el.classList.add("scrollable");
+  // After layout, re-center using real height.
+  requestAnimationFrame(() => {
+    const h = Math.min(el.offsetHeight, maxH);
+    el.style.top = `${Math.max(16, (b.height - h) / 2)}px`;
+  });
+}
+
+function pathTitle(card, index) {
+  return card.path ? card.path.split(/[/\\]/).filter(Boolean).pop() : `路徑 ${index + 1}`;
+}
+
+function listingItems(listing) {
+  if (!listing) return [];
+  return [...(listing.destFolders || []), ...(listing.items || [])];
+}
+
+function fillPathStage(card) {
+  const stage = document.querySelector(`[data-path-stage="${card.id}"]`);
+  if (!stage) return;
+  const items = listingItems(card.listing || card.scan);
+  const view = card.iconView === "list" ? "list" : "grid";
+  const fileOpts = {
+    destDir: card.path,
+    onRefresh: () => scanCard(card)
+  };
+  stage.classList.toggle("view-list", view === "list");
+  stage.classList.toggle("view-grid", view === "grid");
+  if (!items.length) {
+    stage.innerHTML = card.listingError
+      ? `<p class="path-empty">${escapeHtml(card.listingError)}</p>`
+      : `<p class="path-empty">${card.scanning ? "讀取中…" : "此資料夾沒有可顯示的項目"}</p>`;
+    window.edexI18n?.translatePage?.(stage);
+    bindFileStage(stage, fileOpts);
+    return;
+  }
+  fillIconStage(stage, items, { draggable: false, view, ...fileOpts });
+  window.edexI18n?.translatePage?.(stage);
+}
+
+async function scanCard(card) {
+  if (!card?.path) return;
+  if (card.scanning) {
+    while (card.scanning) await delay(40);
+    return;
+  }
+  card.scanning = true;
+  card.listingError = "";
+  fillPathStage(card);
+    try {
+    card.listing = await window.edex.listFolder(card.path);
+    fillPathStage(card);
+    if (card.id === state.activePathId) {
+      try {
+        card.scan = await window.edex.scan(card.path);
+        state.scan = card.scan;
+        await refreshPlan();
+        renderStats();
+        arrangeDesktop();
+      } catch {
+        // Listing can still show even if organize scan fails.
+      }
+      log(`掃描 ${card.path}：${card.listing.total} 個項目`);
+    }
+  } catch (err) {
+    card.listing = { items: [], total: 0 };
+    card.listingError = err.message || "無法讀取資料夾";
+    fillPathStage(card);
+    toast(card.listingError);
+    log(`讀取失敗：${card.listingError}`);
+  } finally {
+    card.scanning = false;
+    fillPathStage(card);
+  }
+}
+
+function activeCard() {
+  return state.pathCards.find((card) => card.id === state.activePathId) || state.pathCards[0];
+}
+
+function renderPathCards() {
+  document.querySelectorAll(".path-card").forEach((el) => el.remove());
+  const workspace = document.getElementById("workspace");
+  state.pathCards.forEach((card, index) => {
+    if (card.minimized) return;
+    const el = document.createElement("section");
+    const locked = Boolean(card.locked);
+    el.className = `path-card${card.id === state.activePathId ? " active-path" : ""}${locked ? " locked" : ""}`;
+    el.id = `path_${card.id}`;
+    el.style.cssText = styleFromBox(card);
+    el.innerHTML = `
+      <h3 class="card-title">
+        <span class="card-title-text">${escapeHtml(pathTitle(card, index))}</span>
+        ${cardToolsHtml()}
+      </h3>
+      <div class="card-body">
+        <p class="path-text" title="${escapeHtml(card.path)}">${escapeHtml(card.path)}</p>
+        <div class="path-stage view-${card.iconView === "list" ? "list" : "grid"}" data-path-stage="${card.id}"></div>
+      </div>
+      <div class="resize-handle"></div>
+    `;
+    el.addEventListener("dblclick", () => setActivePath(card.id));
+    workspace.appendChild(el);
+    bindCardTools(el, () => menuItemsForCard("path", {
+      el,
+      id: card.id,
+      path: card.path,
+      locked: Boolean(card.locked),
+      iconView: card.iconView,
+      widgetType: "path",
+      widgetId: card.id,
+      widgetData: () => ({ path: card.path, box: { ...card }, locked: card.locked, iconView: card.iconView, bg: card.bg }),
+      getBg: () => card.bg || "",
+      setBg: (color) => {
+        card.bg = color;
+        persistLayout();
+      },
+      onTransferred: () => {
+        state.pathCards = state.pathCards.filter((c) => c.id !== card.id);
+        if (state.activePathId === card.id) {
+          state.activePathId = state.pathCards[0]?.id || null;
+        }
+        el.remove();
+        persistLayout();
+        doScan();
+      },
+      onLock: () => {
+        card.locked = !card.locked;
+        setCardLocked(el, Boolean(card.locked));
+        persistLayout();
+      },
+      onClose: () => {
+        state.pathCards = state.pathCards.filter((c) => c.id !== card.id);
+        if (state.activePathId === card.id) {
+          state.activePathId = state.pathCards[0]?.id || null;
+        }
+        el.remove();
+        persistLayout();
+        doScan();
+        toast("已關閉路徑容器");
+      }
+    }));
+    makeInteractive(el, {
+      minW: 280,
+      minH: 220,
+      widgetType: "path",
+      widgetId: card.id,
+      widgetData: () => ({ path: card.path, box: { ...card }, locked: card.locked }),
+      onTransferred: () => {
+        state.pathCards = state.pathCards.filter((c) => c.id !== card.id);
+        if (state.activePathId === card.id) {
+          state.activePathId = state.pathCards[0]?.id || null;
+        }
+        el.remove();
+        persistLayout();
+        doScan();
+      },
+      onMove: (x, y, w, h) => {
+        applyBoxPx(card, x, y, w, h);
+      },
+      onEnd: () => {
+        fillPathStage(card);
+        persistLayout();
+      }
+    });
+    applyCardBg(el, card.bg);
+    bindFileDrop(el, () => card.path, async () => scanCard(card));
+    fillPathStage(card);
+    if (!card.listing) requestAnimationFrame(() => scanCard(card));
+    else requestAnimationFrame(() => fillPathStage(card));
+  });
+}
+
+async function setActivePath(id) {
+  state.activePathId = id;
+  renderPathCards();
+  await doScan();
+}
+
+async function changePath(id) {
+  const picked = await window.edex.pickFolder();
+  if (!picked) return;
+  const card = state.pathCards.find((item) => item.id === id);
+  card.path = picked;
+  persistLayout();
+  renderPathCards();
+  await scanCard(card);
+}
+
+function removePath(id) {
+  state.pathCards = state.pathCards.filter((card) => card.id !== id);
+  if (state.activePathId === id) state.activePathId = state.pathCards[0]?.id || null;
+  persistLayout();
+  renderPathCards();
+  doScan();
+}
+
+async function addPathCard() {
+  const picked = await window.edex.pickFolder();
+  if (!picked) return;
+  await addPathCardAt(picked);
+}
+
+async function addPathCardAt(folderPath) {
+  const picked = String(folderPath || "").trim();
+  if (!picked || isVirtualPath(picked)) {
+    toast("無法將此項目加入為路徑容器");
+    return;
+  }
+  const existing = state.pathCards.find(
+    (card) => String(card.path || "").toLowerCase() === picked.toLowerCase()
+  );
+  if (existing) {
+    await setActivePath(existing.id);
+    toast("此路徑容器已存在");
+    return;
+  }
+  const id = `p${Date.now()}`;
+  const placed = findEmptyBox({
+    id,
+    path: picked,
+    x: 18,
+    y: 16,
+    w: 46,
+    h: 52,
+    iconView: "grid"
+  }, { pathId: id });
+  state.pathCards.push(placed);
+  state.activePathId = id;
+  persistLayout();
+  renderPathCards();
+  const card = state.pathCards.find((item) => item.id === id);
+  await scanCard(card);
+  toast(`已加入路徑容器 ${pathTitle(card, state.pathCards.length - 1)}`);
+}
+
+function desktopItems() {
+  return listingItems(state.desktopListing);
+}
+
+async function loadDesktopListing(options = {}) {
+  const opts = {
+    decorate: "fast",
+    includeShell: false,
+    ...options
+  };
+  try {
+    // Fast FS listing + Electron icons (cached). Avoids PowerShell on every refresh.
+    state.desktopListing = await window.edex.listDesktopShortcuts(opts);
+  } catch {
+    try {
+      state.desktopListing = await window.edex.listDesktopFiles();
+    } catch {
+      state.desktopListing = { items: [], total: 0 };
+    }
+  }
+}
+
+async function fillDrivesStage() {
+  const stage = document.getElementById("drives-stage");
+  if (!stage) return;
+  try {
+    const listing = await window.edex.listDrives();
+    const items = listing.items || [];
+    if (!items.length) {
+      stage.innerHTML = `<p class="path-empty">找不到本機磁碟</p>`;
+      return;
+    }
+    stage.innerHTML = items.map((d) => `
+      <button type="button" class="drive-row" data-path="${escapeHtml(d.path)}">
+        ${iconSvg(d.icon) || `<svg class="drive-fallback" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="6" width="18" height="12" rx="1.5"/><rect x="5" y="9" width="4" height="2"/></svg>`}
+        <div class="drive-main">
+          <div class="drive-head">
+            <span class="drive-name">${escapeHtml(d.name)}</span>
+            <span class="drive-meta">${escapeHtml(d.freeLabel)} 可用 / ${escapeHtml(d.totalLabel)}</span>
+          </div>
+          <div class="drive-bar"><i style="width:${d.pct}%"></i></div>
+          <div class="drive-foot">${escapeHtml(d.type)}${d.fs ? ` · ${escapeHtml(d.fs)}` : ""} · 已用 ${d.pct}%</div>
+        </div>
+      </button>
+    `).join("");
+    window.edexI18n?.translatePage?.(stage);
+    stage.querySelectorAll("[data-path]").forEach((btn) => {
+      btn.addEventListener("click", () => window.edex.openPath(btn.dataset.path));
+    });
+    bindFileStage(stage, {
+      destDir: "",
+      itemFromNode: (node) => {
+        const target = node?.dataset?.path;
+        if (!target) return null;
+        return { path: target, name: node.querySelector(".drive-name")?.textContent || target, isDirectory: true, kind: "drive" };
+      },
+      onRefresh: () => fillDrivesStage()
+    });
+  } catch (err) {
+    stage.innerHTML = `<p class="path-empty">${escapeHtml(err.message || "無法讀取磁碟")}</p>`;
+  }
+}
+
+function bindTerminal() {
+  const root = document.querySelector(".terminal-root");
+  if (!root) return;
+  const grid = root.querySelector("[data-terminal-grid]");
+  const status = root.querySelector("[data-terminal-status]");
+  if (!grid || !window.edex?.createTerminal) return;
+  if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
+  grid.style.setProperty("--terminal-columns", terminalGridMode === "1x1" ? "1" : "2");
+  grid.innerHTML = terminalPaneIds.map((id, index) => `
+    <section class="terminal-pane" data-terminal-pane="${id}">
+      <header class="terminal-pane-head"><span>TTY ${index + 1}</span><span class="terminal-pane-actions"><button type="button" data-terminal-putty title="PuTTY einbetten">PuTTY</button><button type="button" data-terminal-close title="Terminal schließen">×</button></span></header>
+      <pre class="terminal-output" data-terminal-output aria-live="polite"></pre>
+      <form class="terminal-command" data-terminal-form>
+        <span class="terminal-prompt" aria-hidden="true">PS&gt;</span>
+        <input type="text" data-terminal-input autocomplete="off" spellcheck="false" placeholder="Befehl …" />
+      </form>
+    </section>`).join("");
+  terminalPaneIds.forEach((id) => {
+    const pane = grid.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
+    const output = pane?.querySelector("[data-terminal-output]");
+    const form = pane?.querySelector("[data-terminal-form]");
+    const input = pane?.querySelector("[data-terminal-input]");
+    if (!pane || !output || !form || !input) return;
+    output.textContent = terminalBuffers.get(id) || "";
+    const syncNativeBounds = () => {
+      const embedded = terminalNativePanes.get(id);
+      if (!embedded) return;
+      const rect = pane.getBoundingClientRect();
+      window.edex.embedBounds({ hwnd: embedded.hwnd, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
+    };
+    const puttyButton = pane.querySelector("[data-terminal-putty]");
+    puttyButton?.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      window.edex?.setMouseIgnore?.(false);
+    });
+    puttyButton?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      status.textContent = "PuTTY wird gestartet …";
+      const target = window.prompt("PuTTY-Ziel eingeben (z. B. user@server oder session:Name)", "");
+      if (!target?.trim()) return;
+      const rect = pane.getBoundingClientRect();
+      try {
+        window.edex.closeTerminal(id);
+        const result = await window.edex.embedPutty({ target: target.trim(), bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
+        if (!result?.ok) throw new Error(result?.message || "PuTTY konnte nicht eingebettet werden");
+        terminalNativePanes.set(id, { hwnd: result.hwnd });
+        pane.classList.add("terminal-pane-native");
+        status.textContent = `PuTTY in TTY ${terminalPaneIds.indexOf(id) + 1}`;
+      } catch (error) {
+        status.textContent = error?.message || "PuTTY konnte nicht eingebettet werden";
+      }
+    });
+    syncNativeBounds();
+    pane.querySelector("[data-terminal-close]")?.addEventListener("click", () => {
+      const embedded = terminalNativePanes.get(id);
+      if (embedded) window.edex.embedRelease({ hwnd: embedded.hwnd });
+      window.edex.closeTerminal(id);
+      terminalNativePanes.delete(id);
+      terminalStarted.delete(id);
+      terminalPaneIds.splice(terminalPaneIds.indexOf(id), 1);
+      terminalBuffers.delete(id);
+      if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
+      bindTerminal();
+    });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const value = input.value;
+      if (!value) return;
+      window.edex.writeTerminal(id, `${value}\r`);
+      input.value = "";
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") {
+        event.preventDefault();
+        window.edex.writeTerminal(id, "\t");
+      }
+    });
+    if (!terminalStarted.has(id)) {
+      terminalStarted.add(id);
+      window.edex.createTerminal(id).catch?.(() => terminalStarted.delete(id));
+    }
+  });
+  root.querySelector("[data-terminal-add]")?.addEventListener("click", () => {
+    if (terminalPaneIds.length >= 4) return;
+    terminalPaneIds.push(`terminal-${terminalNextPane++}`);
+    bindTerminal();
+  });
+  root.querySelector("[data-terminal-layout]")?.addEventListener("change", (event) => {
+    terminalGridMode = event.target.value;
+    bindTerminal();
+  });
+  window.addEventListener("resize", () => {
+    terminalPaneIds.forEach((id) => {
+      const pane = root.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
+      const embedded = terminalNativePanes.get(id);
+      if (!pane || !embedded) return;
+      const rect = pane.getBoundingClientRect();
+      window.edex.embedBounds({ hwnd: embedded.hwnd, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
+    });
+  }, { passive: true });
+  if (!terminalBridgeBound) {
+    terminalBridgeBound = true;
+    window.edex.onTerminalData(({ paneId, data }) => {
+      const next = `${terminalBuffers.get(paneId) || ""}${data}`.slice(-100000);
+      terminalBuffers.set(paneId, next);
+      const output = document.querySelector(`[data-terminal-pane="${CSS.escape(paneId)}"] [data-terminal-output]`);
+      if (output) {
+        output.textContent = next;
+        output.scrollTop = output.scrollHeight;
+      }
+    });
+    window.edex.onTerminalExit(({ paneId }) => {
+      const output = document.querySelector(`[data-terminal-pane="${CSS.escape(paneId)}"] [data-terminal-output]`);
+      if (output) output.textContent += "\n[Terminal beendet]\n";
+    });
+  }
+  if (status) status.textContent = `${terminalPaneIds.length} PowerShell-Sitzung${terminalPaneIds.length === 1 ? "" : "en"}`;
+}
+
+function formatSearchEngine(status) {
+  const engine = status?.engine === "everything" ? "Everything" : "本機索引";
+  const count = Number(status?.count) || 0;
+  const extra = (status?.roots || []).length;
+  const bits = [engine];
+  if (status?.indexing) bits.push("索引中");
+  else if (count) bits.push(`${count.toLocaleString()} 筆`);
+  if (extra) bits.push(`${extra} 條局域網路徑`);
+  if (status?.lastError) bits.push(status.lastError);
+  return bits.join(" · ");
+}
+
+function bindFileSearch() {
+  const input = document.getElementById("fs_query");
+  const go = document.getElementById("fs_go");
+  const results = document.getElementById("fs_results");
+  if (!input || !results) return;
+  let timer = 0;
+  let token = 0;
+  const run = async () => {
+    const query = input.value.trim();
+    const stamp = ++token;
+    if (!query) {
+      results.innerHTML = "";
+      await refreshSearchStatus();
+      return;
+    }
+    setText("fs_status", "搜尋中…");
+    try {
+      const payload = await window.edex.searchFiles(query, 80);
+      if (stamp !== token) return;
+      renderSearchResults(payload, query);
+    } catch (err) {
+      if (stamp !== token) return;
+      results.innerHTML = `<p class="path-empty">${escapeHtml(err.message || "搜尋失敗")}</p>`;
+      setText("fs_status", "搜尋失敗");
+    }
+  };
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(run, 160);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      clearTimeout(timer);
+      run();
+    }
+  });
+  go?.addEventListener("click", () => {
+    clearTimeout(timer);
+    run();
+  });
+  results.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-path]");
+    if (!row) return;
+    window.edex.openPath(row.dataset.path);
+  });
+  bindFileStage(results, {
+    destDir: "",
+    allowCreate: false,
+    itemFromNode: (node) => {
+      const target = node?.dataset?.path;
+      if (!target) return null;
+      const name = node.querySelector(".fs-name")?.textContent || target;
+      return { path: target, name, isDirectory: false };
+    },
+    onRefresh: async () => {
+      const q = document.getElementById("fs_query")?.value?.trim();
+      if (q) document.getElementById("fs_go")?.click();
+    }
+  });
+  refreshSearchStatus();
+}
+
+function renderSearchResults(payload, query) {
+  const results = document.getElementById("fs_results");
+  if (!results) return;
+  const items = payload?.items || [];
+  setText("fs_status", `${formatSearchEngine(payload)} · ${items.length} 筆結果`);
+  if (!items.length) {
+    results.innerHTML = `<p class="path-empty">沒有符合「${escapeHtml(query)}」的檔案</p>`;
+    return;
+  }
+  results.innerHTML = items.map((item) => `
+    <button type="button" class="fs-row" data-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">
+      <span class="fs-name">${escapeHtml(item.name)}</span>
+      <span class="fs-path">${escapeHtml(item.dir || item.path)}</span>
+    </button>
+  `).join("");
+  window.edexI18n?.translatePage?.(results);
+}
+
+async function refreshSearchStatus() {
+  const el = document.getElementById("fs_status");
+  if (!el) return;
+  try {
+    const status = await window.edex.searchStatus();
+    el.textContent = formatSearchEngine(status) + " · 輸入關鍵字搜尋";
+  } catch {
+    el.textContent = "搜尋尚未就緒";
+  }
+}
+
+async function addSearchFolder() {
+  const folder = await window.edex.pickSearchRoot();
+  if (!folder) return;
+  try {
+    await window.edex.addSearchRoot(folder);
+    toast(`已加入搜尋路徑 ${folder}`);
+    refreshSearchStatus();
+  } catch (err) {
+    toast(err.message || "無法加入路徑");
+  }
+}
+
+function openLanPathPrompt() {
+  document.getElementById("lanPathEditor")?.closest(".modal_popup")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info";
+  modal.innerHTML = `
+    <h1>局域網路徑</h1>
+    <h2>例如 \\\\NAS\\share 或已對應的網路磁碟資料夾</h2>
+    <table id="lanPathEditor">
+      <tr><th>路徑</th><th><input id="lan_path_input" type="text" spellcheck="false" placeholder="\\\\伺服器\\分享" /></th></tr>
+    </table>
+    <div class="settings-footer">
+      <button type="button" id="lan-cancel">取消</button>
+      <button type="button" id="lan-ok">加入並索引</button>
+    </div>`;
+  document.body.appendChild(modal);
+  const input = document.getElementById("lan_path_input");
+  input?.focus();
+  document.getElementById("lan-cancel").onclick = () => modal.remove();
+  document.getElementById("lan-ok").onclick = async () => {
+    const value = input.value.trim();
+    if (!value) return toast("請輸入路徑");
+    try {
+      await window.edex.addSearchRoot(value);
+      modal.remove();
+      toast(`已加入 ${value}`);
+      refreshSearchStatus();
+    } catch (err) {
+      toast(err.message || "無法加入路徑");
+    }
+  };
+  input?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") document.getElementById("lan-ok")?.click();
+  });
+}
+
+async function openSearchRootsEditor() {
+  document.getElementById("searchRootsEditor")?.closest(".modal_popup")?.remove();
+  let status;
+  try {
+    status = await window.edex.searchStatus();
+  } catch (err) {
+    toast(err.message || "無法讀取搜尋路徑");
+    return;
+  }
+  const roots = status.roots || [];
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info";
+  modal.innerHTML = `
+    <h1>搜尋路徑</h1>
+    <h2>${status.includeLocal ? "已包含本機磁碟" : "未索引本機磁碟"} · ${status.engine === "everything" ? "Everything 加速" : "檔名索引"}</h2>
+    <div id="searchRootsEditor" class="fs-roots">
+      ${roots.length
+        ? roots.map((root) => `
+          <div class="fs-root-row">
+            <span>${escapeHtml(root)}</span>
+            <button type="button" data-del-root="${escapeHtml(root)}">移除</button>
+          </div>`).join("")
+        : `<p class="cal-editor-empty">尚未加入局域網或額外資料夾，可在容器選單新增</p>`}
+    </div>
+    <div class="settings-footer">
+      <button type="button" id="fs-local-toggle">${status.includeLocal ? "停用本機磁碟" : "啟用本機磁碟"}</button>
+      <button type="button" id="fs-roots-close">關閉</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll("[data-del-root]").forEach((btn) => {
+    btn.onclick = async () => {
+      try {
+        await window.edex.removeSearchRoot(btn.dataset.delRoot);
+        toast("已移除路徑");
+        modal.remove();
+        openSearchRootsEditor();
+        refreshSearchStatus();
+      } catch (err) {
+        toast(err.message || "無法移除");
+      }
+    };
+  });
+  document.getElementById("fs-local-toggle").onclick = async () => {
+    await window.edex.setSearchLocal(!status.includeLocal);
+    modal.remove();
+    toast(status.includeLocal ? "已停用本機磁碟索引" : "已啟用本機磁碟索引");
+    openSearchRootsEditor();
+    refreshSearchStatus();
+  };
+  document.getElementById("fs-roots-close").onclick = () => modal.remove();
+}
+
+async function rebuildFileSearch() {
+  toast("正在重建索引…");
+  try {
+    await window.edex.searchRebuild();
+    toast("索引已重建");
+    refreshSearchStatus();
+  } catch (err) {
+    toast(err.message || "重建失敗");
+  }
+}
+
+function dateKey(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function bindCalendar() {
+  if (!document.getElementById("cal_grid")) return;
+  document.getElementById("cal_prev")?.addEventListener("click", () => {
+    state.calCursor.setMonth(state.calCursor.getMonth() - 1);
+    renderCalendar();
+  });
+  document.getElementById("cal_next")?.addEventListener("click", () => {
+    state.calCursor.setMonth(state.calCursor.getMonth() + 1);
+    renderCalendar();
+  });
+  refreshCalendar();
+}
+
+async function refreshCalendar() {
+  try {
+    state.calNotes = await window.edex.getCalendarNotes() || {};
+  } catch {
+    state.calNotes = {};
+  }
+  renderCalendar();
+}
+
+function mondayIndex(jsDay) {
+  return (jsDay + 6) % 7;
+}
+
+function renderCalendar() {
+  const grid = document.getElementById("cal_grid");
+  const title = document.getElementById("cal_title");
+  if (!grid || !title) return;
+  const y = state.calCursor.getFullYear();
+  const m = state.calCursor.getMonth();
+  title.textContent = `${y} / ${m + 1}`;
+  const start = mondayIndex(new Date(y, m, 1).getDay());
+  const days = new Date(y, m + 1, 0).getDate();
+  const today = dateKey(new Date());
+  const cells = [];
+  for (let i = 0; i < start; i++) {
+    cells.push({ empty: true, sun: i === 6 });
+  }
+  for (let d = 1; d <= days; d++) {
+    const key = `${y}-${pad(m + 1)}-${pad(d)}`;
+    const jsDay = new Date(y, m, d).getDay();
+    cells.push({
+      empty: false,
+      key,
+      day: d,
+      sun: jsDay === 0,
+      holiday: window.edexMacauHolidays?.get(key) || "",
+      notes: state.calNotes[key] || [],
+      today: key === today,
+      selected: key === state.calSelected
+    });
+  }
+  while (cells.length < 42) {
+    cells.push({ empty: true, sun: cells.length % 7 === 6 });
+  }
+  grid.innerHTML = cells.map((cell) => {
+    if (cell.empty) {
+      return `<span class="cal-cell empty${cell.sun ? " sun" : ""}"></span>`;
+    }
+    const cls = ["cal-cell"];
+    if (cell.sun) cls.push("sun");
+    if (cell.today) cls.push("today");
+    if (cell.selected) cls.push("selected");
+    if (cell.holiday) cls.push("holiday");
+    if (cell.notes.length) cls.push("has-notes");
+    const holiday = cell.holiday
+      ? `<span class="cal-holiday" title="${escapeHtml(cell.holiday)}">${escapeHtml(cell.holiday)}</span>`
+      : "";
+    const previews = cell.notes.slice(0, 4).map((n, i) =>
+      `<span class="cal-preview">${i + 1}. ${escapeHtml(n.text)}</span>`
+    ).join("");
+    const more = cell.notes.length > 4 ? `<span class="cal-preview more">+${cell.notes.length - 4}</span>` : "";
+    return `<button type="button" class="${cls.join(" ")}" data-date="${cell.key}">
+      <span class="cal-num">${cell.day}</span>
+      ${holiday}
+      <span class="cal-previews">${previews}${more}</span>
+    </button>`;
+  }).join("");
+  grid.querySelectorAll("[data-date]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.calSelected = btn.dataset.date;
+      grid.querySelectorAll(".cal-cell.selected").forEach((el) => el.classList.remove("selected"));
+      btn.classList.add("selected");
+    });
+    btn.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openCalNoteEditor(btn.dataset.date);
+    });
+  });
+}
+
+function formatNotesForWeChat(dateKey, notes = []) {
+  const lines = [`${dateKey} 事項`];
+  if (!notes.length) {
+    lines.push("（尚無事項）");
+  } else {
+    notes.forEach((n, i) => lines.push(`${i + 1}. ${n.text}`));
+  }
+  return lines.join("\n");
+}
+
+function openCalNoteEditor(key) {
+  document.getElementById("calNoteEditor")?.closest(".modal_popup")?.remove();
+  state.calSelected = key;
+  const notes = state.calNotes[key] || [];
+  const holiday = window.edexMacauHolidays?.get(key) || "";
+  let editingId = null;
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info cal-editor";
+  modal.innerHTML = `
+    <div class="cal-editor-head">
+      <div class="cal-editor-heading">
+        <h1>日曆事項</h1>
+        <h2>${escapeHtml(key)}${holiday ? ` · ${escapeHtml(holiday)}` : ""}</h2>
+      </div>
+      <div class="cal-editor-actions">
+        <button type="button" id="cal-note-wechat">複製到微信</button>
+        <button type="button" id="cal-note-cancel">關閉</button>
+      </div>
+    </div>
+    <div class="cal-editor-list" id="calNoteEditor">
+      ${notes.length
+        ? notes.map((n, i) => `
+          <div class="cal-editor-item" data-edit="${escapeHtml(n.id)}">
+            <span class="cal-editor-idx">${i + 1}.</span>
+            <span class="cal-editor-text">${escapeHtml(n.text)}</span>
+            <button type="button" data-edit-btn="${escapeHtml(n.id)}">編輯</button>
+            <button type="button" data-del="${escapeHtml(n.id)}">刪除</button>
+          </div>`).join("")
+        : `<p class="cal-editor-empty">這天還沒有事項，可在下方輸入後新增</p>`}
+    </div>
+    <label class="cal-editor-label" for="cal_note_text" id="cal_note_label">新增事項</label>
+    <textarea id="cal_note_text" rows="4" placeholder="輸入事項內容…"></textarea>
+    <div class="cal-editor-add">
+      <button type="button" id="cal-note-save">新增事項</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  window.edexI18n?.translatePage?.(modal);
+  placeCentered(modal);
+  window.edex?.setMouseIgnore?.(false);
+  const input = modal.querySelector("#cal_note_text");
+  const label = modal.querySelector("#cal_note_label");
+  const saveBtn = modal.querySelector("#cal-note-save");
+  input?.focus();
+
+  const setEditMode = (id, text) => {
+    editingId = id || null;
+    modal.querySelectorAll(".cal-editor-item").forEach((el) => {
+      el.classList.toggle("active", Boolean(id) && el.dataset.edit === id);
+    });
+    if (id) {
+      label.textContent = "編輯事項";
+      saveBtn.textContent = "儲存修改";
+      input.value = text || "";
+      input.focus();
+    } else {
+      label.textContent = "新增事項";
+      saveBtn.textContent = "新增事項";
+      input.value = "";
+      input.focus();
+    }
+  };
+
+  const close = () => modal.remove();
+  modal.querySelector("#cal-note-cancel").onclick = close;
+
+  const startEdit = (id) => {
+    const note = (state.calNotes[key] || []).find((n) => n.id === id);
+    if (note) setEditMode(id, note.text);
+  };
+
+  modal.querySelectorAll("[data-edit]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("[data-del]")) return;
+      startEdit(row.dataset.edit);
+    });
+  });
+
+  modal.querySelectorAll("[data-del]").forEach((btn) => {
+    btn.onclick = async (event) => {
+      event.stopPropagation();
+      state.calNotes = await window.edex.removeCalendarNote(key, btn.dataset.del) || {};
+      renderCalendar();
+      close();
+      openCalNoteEditor(key);
+    };
+  });
+
+  modal.querySelector("#cal-note-wechat").onclick = async () => {
+    const list = state.calNotes[key] || [];
+    const text = formatNotesForWeChat(key, list);
+    await window.edex.copyText(text);
+    toast("已複製，可貼到微信");
+  };
+
+  const save = async () => {
+    const text = input.value.trim();
+    if (!text) {
+      toast("請輸入事項內容");
+      return;
+    }
+    let result;
+    if (editingId) {
+      result = await window.edex.updateCalendarNote(key, editingId, text);
+    } else {
+      result = await window.edex.addCalendarNote(key, text);
+    }
+    state.calNotes = result?.notes || result || {};
+    renderCalendar();
+    close();
+    openCalNoteEditor(key);
+  };
+  saveBtn.onclick = save;
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      save();
+    }
+  });
+}
+
+function parentDir(target) {
+  const value = String(target || "");
+  const idx = Math.max(value.lastIndexOf("\\"), value.lastIndexOf("/"));
+  return idx > 0 ? value.slice(0, idx) : "";
+}
+
+function isVirtualPath(target) {
+  const value = String(target || "");
+  return !value || /^shell:/i.test(value) || value.includes("::{") || value.startsWith("::");
+}
+
+function isDriveRoot(target) {
+  return /^[a-zA-Z]:\\?$/.test(String(target || "").trim());
+}
+
+function tagDotsHtml(tags) {
+  const list = Array.isArray(tags) ? tags : [];
+  if (!list.length) return "";
+  const dots = list.map((id) => {
+    const tag = MACOS_TAGS.find((t) => t.id === id);
+    if (!tag) return "";
+    return `<i class="tag-dot" style="background:${tag.color}" title="${escapeHtml(tag.label)}"></i>`;
+  }).join("");
+  return dots ? `<span class="tag-dots">${dots}</span>` : "";
+}
+
+function canNativeFileItem(item) {
+  if (!item?.path || isVirtualPath(item.path)) return false;
+  if (item.kind === "drive" || item.kind === "thispc" || item.kind === "recycle") return false;
+  if (isDriveRoot(item.path)) return false;
+  return true;
+}
+
+/** Nearest stage root so grouped 系統桌面 + 桌面捷徑 share selection / drag paths. */
+function fileStageRoot(nodeOrStage) {
+  if (!nodeOrStage) return null;
+  return nodeOrStage.closest?.(
+    "#desktop-stage, #shortcuts-stage, .path-stage, .fs-results, .drives-stage"
+  ) || nodeOrStage;
+}
+
+function stageFileNodes(stage) {
+  const root = fileStageRoot(stage) || stage;
+  return [...root.querySelectorAll(".desk-icon[data-path], .fs-row[data-path]")];
+}
+
+function clearStageSelection(stage) {
+  stageFileNodes(stage).forEach((el) => el.classList.remove("selected"));
+}
+
+function selectedPathsInStage(stage) {
+  return stageFileNodes(stage)
+    .filter((el) => el.classList.contains("selected"))
+    .map((el) => el.dataset.path)
+    .filter(Boolean);
+}
+
+function selectFileNode(stage, node, event) {
+  const root = fileStageRoot(stage) || stage;
+  if (!node || !root.contains(node)) return;
+  const item = itemFromIcon(node);
+  if (!canNativeFileItem(item) && !node.classList.contains("fs-row")) {
+    if (!(event.ctrlKey || event.metaKey || event.shiftKey)) clearStageSelection(root);
+    return;
+  }
+  const nodes = stageFileNodes(root);
+  if (event.shiftKey) {
+    const anchor = root._fileAnchor && nodes.includes(root._fileAnchor) ? root._fileAnchor : node;
+    const a = nodes.indexOf(anchor);
+    const b = nodes.indexOf(node);
+    if (a >= 0 && b >= 0) {
+      const lo = Math.min(a, b);
+      const hi = Math.max(a, b);
+      if (!(event.ctrlKey || event.metaKey)) clearStageSelection(root);
+      for (let i = lo; i <= hi; i += 1) nodes[i].classList.add("selected");
+      root._fileAnchor = node;
+      return;
+    }
+  }
+  if (event.ctrlKey || event.metaKey) node.classList.toggle("selected");
+  else {
+    clearStageSelection(root);
+    node.classList.add("selected");
+  }
+  root._fileAnchor = node;
+}
+
+function ensureFileDragGhost() {
+  let ghost = document.getElementById("file-drag-ghost");
+  if (ghost) return ghost;
+  ghost = document.createElement("div");
+  ghost.id = "file-drag-ghost";
+  ghost.hidden = true;
+  document.body.appendChild(ghost);
+  return ghost;
+}
+
+function showFileDragGhost(node, x, y) {
+  const ghost = ensureFileDragGhost();
+  const face = node.querySelector(".desk-icon-face")?.innerHTML
+    || node.querySelector("img, svg")?.outerHTML
+    || "";
+  const label = node.querySelector("h3")?.textContent || "";
+  ghost.innerHTML = `${face}<span>${escapeHtml(label)}</span>`;
+  ghost.hidden = false;
+  ghost.style.left = `${x + 12}px`;
+  ghost.style.top = `${y + 12}px`;
+  document.body.classList.add("is-file-dragging");
+}
+
+function moveFileDragGhost(x, y) {
+  const ghost = document.getElementById("file-drag-ghost");
+  if (!ghost || ghost.hidden) return;
+  ghost.style.left = `${x + 12}px`;
+  ghost.style.top = `${y + 12}px`;
+}
+
+function hideFileDragGhost() {
+  const ghost = document.getElementById("file-drag-ghost");
+  if (ghost) ghost.hidden = true;
+  document.body.classList.remove("is-file-dragging");
+}
+
+/**
+ * Native OS file drag — OLE-first.
+ * Critical: do NOT arm / capture / prepare on pointerdown — that breaks dblclick
+ * (open in Explorer + Ctrl+dblclick desktop tabs).
+ */
+function bindNativeFileDrag(node, item, stage) {
+  if (!canNativeFileItem(item)) return;
+  const dragStage = fileStageRoot(stage) || stage;
+  node.setAttribute("draggable", "false");
+  node.style.webkitUserDrag = "none";
+  node.style.cursor = "pointer";
+  node.querySelectorAll("img, svg, a, .desk-icon-face, h3, .meta, .tag-dots").forEach((el) => {
+    el.setAttribute("draggable", "false");
+    el.style.webkitUserDrag = "none";
+    el.style.pointerEvents = "none";
+  });
+
+  // Prefer double-click open / Ctrl+tab. OS drag only after a deliberate gesture:
+  // Alt+drag, or press-and-hold >350ms then move past threshold.
+  const THRESHOLD = 20;
+  const HOLD_BEFORE_DRAG_MS = 350;
+  let pressing = false;
+  let armed = false;
+  let started = false;
+  let startX = 0;
+  let startY = 0;
+  let downAt = 0;
+  let altDrag = false;
+
+  const collectPaths = () => {
+    const paths = selectedPathsInStage(dragStage).filter((p) => canNativeFileItem({ path: p }));
+    return paths.length ? paths : [item.path].filter(Boolean);
+  };
+
+  const disarm = () => {
+    pressing = false;
+    armed = false;
+    altDrag = false;
+    document.body.classList.remove("is-file-drag-armed");
+    node.classList.remove("dragging");
+    hideFileDragGhost();
+    window.edex?.setFileDragArmed?.(false);
+    window.edex?.cancelFileDragPrepare?.();
+    window.removeEventListener("pointermove", onMove, true);
+    window.removeEventListener("pointerup", onUp, true);
+    window.removeEventListener("pointercancel", onUp, true);
+  };
+
+  const armForDrag = () => {
+    if (armed || started) return;
+    armed = true;
+    document.body.classList.add("is-file-drag-armed");
+    window.edex?.setFileDragArmed?.(true);
+    window.edex?.prepareFileDrag?.()?.catch?.(() => {});
+  };
+
+  const beginOleDrag = async () => {
+    if (!pressing || started) return;
+    const list = collectPaths();
+    if (!list.length) {
+      toast("無法開始拖放（請確認檔案仍存在）");
+      disarm();
+      return;
+    }
+    started = true;
+    armForDrag();
+    document.body.classList.add("is-file-dragging");
+    node.classList.add("dragging");
+    showFileDragGhost(node, startX, startY);
+    try {
+      const result = await window.edex?.startFileDrag?.(list);
+      if (!result?.ok) toast(result?.message || "無法開始拖放");
+    } catch (err) {
+      toast(err?.message || "無法開始拖放");
+    } finally {
+      started = false;
+      disarm();
+      document.body.classList.remove("is-file-dragging");
+    }
+  };
+
+  const onMove = (event) => {
+    if (!pressing || started) return;
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    const dist2 = dx * dx + dy * dy;
+    if (dist2 < THRESHOLD * THRESHOLD) return;
+    const held = Date.now() - downAt;
+    if (!altDrag && held < HOLD_BEFORE_DRAG_MS) return;
+    if (!node.classList.contains("selected")) {
+      clearStageSelection(dragStage);
+      node.classList.add("selected");
+      dragStage._fileAnchor = node;
+    }
+    showFileDragGhost(node, event.clientX, event.clientY);
+    moveFileDragGhost(event.clientX, event.clientY);
+    beginOleDrag();
+  };
+
+  const onUp = () => {
+    if (!started) disarm();
+  };
+
+  node.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    if (event.target?.closest?.("input, textarea, .icon-rename")) return;
+    if (event.detail > 1) {
+      disarm();
+      return;
+    }
+    // Ctrl/Cmd = select / Ctrl+dblclick tabs — never start OLE.
+    if (event.ctrlKey || event.metaKey) return;
+    pressing = true;
+    armed = false;
+    started = false;
+    altDrag = Boolean(event.altKey);
+    startX = event.clientX;
+    startY = event.clientY;
+    downAt = Date.now();
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onUp, true);
+  });
+}
+
+function bindFileStage(stage, opts) {
+  fileStageCtx.set(stage, opts || {});
+  if (stage.tabIndex < 0) stage.tabIndex = 0;
+  stage.style.cursor = "default";
+  if (stage.dataset.fileMenuBound) return;
+  stage.dataset.fileMenuBound = "1";
+  stage.addEventListener("pointerdown", (event) => {
+    const node = event.target.closest(".desk-icon, .fs-row");
+    if (!node || !stage.contains(node)) {
+      if (!event.target.closest("input, textarea, button, a, .icon-rename")) {
+        clearStageSelection(stage);
+      }
+      return;
+    }
+    if (event.button !== 0) return;
+    if (event.target.closest("input, textarea, .icon-rename")) return;
+    selectFileNode(stage, node, event);
+  });
+  stage.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const ctx = fileStageCtx.get(stage) || {};
+    const node = event.target.closest(".desk-icon, .fs-row, .drive-row");
+    const item = node
+      ? (ctx.itemFromNode?.(node) || itemFromIcon(node))
+      : null;
+    if (node && item && canNativeFileItem(item) && !node.classList.contains("selected")) {
+      clearStageSelection(stage);
+      node.classList.add("selected");
+      stage._fileAnchor = node;
+    }
+    const menuItems = fileMenuItems(stage, item, ctx);
+    if (!menuItems.length) return;
+    openCardMenu(node || stage, menuItems, { x: event.clientX, y: event.clientY });
+  });
+}
+
+function itemFromIcon(node) {
+  if (!node?.dataset?.path) return null;
+  let tags = [];
+  try { tags = JSON.parse(node.dataset.tags || "[]"); } catch { tags = []; }
+  return {
+    path: node.dataset.path,
+    name: node.dataset.name || node.querySelector("h3")?.textContent || "",
+    isDirectory: node.dataset.dir === "1",
+    targetPath: node.dataset.targetPath || "",
+    targetIsDirectory: node.dataset.targetDir === "1",
+    kind: node.dataset.kind || "",
+    tags
+  };
+}
+
+function fileMenuItems(stage, item, ctx) {
+  const destDir = ctx.allowCreate === false
+    ? ""
+    : (ctx.destDir || (item && !isVirtualPath(item.path) ? (item.isDirectory ? item.path : parentDir(item.path)) : ""));
+  const items = [];
+  const isDesktopStage = Boolean(ctx.desktopActions) || stage?.id === "desktop-stage";
+  if (isDesktopStage) {
+    items.push(
+      {
+        label: "刷新內容",
+        action: async () => {
+          try {
+            await refreshActiveDesktopView();
+            toast("已刷新內容");
+          } catch (err) {
+            toast(err.message || "無法刷新");
+          }
+        }
+      },
+      {
+        label: "自動整理",
+        action: () => runOrganize()
+      },
+      { sep: true }
+    );
+  }
+  const folderTab = resolveFolderForTab(item);
+  if (folderTab) {
+    items.push(
+      {
+        label: "在系統桌面標籤頁開啟",
+        action: () => openFolderInDesktopTab(folderTab)
+      },
+      {
+        label: "加入為路徑容器",
+        action: () => addPathCardAt(folderTab.path)
+      }
+    );
+  }
+  if (destDir && !isVirtualPath(destDir)) {
+    items.push({
+      label: "新建資料夾",
+      action: async () => {
+        const name = await promptFolderName("未命名資料夾");
+        if (name == null) return;
+        try {
+          const created = await window.edex.createFolder(destDir, name);
+          toast(`已建立 ${created.name}`);
+          await ctx.onRefresh?.();
+        } catch (err) {
+          toast(err.message || "無法建立資料夾");
+        }
+      }
+    });
+  }
+  const canEdit = item && !isVirtualPath(item.path) && item.kind !== "drive" && !isDriveRoot(item.path);
+  if (canEdit) {
+    items.push(
+      {
+        label: "刪除",
+        action: async () => {
+          try {
+            const result = await window.edex.trashItem(item.path);
+            if (result?.cancelled) return;
+            toast("已移至回收桶");
+            await ctx.onRefresh?.();
+          } catch (err) {
+            toast(err.message || "無法刪除");
+          }
+        }
+      },
+      {
+        label: "重新命名",
+        action: () => {
+          const node = [...stage.querySelectorAll(".desk-icon, .fs-row")].find((el) => el.dataset.path === item.path);
+          if (node?.classList.contains("desk-icon")) startRename(node, item, ctx.onRefresh);
+          else promptRename(item, ctx.onRefresh);
+        }
+      }
+    );
+    if (item.isDirectory) {
+      items.push(
+        { sep: true },
+        {
+          kind: "tags",
+          tags: item.tags || [],
+          onChange: async (tags) => {
+            await window.edex.setItemTags(item.path, tags);
+            const node = [...stage.querySelectorAll(".desk-icon")].find((el) => el.dataset.path === item.path);
+            if (node) {
+              node.dataset.tags = JSON.stringify(tags);
+              const face = node.querySelector(".desk-icon-face");
+              const dots = node.querySelector(".tag-dots");
+              const html = tagDotsHtml(tags);
+              if (dots && html) dots.outerHTML = html;
+              else if (dots) dots.remove();
+              else if (html && face) face.insertAdjacentHTML("beforeend", html);
+              else if (html) node.querySelector("h3")?.insertAdjacentHTML("beforebegin", html);
+            }
+          }
+        }
+      );
+    }
+  }
+  return items;
+}
+
+/** Modal text prompt — resolves with trimmed string, or null if cancelled. */
+function promptTextInput({ title = "輸入", hint = "", value = "", okLabel = "確定", cancelLabel = "取消" } = {}) {
+  return new Promise((resolve) => {
+    document.getElementById("textInputPrompt")?.closest(".modal_popup")?.remove();
+    const modal = document.createElement("div");
+    modal.className = "modal_popup info";
+    modal.innerHTML = `
+      <h1>${escapeHtml(title)}</h1>
+      ${hint ? `<h2>${escapeHtml(hint)}</h2>` : ""}
+      <table id="textInputPrompt">
+        <tr><th>名稱</th><th><input id="text_input_field" type="text" spellcheck="false" /></th></tr>
+      </table>
+      <div class="settings-footer">
+        <button type="button" id="text-input-cancel">${escapeHtml(cancelLabel)}</button>
+        <button type="button" id="text-input-ok">${escapeHtml(okLabel)}</button>
+      </div>`;
+    document.body.appendChild(modal);
+    placeCentered(modal, { width: Math.min(420, window.innerWidth * 0.42), topRatio: 0.22 });
+    const input = modal.querySelector("#text_input_field");
+    if (input) {
+      input.value = value || "";
+      input.focus();
+      input.select();
+    }
+    const finish = (result) => {
+      modal.remove();
+      resolve(result);
+    };
+    modal.querySelector("#text-input-cancel").onclick = () => finish(null);
+    modal.querySelector("#text-input-ok").onclick = () => {
+      const next = String(input?.value || "").trim();
+      if (!next) {
+        toast("請輸入名稱");
+        input?.focus();
+        return;
+      }
+      finish(next);
+    };
+    input?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") modal.querySelector("#text-input-ok")?.click();
+      if (event.key === "Escape") finish(null);
+    });
+  });
+}
+
+function promptFolderName(defaultName = "未命名資料夾") {
+  return promptTextInput({
+    title: "新建資料夾",
+    hint: "請輸入資料夾名稱",
+    value: defaultName,
+    okLabel: "建立"
+  });
+}
+
+function promptRename(item, onRefresh) {
+  promptTextInput({
+    title: "重新命名",
+    value: item.name || "",
+    okLabel: "確定"
+  }).then((next) => {
+    if (next == null || next === item.name) return;
+    window.edex.renameItem(item.path, next).then(async () => {
+      toast("已重新命名");
+      await onRefresh?.();
+    }).catch((err) => toast(err.message || "無法重新命名"));
+  });
+}
+
+function startRename(node, item, onRefresh) {
+  const title = node.querySelector("h3");
+  if (!title) {
+    promptRename(item, onRefresh);
+    return;
+  }
+  const input = document.createElement("input");
+  input.className = "icon-rename";
+  input.value = item.name || title.textContent || "";
+  title.replaceWith(input);
+  input.focus();
+  input.select();
+  window.edex?.setMouseIgnore?.(false);
+  let done = false;
+  const finish = async (commit) => {
+    if (done) return;
+    done = true;
+    const value = input.value.trim();
+    if (!commit || !value || value === item.name) {
+      await onRefresh?.();
+      return;
+    }
+    try {
+      await window.edex.renameItem(item.path, value);
+      toast("已重新命名");
+      await onRefresh?.();
+    } catch (err) {
+      toast(err.message || "無法重新命名");
+      await onRefresh?.();
+    }
+  };
+  input.addEventListener("pointerdown", (event) => event.stopPropagation());
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      finish(true);
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener("blur", () => finish(true));
+}
+
+function fillIconStage(stage, items, opts = {}) {
+  const view = opts.view === "list" ? "list" : "grid";
+  const listMode = view === "list";
+  const dragRoot = fileStageRoot(stage) || stage;
+  stage.classList.toggle("view-list", listMode);
+  stage.classList.toggle("view-grid", !listMode);
+  stage.innerHTML = "";
+  const gap = snapGap();
+
+  items.forEach((item) => {
+    const node = document.createElement("div");
+    node.className = "desk-icon";
+    node.dataset.path = item.path;
+    node.dataset.name = item.name || "";
+    node.dataset.dir = item.isDirectory ? "1" : "0";
+    node.dataset.kind = item.kind || "";
+    if (item.targetPath) node.dataset.targetPath = item.targetPath;
+    if (item.targetIsDirectory) node.dataset.targetDir = "1";
+    node.dataset.tags = JSON.stringify(item.tags || []);
+    try {
+      node.dataset.itemJson = JSON.stringify({
+        path: item.path,
+        name: item.name,
+        displayName: item.displayName,
+        isDirectory: Boolean(item.isDirectory),
+        targetPath: item.targetPath || "",
+        targetIsDirectory: Boolean(item.targetIsDirectory),
+        kind: item.kind || "",
+        category: item.category || "",
+        tags: item.tags || []
+      });
+    } catch {
+      // ignore
+    }
+    const label = itemLabel(item);
+    node.innerHTML = `<span class="desk-icon-face">${iconSvg(item.icon)}${tagDotsHtml(item.tags)}</span><h3 title="${escapeHtml(item.name || label)}">${escapeHtml(label)}</h3><span class="meta">${escapeHtml(item.sizeLabel || "")}</span>`;
+    node.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      holdOverlayHits(1500);
+    }, true);
+    // OS file drag — only after a real drag; do not steal double-clicks.
+    bindNativeFileDrag(node, item, dragRoot);
+    if (opts.draggable && !listMode) bindIconDrag(node, item, gap);
+    stage.appendChild(node);
+  });
+  bindFileStage(stage, {
+    destDir: opts.destDir || "",
+    allowCreate: opts.allowCreate,
+    desktopActions: opts.desktopActions,
+    onRefresh: opts.onRefresh
+  });
+}
+
+function bindIconDrag(node, item, gap) {
+  node.addEventListener("pointerdown", (event) => {
+    if (event.detail > 1) return;
+    event.preventDefault();
+    node.classList.add("dragging");
+    node.style.zIndex = String(++state.zTop);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origX = node.offsetLeft;
+    const origY = node.offsetTop;
+    const move = (ev) => {
+      let x = origX + (ev.clientX - startX);
+      let y = origY + (ev.clientY - startY);
+      if (state.settings.snapWidgets) {
+        x = Math.round(x / gap) * gap;
+        y = Math.round(y / gap) * gap;
+      }
+      x = Math.max(0, x);
+      y = Math.max(0, y);
+      node.style.left = `${x}px`;
+      node.style.top = `${y}px`;
+      state.iconPositions[item.path] = { x, y };
+    };
+    const up = () => {
+      node.classList.remove("dragging");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      persistLayout();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+
+function itemKindBucket(item) {
+  if (!item) return "other";
+  if (item.kind === "thispc" || item.kind === "recycle") return "icons";
+  const name = String(item.name || "");
+  if (/\.(lnk|url)$/i.test(name) || item.category === "shortcuts" || item.kind === "shortcut") {
+    return "icons";
+  }
+  if (item.isDirectory) return "folders";
+  return item.category || "other";
+}
+
+function deskFilterBuckets() {
+  return [
+    { id: "folders", label: "文件夾" },
+    { id: "icons", label: "圖標" },
+    ...FILE_FORMAT_FILTERS
+  ];
+}
+
+function matchesDeskFilter(item, filter) {
+  const bucket = itemKindBucket(item);
+  if (!filter || filter === "all") return true;
+  if (filter === "files") return !["folders", "icons"].includes(bucket);
+  return bucket === filter;
+}
+
+function activeDesktopFolderTab() {
+  if (!state.desktopTabId || state.desktopTabId === "classify") return null;
+  return (state.desktopFolderTabs || []).find((tab) => tab.id === state.desktopTabId) || null;
+}
+
+function activeDesktopDropDir() {
+  const tab = activeDesktopFolderTab();
+  if (tab?.path) return tab.path;
+  return state.bootstrap?.desktop || "";
+}
+
+function folderTabTitle(pathValue, fallback = "") {
+  const base = String(pathValue || "").split(/[/\\]/).filter(Boolean).pop();
+  return base || fallback || "資料夾";
+}
+
+function ensureDesktopEnabled() {
+  if (!state.primary) return false;
+  if (state.desktopEnabled !== false && document.getElementById("card_desktop")) return true;
+  state.desktopEnabled = true;
+  if (!state.desktopStage) state.desktopStage = findEmptyBox(defaultDesktop(), { desktop: true });
+  persistLayout();
+  // rebuildWorkspace keeps state.layout; never assign defaultWidgets() here.
+  rebuildWorkspace();
+  return Boolean(document.getElementById("card_desktop"));
+}
+
+/** Remove panel id(s) from all persisted display layouts (closed = gone forever). */
+async function purgePanelFromSavedLayouts(panelIds) {
+  const ids = (Array.isArray(panelIds) ? panelIds : [panelIds])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  if (!ids.length) return;
+  const layouts = state.settings?.displayLayouts;
+  if (!layouts || typeof layouts !== "object") return;
+  const next = {};
+  let changed = false;
+  for (const [displayId, entry] of Object.entries(layouts)) {
+    if (!entry?.layout) {
+      next[displayId] = entry;
+      continue;
+    }
+    const layout = { ...entry.layout };
+    let local = false;
+    for (const id of ids) {
+      if (layout[id]) {
+        delete layout[id];
+        local = true;
+      }
+    }
+    if (local) {
+      next[displayId] = { ...entry, layout };
+      changed = true;
+    } else {
+      next[displayId] = entry;
+    }
+  }
+  if (!changed) return;
+  try {
+    const result = await window.edex.saveSettings({ displayLayouts: next });
+    if (result?.settings) state.settings = result.settings;
+  } catch {
+    // ignore
+  }
+}
+
+/** Resolve a real folder path for desktop tab open (folder or .lnk → folder). */
+function resolveFolderForTab(item) {
+  if (!item) return null;
+  const pathValue = String(item.path || "").trim();
+  const target = String(item.targetPath || "").trim();
+  const name = itemLabel(item) || item.name || item.displayName || "";
+  if (item.isDirectory && pathValue && !isVirtualPath(pathValue)) {
+    return { path: pathValue, name: name || folderTabTitle(pathValue), isDirectory: true };
+  }
+  if ((item.targetIsDirectory || item.kind === "shortcut") && target && !isVirtualPath(target)) {
+    // Folder shortcuts often only set targetPath; treat as folder when target has no file ext
+    // or explicit targetIsDirectory flag.
+    const base = target.split(/[/\\]/).pop() || "";
+    const looksFile = /\.[a-z0-9]{1,8}$/i.test(base);
+    if (item.targetIsDirectory || !looksFile) {
+      return { path: target, name: name || folderTabTitle(target), isDirectory: true };
+    }
+  }
+  return null;
+}
+
+function renderDeskTabs() {
+  const bar = document.getElementById("desk-tab-bar");
+  if (!bar) return;
+  const active = state.desktopTabId || "classify";
+  const folderTabs = state.desktopFolderTabs || [];
+  bar.innerHTML = [
+    `<button type="button" class="desk-tab${active === "classify" ? " on" : ""}" data-desk-tab="classify"><span class="desk-tab-label">Desktop-Kategorien</span></button>`,
+    ...folderTabs.map((tab) => `
+      <button type="button" class="desk-tab${active === tab.id ? " on" : ""}" data-desk-tab="${escapeHtml(tab.id)}" title="${escapeHtml(tab.path || "")}">
+        <span class="desk-tab-label">${escapeHtml(tab.name || folderTabTitle(tab.path))}</span>
+        <span class="desk-tab-close" data-desk-tab-close="${escapeHtml(tab.id)}" title="關閉">×</span>
+      </button>
+    `)
+  ].join("");
+}
+
+function bindDeskTabs(desk) {
+  const bar = desk.querySelector("#desk-tab-bar") || document.getElementById("desk-tab-bar");
+  if (!bar) return;
+  if (bar.dataset.bound === "1") {
+    renderDeskTabs();
+    return;
+  }
+  bar.dataset.bound = "1";
+  bar.addEventListener("click", async (event) => {
+    const closeBtn = event.target.closest("[data-desk-tab-close]");
+    if (closeBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      await closeDesktopFolderTab(closeBtn.dataset.deskTabClose);
+      return;
+    }
+    const tabBtn = event.target.closest("[data-desk-tab]");
+    if (!tabBtn) return;
+    event.preventDefault();
+    event.stopPropagation();
+    state.desktopTabId = tabBtn.dataset.deskTab || "classify";
+    persistLayout();
+    await arrangeDesktop();
+  });
+  renderDeskTabs();
+}
+
+async function openFolderInDesktopTab(item) {
+  const folder = resolveFolderForTab(item) || (
+    item?.isDirectory && item?.path && !isVirtualPath(item.path)
+      ? { path: item.path, name: itemLabel(item) || item.name, isDirectory: true }
+      : null
+  );
+  const folderPath = String(folder?.path || "").trim();
+  if (!folderPath || isVirtualPath(folderPath)) {
+    toast("無法在桌面容器開啟此資料夾");
+    return;
+  }
+  if (!ensureDesktopEnabled()) {
+    toast("系統桌面容器未啟用");
+    return;
+  }
+  const existing = (state.desktopFolderTabs || []).find(
+    (tab) => String(tab.path || "").toLowerCase() === folderPath.toLowerCase()
+  );
+  if (existing) {
+    state.desktopTabId = existing.id;
+  } else {
+    const id = `ft${Date.now().toString(36)}`;
+    const tab = {
+      id,
+      path: folderPath,
+      name: folder.name || folderTabTitle(folderPath, item?.name),
+      listing: null
+    };
+    state.desktopFolderTabs = [...(state.desktopFolderTabs || []), tab];
+    state.desktopTabId = id;
+  }
+  await persistLayout();
+  const desk = document.getElementById("card_desktop");
+  if (desk) bindDeskTabs(desk);
+  renderDeskTabs();
+  await arrangeDesktop();
+  toast(`已在系統桌面開啟「${folderTabTitle(folderPath, folder.name)}」`);
+}
+
+async function closeDesktopFolderTab(tabId) {
+  const id = String(tabId || "");
+  if (!id || id === "classify") return;
+  state.desktopFolderTabs = (state.desktopFolderTabs || []).filter((tab) => tab.id !== id);
+  if (state.desktopTabId === id) state.desktopTabId = "classify";
+  persistLayout();
+  renderDeskTabs();
+  await arrangeDesktop();
+}
+
+async function refreshActiveDesktopView() {
+  const tab = activeDesktopFolderTab();
+  if (tab) {
+    tab.listing = null;
+    await arrangeDesktop();
+    return;
+  }
+  await loadDesktopListing({ decorate: "fast", includeShell: false });
+  arrangeDesktop();
+}
+
+async function loadFolderTabListing(tab) {
+  if (!tab?.path) return { items: [], total: 0 };
+  try {
+    const listing = await window.edex.listFolder(tab.path, { systemIcons: "fast" });
+    tab.listing = listing;
+    tab.listingError = "";
+    return listing;
+  } catch (err) {
+    tab.listing = { items: [], total: 0 };
+    tab.listingError = err.message || "無法讀取資料夾";
+    return tab.listing;
+  }
+}
+
+function bindDeskFilters(desk) {
+  desk.querySelectorAll("[data-desk-filter]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.desktopFilter = btn.dataset.deskFilter || "all";
+      state.desktopTabId = "classify";
+      persistLayout();
+      arrangeDesktop();
+    });
+  });
+  syncDeskFilters();
+}
+
+function syncDeskFilters() {
+  const current = state.desktopFilter || "all";
+  document.querySelectorAll("[data-desk-filter]").forEach((btn) => {
+    btn.classList.toggle("on", btn.dataset.deskFilter === current);
+  });
+}
+
+function syncDesktopChrome() {
+  const filterBar = document.getElementById("desk-filter-bar");
+  const pathText = document.getElementById("desktop-path-text");
+  const folderTab = activeDesktopFolderTab();
+  const onClassify = !folderTab;
+  if (filterBar) filterBar.hidden = !onClassify;
+  if (pathText) {
+    const shown = folderTab?.path || state.bootstrap?.desktop || "";
+    pathText.textContent = shown;
+    pathText.title = shown;
+  }
+  renderDeskTabs();
+  syncDeskFilters();
+}
+
+async function arrangeDesktop() {
+  const stage = document.getElementById("desktop-stage");
+  if (!stage) return;
+  syncDesktopChrome();
+
+  const folderTab = activeDesktopFolderTab();
+  const view = state.iconView === "list" ? "list" : "grid";
+
+  if (folderTab) {
+    stage.classList.remove("view-grouped");
+    if (!folderTab.listing) {
+      stage.innerHTML = `<p class="path-empty">讀取中…</p>`;
+      await loadFolderTabListing(folderTab);
+    }
+    const destDir = folderTab.path || "";
+    const fileOpts = {
+      destDir,
+      desktopActions: true,
+      onRefresh: async () => {
+        folderTab.listing = null;
+        await arrangeDesktop();
+      }
+    };
+    if (folderTab.listingError) {
+      stage.innerHTML = `<p class="path-empty">${escapeHtml(folderTab.listingError)}</p>`;
+      bindFileStage(stage, fileOpts);
+      return;
+    }
+    const items = listingItems(folderTab.listing);
+    if (!items.length) {
+      stage.innerHTML = `<p class="path-empty">此資料夾沒有可顯示的項目</p>`;
+      bindFileStage(stage, fileOpts);
+      return;
+    }
+    fillIconStage(stage, items, { draggable: false, view, ...fileOpts });
+    return;
+  }
+
+  const destDir = state.bootstrap?.desktop || "";
+  const all = desktopItems();
+  const filter = state.desktopFilter || "all";
+  const fileOpts = {
+    destDir,
+    desktopActions: true,
+    onRefresh: async () => {
+      await loadDesktopListing();
+      arrangeDesktop();
+    }
+  };
+  const buckets = deskFilterBuckets();
+  if (state.desktopGrouped && filter === "all") {
+    stage.classList.remove("view-list", "view-grid");
+    stage.classList.add("view-grouped");
+    const visibleBuckets = buckets.filter((bucket) => all.some((item) => matchesDeskFilter(item, bucket.id)));
+    const list = visibleBuckets.length ? visibleBuckets : buckets;
+    stage.innerHTML = list.map((bucket) => {
+      const count = all.filter((item) => matchesDeskFilter(item, bucket.id)).length;
+      return `<section class="desk-group" data-bucket="${bucket.id}"><h4>${bucket.label}<em>${count}</em></h4><div class="desk-group-items"></div></section>`;
+    }).join("");
+    list.forEach((bucket) => {
+      const inner = stage.querySelector(`[data-bucket="${bucket.id}"] .desk-group-items`);
+      if (!inner) return;
+      const items = all.filter((item) => matchesDeskFilter(item, bucket.id));
+      if (!items.length) {
+        inner.className = "desk-group-items";
+        inner.innerHTML = `<p class="path-empty">沒有${bucket.label}</p>`;
+        return;
+      }
+      fillIconStage(inner, items, { draggable: false, view, ...fileOpts });
+    });
+    bindFileStage(stage, fileOpts);
+    return;
+  }
+  stage.classList.remove("view-grouped");
+  const items = all.filter((item) => matchesDeskFilter(item, filter));
+  fillIconStage(stage, items, { draggable: false, view, ...fileOpts });
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = window.edexI18n?.translateDynamic?.(text) || text;
+}
+
+function renderStats() {
+  // Category / storage panels removed — keep no-op for existing call sites.
+}
+
+function log(text) {
+  const node = document.getElementById("op_log");
+  if (!node) return;
+  const time = new Date().toLocaleTimeString(window.edexI18n?.locale?.() || "zh-Hant", { hour12: false });
+  const entry = document.createDocumentFragment();
+  entry.append(document.createTextNode(`[${time}] ${window.edexI18n?.translateDynamic?.(text) || String(text)}`));
+  entry.append(document.createElement("br"));
+  node.prepend(entry);
+}
+
+function updateDisplayChip() {
+  const chip = document.getElementById("display_chip");
+  if (!chip) return;
+  const { width, height } = pageSize();
+  const role = state.primary ? "主螢幕" : "獨立頁面";
+  const who = state.bootstrap?.username || "";
+  chip.textContent = `顯示器 ${state.displayIndex + 1} · ${layoutMode().toUpperCase()} · ${width}×${height} · ${who} · ${role}`;
+}
+
+async function refreshPlan() {
+  if (!state.scan) return;
+  state.plan = await window.edex.plan(state.scan, { includeFolders: state.includeFolders });
+  setText("st_plan", `${state.plan.count} 筆`);
+  setText("st_folders", state.includeFolders ? "一併移動" : "略過");
+}
+
+async function doScan() {
+  const cards = state.pathCards.filter((card) => card.path);
+  setText("st_mode", "掃描中");
+  try {
+    if (!cards.length) {
+      state.scan = null;
+      state.plan = null;
+    } else {
+      await Promise.all(cards.map((card) => scanCard(card)));
+    }
+  } finally {
+    setText("st_mode", "待命");
+  }
+  await loadDesktopListing();
+  arrangeDesktop();
+}
+
+function closeSettings() {
+  document.getElementById("settingsEditor")?.closest(".modal_popup")?.remove();
+}
+
+function openSettings() {
+  if (document.getElementById("settingsEditor")) return;
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info";
+  const themeOpts = state.themes.map((t) =>
+    `<option value="${escapeHtml(t)}" ${t === state.themeName ? "selected" : ""}>${escapeHtml(t)}</option>`
+  ).join("");
+  const wallOpts = state.wallpapers.map((w) =>
+    `<option value="${escapeHtml(w.id)}" ${w.id === (state.settings.wallpaper || "grid") ? "selected" : ""}>${escapeHtml(w.label)}</option>`
+  ).join("");
+
+  modal.innerHTML = `
+    <h1>設定</h1>
+    <h2>Sprache / 語言</h2>
+    <table><tr><td>Sprache</td><td>UI-Sprache der Anwendung</td><td>
+      <select id="set-locale">
+        <option value="zh-Hant" ${(state.settings.locale || "zh-Hant") === "zh-Hant" ? "selected" : ""}>繁體中文</option>
+        <option value="de" ${state.settings.locale === "de" ? "selected" : ""}>Deutsch</option>
+      </select>
+    </td></tr></table>
+    <h2>畫面與外觀（解析度與網格全顯示器同步）</h2>
+    <table id="settingsEditor">
+      <tr><th>項目</th><th>說明</th><th>值</th></tr>
+      <tr>
+        <td>本顯示器</td>
+        <td>實體解析度（非系統 2K 縮放）</td>
+        <td>顯示器 ${state.displayIndex + 1} · ${pageSize().width}×${pageSize().height}</td>
+      </tr>
+      <tr>
+        <td>顯示器數量</td>
+        <td>各自獨立視窗，非鏡像</td>
+        <td>${state.displays.length || 1} 台</td>
+      </tr>
+      <tr>
+        <td>主題</td>
+        <td>原版介面主題</td>
+        <td><select id="set-theme">${themeOpts}</select></td>
+      </tr>
+      <tr>
+        <td>壁紙</td>
+        <td>所有顯示器共用背景</td>
+        <td><select id="set-wall">${wallOpts}</select></td>
+      </tr>
+      <tr>
+        <td>圖示顯示</td>
+        <td>桌面容器內圖示排列</td>
+        <td>
+          <select id="set-icon-view">
+            <option value="grid" ${state.iconView === "grid" ? "selected" : ""}>圖示網格</option>
+            <option value="list" ${state.iconView === "list" ? "selected" : ""}>圖示列表</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>自動吸附</td>
+        <td>容器拖曳時自動對齊（含螢幕邊緣）</td>
+        <td><input id="set-snap" type="checkbox" ${state.settings.snapWidgets !== false ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>底部 Dock</td>
+        <td>主螢幕底邊背景條；寬度跟隨任務欄圖示；不遮擋點擊</td>
+        <td><input id="set-dock" type="checkbox" ${!state.primary ? "disabled" : ""} ${dockEnabled() ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Dock 外框</td>
+        <td>圓角 / 梯形 / 直角；邊框帶電路發光點</td>
+        <td>
+          <select id="set-dock-frame" ${!state.primary || !dockEnabled() ? "disabled" : ""}>
+            <option value="rounded" ${(state.settings?.dockFrameStyle || "rounded") === "rounded" ? "selected" : ""}>圓角</option>
+            <option value="trapezoid" ${state.settings?.dockFrameStyle === "trapezoid" ? "selected" : ""}>梯形</option>
+            <option value="rect" ${state.settings?.dockFrameStyle === "rect" ? "selected" : ""}>直角</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>網格大小</td>
+        <td>以主顯示器為準，所有顯示器使用同一格距（像素）</td>
+        <td><input id="set-grid" type="number" min="12" max="96" step="1" value="${settingsGridSize()}"></td>
+      </tr>
+      <tr>
+        <td>時鐘字格</td>
+        <td>相對壁紙網格倍率（0.25–2.0，可縮小）</td>
+        <td><input id="set-clock-scale" type="number" min="0.25" max="2" step="0.05" value="${clockScale()}"></td>
+      </tr>
+      <tr>
+        <td>顯示日期</td>
+        <td>在時間下方另起一行顯示年月日</td>
+        <td><input id="set-clock-date" type="checkbox" ${clockShowDate() ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>時鐘高亮</td>
+        <td>點陣點亮顏色（色票或 #RRGGBB）</td>
+        <td>
+          <input id="set-clock-led" type="color" value="${escapeHtml(clockLedColor())}">
+          <input id="set-clock-led-hex" type="text" spellcheck="false" value="${escapeHtml(clockLedColor())}" style="width:7rem">
+        </td>
+      </tr>
+      <tr>
+        <td>搜尋字體</td>
+        <td>快速搜尋檔名、路徑與輸入框統一字級（px，預設 12）</td>
+        <td><input id="set-search-font" type="text" inputmode="numeric" spellcheck="false" value="${searchFontSize()}"></td>
+      </tr>
+      <tr>
+        <td>瀑布字體</td>
+        <td>代碼雨字級（px，8–72，手動輸入後套用）</td>
+        <td><input id="set-rain-font" type="text" inputmode="numeric" spellcheck="false" value="${rainFontSize()}"></td>
+      </tr>
+      <tr>
+        <td>瀑布速度</td>
+        <td>下落倍率（0.1–8.0，手動輸入後套用）</td>
+        <td><input id="set-rain-speed" type="text" inputmode="decimal" spellcheck="false" value="${rainSpeed()}"></td>
+      </tr>
+      <tr>
+        <td>佈局解析度</td>
+        <td>全顯示器同步。2K 螢幕依同一尺縮小，網格密度與 4K 一致</td>
+        <td>
+          <select id="set-layout-mode">
+            <option value="2k" ${layoutMode() === "2k" ? "selected" : ""}>2K（2560×1440）</option>
+            <option value="4k" ${layoutMode() === "4k" ? "selected" : ""}>4K（3840×2160）</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>介面比例</td>
+        <td>全顯示器同步，疊加在佈局解析度上</td>
+        <td><input id="set-ui-scale" type="number" min="0.4" max="1.2" step="0.05" value="${displayUiScale()}"></td>
+      </tr>
+      <tr>
+        <td>遷移檔案</td>
+        <td>開啟後自動整理會把檔案搬到「分類／副檔名」資料夾；關閉則只篩選顯示</td>
+        <td><input id="set-migrate" type="checkbox" ${state.settings?.migrateFiles ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>整理資料夾</td>
+        <td>遷移時一併把資料夾收到「資料夾」</td>
+        <td><input id="set-dirs" type="checkbox" ${state.includeFolders ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>桌面佈局</td>
+        <td>保存本顯示器全部容器：插件開關與位置、系統桌面、路徑卡、桌面標籤。關閉的插件不會在下次啟動復原。</td>
+        <td>
+          <button type="button" id="set-save-layout">保存佈局</button>
+        </td>
+      </tr>
+    </table>
+
+    <div class="settings-footer">
+      <button type="button" id="set-reset">重設容器位置</button>
+      <button type="button" id="set-quit">結束程式</button>
+      <button type="button" id="set-cancel">關閉</button>
+      <button type="button" id="set-save-layout-footer">保存佈局</button>
+      <button type="button" id="set-save">套用設定並保存佈局</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  window.edexI18n?.translatePage?.(modal);
+  placeCentered(modal);
+
+  const ledColor = modal.querySelector("#set-clock-led");
+  const ledHex = modal.querySelector("#set-clock-led-hex");
+  const previewLed = () => {
+    const hex = toHex6(ledHex?.value || ledColor?.value || clockLedColor());
+    state.settings = { ...state.settings, clockLedColor: hex };
+    applyClockMetrics();
+  };
+  ledColor?.addEventListener("input", () => {
+    if (ledHex) ledHex.value = ledColor.value;
+    previewLed();
+  });
+  ledHex?.addEventListener("input", () => {
+    const hex = toHex6(ledHex.value);
+    if (ledColor && /^#[0-9a-fA-F]{6}$/.test(hex)) ledColor.value = hex;
+    previewLed();
+  });
+  modal.querySelector("#set-clock-date")?.addEventListener("change", (event) => {
+    setClockShowDate(event.target.checked);
+  });
+  modal.querySelector("#set-clock-scale")?.addEventListener("input", (event) => {
+    const next = Number(event.target.value);
+    if (!Number.isFinite(next)) return;
+    state.settings = { ...state.settings, clockScale: Math.max(0.25, Math.min(2, next)) };
+    applyClockMetrics();
+    renderClock();
+  });
+
+  const previewRain = () => {
+    const fontRaw = Number(modal.querySelector("#set-rain-font")?.value);
+    const speedRaw = Number(modal.querySelector("#set-rain-speed")?.value);
+    state.settings = {
+      ...state.settings,
+      rainFontSize: Number.isFinite(fontRaw) ? Math.max(8, Math.min(72, Math.round(fontRaw))) : rainFontSize(),
+      rainSpeed: Number.isFinite(speedRaw) ? Math.max(0.1, Math.min(8, Math.round(speedRaw * 10) / 10)) : rainSpeed()
+    };
+    applyRainMetrics();
+  };
+  modal.querySelector("#set-rain-font")?.addEventListener("input", previewRain);
+  modal.querySelector("#set-rain-speed")?.addEventListener("input", previewRain);
+  modal.querySelector("#set-search-font")?.addEventListener("input", (event) => {
+    const next = Number(event.target.value);
+    if (!Number.isFinite(next)) return;
+    state.settings = { ...state.settings, searchFontSize: Math.max(8, Math.min(72, Math.round(next))) };
+    applyUiMetrics();
+  });
+
+  const prevLayoutMode = layoutMode();
+  const prevUiScale = displayUiScale();
+  modal.querySelector("#set-layout-mode")?.addEventListener("change", (event) => {
+    state.settings = { ...state.settings, layoutMode: event.target.value === "4k" ? "4k" : "2k" };
+    applyUiMetrics();
+  });
+  modal.querySelector("#set-ui-scale")?.addEventListener("input", (event) => {
+    const next = Number(event.target.value);
+    if (!Number.isFinite(next)) return;
+    state.settings = { ...state.settings, uiScale: Math.max(0.4, Math.min(1.5, next)) };
+    applyUiMetrics();
+  });
+
+  modal.querySelector("#set-dock")?.addEventListener("change", (event) => {
+    setDockEnabled(event.target.checked);
+    const frameSel = modal.querySelector("#set-dock-frame");
+    if (frameSel) frameSel.disabled = !event.target.checked || !state.primary;
+  });
+  modal.querySelector("#set-dock-frame")?.addEventListener("change", (event) => {
+    window.dockPanel?.setFrameStyle?.(state, event.target.value);
+  });
+  modal.querySelector("#set-cancel").onclick = () => {
+    state.settings = { ...state.settings, layoutMode: prevLayoutMode, uiScale: prevUiScale };
+    applyUiMetrics();
+    closeSettings();
+  };
+  modal.querySelector("#set-quit").onclick = () => {
+    if (window.confirm("Desktop Organizer wirklich beenden?")) window.edex.quitApp();
+  };
+  const saveDesktopLayout = async () => {
+    snapAllLayoutToGrid();
+    try {
+      await persistLayout();
+      toast("本顯示器桌面佈局已保存（含全部插件）");
+      return true;
+    } catch (err) {
+      toast(err?.message || "佈局保存失敗");
+      return false;
+    }
+  };
+  modal.querySelector("#set-save-layout").onclick = () => saveDesktopLayout();
+  modal.querySelector("#set-save-layout-footer").onclick = () => saveDesktopLayout();
+  modal.querySelector("#set-reset").onclick = () => {
+    state.layout = defaultWidgets();
+    state.desktopStage = defaultDesktop();
+    state.desktopEnabled = true;
+    state.pathCards = [];
+    state.desktopFolderTabs = [];
+    state.desktopTabId = "classify";
+    snapAllLayoutToGrid();
+    persistLayout();
+    location.reload();
+  };
+
+  modal.querySelector("#set-save").onclick = async () => {
+    state.includeFolders = modal.querySelector("#set-dirs").checked;
+    const migrateFiles = Boolean(modal.querySelector("#set-migrate")?.checked);
+    state.settings = { ...state.settings, migrateFiles };
+    state.iconView = modal.querySelector("#set-icon-view").value === "list" ? "list" : "grid";
+    const themeName = modal.querySelector("#set-theme").value;
+    const wallpaper = modal.querySelector("#set-wall").value;
+    const uiScaleRaw = Number(modal.querySelector("#set-ui-scale").value);
+    const uiScale = Number.isFinite(uiScaleRaw) ? Math.max(0.4, Math.min(1.2, uiScaleRaw)) : 1;
+    const layoutModeValue = modal.querySelector("#set-layout-mode")?.value === "4k" ? "4k" : "2k";
+    state.settings = { ...state.settings, layoutMode: layoutModeValue, uiScale };
+    const gridRaw = Number(modal.querySelector("#set-grid").value);
+    const gridSizeValue = Number.isFinite(gridRaw) ? Math.max(12, Math.min(96, Math.round(gridRaw))) : 32;
+    const clockRaw = Number(modal.querySelector("#set-clock-scale").value);
+    const clockScaleValue = Number.isFinite(clockRaw)
+      ? Math.max(0.25, Math.min(2, Math.round(clockRaw * 20) / 20))
+      : 1;
+    const clockLedValue = toHex6(
+      modal.querySelector("#set-clock-led-hex")?.value
+      || modal.querySelector("#set-clock-led")?.value
+      || clockLedColor()
+    );
+    const clockDateValue = Boolean(modal.querySelector("#set-clock-date")?.checked);
+    const rainFontRaw = Number(modal.querySelector("#set-rain-font").value);
+    const rainFontValue = Number.isFinite(rainFontRaw)
+      ? Math.max(8, Math.min(72, Math.round(rainFontRaw)))
+      : 14;
+    const rainSpeedRaw = Number(modal.querySelector("#set-rain-speed").value);
+    const rainSpeedValue = Number.isFinite(rainSpeedRaw)
+      ? Math.max(0.1, Math.min(8, Math.round(rainSpeedRaw * 10) / 10))
+      : 1;
+    const searchFontRaw = Number(modal.querySelector("#set-search-font")?.value);
+    const searchFontValue = Number.isFinite(searchFontRaw)
+      ? Math.max(8, Math.min(72, Math.round(searchFontRaw)))
+      : 12;
+    const dockEnabledValue = state.primary
+      ? Boolean(modal.querySelector("#set-dock")?.checked)
+      : false;
+    const dockFrameValue = String(modal.querySelector("#set-dock-frame")?.value || state.settings?.dockFrameStyle || "rounded");
+    const localeValue = window.edexI18n?.normalize?.(modal.querySelector("#set-locale")?.value) || "zh-Hant";
+    state.settings = { ...state.settings, dockEnabled: dockEnabledValue, dockFrameStyle: dockFrameValue };
+    syncDockLayout(dockEnabledValue);
+    window.dockPanel?.setFrameStyle?.(state, dockFrameValue);
+    const result = await window.edex.saveSettings({
+      snapWidgets: modal.querySelector("#set-snap").checked,
+      dockEnabled: dockEnabledValue,
+      dockFrameStyle: dockFrameValue,
+      gridSize: gridSizeValue,
+      clockScale: clockScaleValue,
+      clockLedColor: clockLedValue,
+      clockShowDate: clockDateValue,
+      rainFontSize: rainFontValue,
+      rainSpeed: rainSpeedValue,
+      searchFontSize: searchFontValue,
+      layoutMode: layoutModeValue,
+      uiScale,
+      theme: themeName,
+      wallpaper,
+      iconView: state.iconView,
+      includeFolders: state.includeFolders,
+      migrateFiles,
+      locale: localeValue
+    });
+    state.settings = result.settings;
+    window.edexI18n?.setLocale?.(state.settings.locale);
+    state.themeName = result.themeName;
+    if (result.displays) state.displays = result.displays;
+    applyTheme(result.theme, wallpaper);
+    applyClockMetrics();
+    applyRainMetrics();
+    snapAllLayoutToGrid();
+    await persistLayout();
+    closeSettings();
+    toast("設定與桌面佈局已保存");
+    rebuildWorkspace();
+  };
+}
+
+function rebuildWorkspace() {
+  buildLayout();
+  updateDisplayChip();
+  applyClockMetrics();
+  applyRainMetrics();
+  window.edexEffects?.start?.();
+  applyRainMetrics();
+  renderPathCards();
+  if (state.scan) renderStats();
+  loadDesktopListing().then(() => arrangeDesktop());
+  fillDrivesStage();
+  bindTerminal();
+  bindPluginPanels();
+  if (keepAddPicker) {
+    queueMicrotask(() => openAddPicker());
+  }
+  window.edexI18n?.translatePage?.();
+}
+
+function receiveWidget(widget) {
+  if (!widget?.type) return;
+
+  if (widget.type === "panel" && widget.id && widget.id !== "status" && PANEL_META[widget.id]) {
+    if (widget.id === "dock") {
+      setDockEnabled(state.primary);
+      return;
+    }
+    if (state.layout[widget.id]) {
+      toast("此顯示器已有該插件");
+      return;
+    }
+    state.layout[widget.id] = findEmptyBox({
+      ...(widget.data?.box || {}),
+      x: widget.x ?? PANEL_META[widget.id].box?.x ?? 2,
+      y: widget.y ?? PANEL_META[widget.id].box?.y ?? 4,
+      w: widget.w ?? PANEL_META[widget.id].box?.w ?? 16,
+      h: widget.h ?? PANEL_META[widget.id].box?.h ?? 14,
+      gx: widget.gx,
+      gy: widget.gy,
+      gw: widget.gw,
+      gh: widget.gh
+    }, { panelId: widget.id });
+    persistLayout();
+    rebuildWorkspace();
+    toast(`已接收面板「${PANEL_META[widget.id].title}」`);
+    return;
+  }
+
+  if (widget.type === "path") {
+    const id = widget.id || `p${Date.now()}`;
+    if (!state.pathCards.some((c) => c.id === id)) {
+      state.pathCards.push(findEmptyBox({
+        id,
+        path: widget.data?.path || state.bootstrap.root,
+        x: widget.x ?? 20,
+        y: widget.y ?? 16,
+        w: widget.w ?? 46,
+        h: widget.h ?? 52,
+        gx: widget.gx,
+        gy: widget.gy,
+        gw: widget.gw,
+        gh: widget.gh,
+        iconView: widget.data?.iconView === "list" ? "list" : "grid"
+      }, { pathId: id }));
+    } else {
+      const card = state.pathCards.find((c) => c.id === id);
+      Object.assign(card, findEmptyBox({
+        ...card,
+        path: widget.data?.path || card.path,
+        x: widget.x ?? card.x,
+        y: widget.y ?? card.y,
+        w: widget.w ?? card.w,
+        h: widget.h ?? card.h,
+        gx: widget.gx ?? card.gx,
+        gy: widget.gy ?? card.gy,
+        gw: widget.gw ?? card.gw,
+        gh: widget.gh ?? card.gh
+      }, { pathId: id }));
+    }
+    if (!state.activePathId) state.activePathId = id;
+    persistLayout();
+    renderPathCards();
+    const card = state.pathCards.find((c) => c.id === id);
+    scanCard(card);
+    toast("已接收路徑容器");
+    return;
+  }
+
+  if (widget.type === "desktop") {
+    if (!state.primary) {
+      toast("系統桌面僅能顯示在主顯示器");
+      return;
+    }
+    state.desktopEnabled = true;
+    state.desktopStage = findEmptyBox({
+      ...(state.desktopStage || defaultDesktop()),
+      x: widget.x ?? state.desktopStage?.x,
+      y: widget.y ?? state.desktopStage?.y,
+      w: widget.w ?? state.desktopStage?.w ?? DEFAULT_DESKTOP_PRIMARY.w,
+      h: widget.h ?? state.desktopStage?.h ?? DEFAULT_DESKTOP_PRIMARY.h,
+      gx: widget.gx,
+      gy: widget.gy,
+      gw: widget.gw,
+      gh: widget.gh
+    }, { desktop: true });
+    persistLayout();
+    rebuildWorkspace();
+    toast("已接收桌面容器");
+  }
+}
+
+async function runOrganize() {
+  const root = state.bootstrap?.desktop;
+  if (!root) {
+    toast("找不到系統桌面路徑");
+    return;
+  }
+  const migrate = Boolean(state.settings?.migrateFiles);
+  state.busy = true;
+  setText("st_mode", migrate ? "整理中" : "篩選中");
+  try {
+    const scan = await window.edex.scan(root);
+    state.scan = scan;
+    await refreshPlan();
+    renderStats();
+    if (!migrate) {
+      state.desktopGrouped = true;
+      state.desktopFilter = "all";
+      persistLayout();
+      await loadDesktopListing();
+      arrangeDesktop();
+      log("已依文件夾、圖標與檔案格式大類篩選顯示（未遷移檔案）");
+      toast("已按格式大類篩選顯示，檔案仍在系統桌面");
+      return;
+    }
+    if (!state.plan?.count) {
+      toast("沒有需要遷移的項目");
+      return;
+    }
+    if (!window.confirm(`將在系統桌面建立分類／副檔名資料夾並遷移 ${state.plan.count} 個項目。確定？`)) {
+      return;
+    }
+    const result = await window.edex.organize(scan, { includeFolders: state.includeFolders });
+    log(`已遷移 ${result.moved} 個項目到分類資料夾`);
+    toast(`已遷移 ${result.moved} 個項目`);
+    await doScan();
+  } catch (err) {
+    toast(err.message);
+    log(`執行失敗：${err.message}`);
+  } finally {
+    state.busy = false;
+    setText("st_mode", "待命");
+  }
+}
+
+window.addEventListener("keydown", (event) => {
+  if (!state.primary) return;
+  if (event.key === "F10" || (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "s")) {
+    event.preventDefault();
+    openSettings();
+  }
+});
+
+(async function start() {
+  state.bootstrap = await window.edex.bootstrap();
+  state.settings = state.bootstrap.settings || {};
+  window.edexI18n?.setLocale?.(state.settings.locale || "zh-Hant");
+  state.displays = state.bootstrap.displays || [];
+  state.displayId = state.bootstrap.displayId ?? window.edex.displayId;
+  state.displayIndex = state.bootstrap.displayIndex ?? window.edex.displayIndex ?? 0;
+  state.primary = Boolean(state.bootstrap.primary ?? window.edex.isPrimary);
+  state.bounds = state.bootstrap.bounds || {
+    x: 0,
+    y: 0,
+    width: window.edex.launchWidth || window.innerWidth,
+    height: window.edex.launchHeight || window.innerHeight
+  };
+  state.scaleFactor = state.bootstrap.scaleFactor || window.edex.launchScale || 1;
+  state.physicalSize = state.bootstrap.physicalSize || null;
+  state.themes = state.bootstrap.themes || [];
+  state.wallpapers = state.bootstrap.wallpapers || [];
+  state.themeName = state.bootstrap.themeName || "tron";
+  state.includeFolders = Boolean(state.settings.includeFolders);
+
+  // Prefer per-display layout; migrate legacy global layout onto primary once.
+  let saved = state.bootstrap.displayLayout;
+  if (!saved && state.primary && (state.settings.layout || state.settings.pathCards)) {
+    saved = {
+      layout: state.settings.layout,
+      desktopStage: state.settings.desktopStage,
+      pathCards: state.settings.pathCards,
+      iconPositions: state.settings.iconPositions,
+      iconView: state.settings.iconView
+    };
+  }
+
+  state.iconView = (saved?.iconView || state.settings.iconView) === "list" ? "list" : "grid";
+  state.iconPositions = saved?.iconPositions || {};
+  if (state.settings?.layoutMode !== "4k" && state.settings?.layoutMode !== "2k") {
+    state.settings = { ...state.settings, layoutMode: defaultLayoutMode() };
+  }
+  applyTheme(state.bootstrap.theme, state.settings.wallpaper || "grid");
+
+  try {
+    const fitted = await window.edex.refitDisplay();
+    if (fitted?.bounds) {
+      state.bounds = fitted.bounds;
+      state.scaleFactor = fitted.scaleFactor || state.scaleFactor;
+      state.physicalSize = fitted.physicalSize || state.physicalSize;
+    }
+  } catch {
+    // Keep launch bounds if refit is unavailable.
+  }
+  applyUiMetrics();
+
+  await boot();
+
+  const defaults = defaultWidgets();
+  state.layout = defaults;
+  const savedLayout = saved?.layout || null;
+  const oldSecondaryMirror = !state.primary && savedLayout && Object.keys(savedLayout).length
+    && Object.keys(savedLayout).every((k) => ["clock", "status"].includes(k));
+
+  if (savedLayout && !oldSecondaryMirror) {
+    // Trust saved layout exactly — missing keys mean the user closed those panels.
+    state.layout = {};
+    Object.keys(savedLayout).forEach((key) => {
+      if (key === "status" || REMOVED_PANELS.has(key)) return;
+      if (!PANEL_META[key]) return;
+      state.layout[key] = { ...(PANEL_META[key].box || {}), ...savedLayout[key] };
+    });
+  } else if (!state.primary) {
+    state.layout = {};
+  } else {
+    state.layout = defaults;
+  }
+
+  // Dock is a primary-only backdrop driven by settings.dockEnabled (default on).
+  syncDockLayout(dockEnabled());
+
+  // Drop retired panels from memory + disk so they cannot reappear.
+  let strippedRemoved = false;
+  for (const key of REMOVED_PANELS) {
+    if (state.layout[key]) {
+      delete state.layout[key];
+      strippedRemoved = true;
+    }
+  }
+  if (strippedRemoved || Object.keys(savedLayout || {}).some((k) => REMOVED_PANELS.has(k))) {
+    queueMicrotask(async () => {
+      await persistLayout();
+      await purgePanelFromSavedLayouts([...REMOVED_PANELS]);
+    });
+  }
+
+  state.desktopStage = saved?.desktopStage
+    ? { ...defaultDesktop(), ...saved.desktopStage }
+    : defaultDesktop();
+  if (saved?.desktopBg && !state.desktopStage.bg) state.desktopStage.bg = saved.desktopBg;
+  // 系統桌面 only on the primary monitor — force off on secondaries and persist.
+  if (!state.primary) {
+    if (saved?.desktopEnabled !== false) {
+      queueMicrotask(() => persistLayout());
+    }
+    state.desktopEnabled = false;
+  } else {
+    state.desktopEnabled = saved?.desktopEnabled !== false;
+  }
+  state.desktopLocked = Boolean(saved?.desktopLocked);
+  state.desktopGrouped = Boolean(saved?.desktopGrouped);
+  state.desktopFilter = saved?.desktopFilter || "all";
+  state.desktopTabId = saved?.desktopTabId || "classify";
+  state.desktopFolderTabs = Array.isArray(saved?.desktopFolderTabs)
+    ? saved.desktopFolderTabs
+      .filter((tab) => tab?.id && tab?.path)
+      .map((tab) => ({
+        id: String(tab.id),
+        path: String(tab.path),
+        name: String(tab.name || folderTabTitle(tab.path)),
+        listing: null
+      }))
+    : [];
+  if (
+    state.desktopTabId !== "classify"
+    && !(state.desktopFolderTabs || []).some((tab) => tab.id === state.desktopTabId)
+  ) {
+    state.desktopTabId = "classify";
+  }
+
+  if (Array.isArray(saved?.pathCards) && saved.pathCards.length) {
+    state.pathCards = saved.pathCards.filter((card) => card?.path && card.id !== "desktop");
+  } else {
+    state.pathCards = [];
+  }
+  state.activePathId = state.pathCards[0]?.id || null;
+
+  snapAllLayoutToGrid();
+  buildLayout();
+  window.edexI18n?.translatePage?.();
+  setText("info_user", state.bootstrap.username);
+  setText("info_host", state.bootstrap.hostname);
+  updateDisplayChip();
+  renderPathCards();
+
+  window.edex.onDisplaysChanged((payload) => {
+    if (Array.isArray(payload)) {
+      state.displays = payload;
+    } else {
+      state.displays = payload.displays || state.displays;
+      if (payload.bounds) state.bounds = payload.bounds;
+      if (payload.scaleFactor) state.scaleFactor = payload.scaleFactor;
+      if (payload.displayId != null) state.displayId = payload.displayId;
+      if (payload.index != null) state.displayIndex = payload.index;
+      if (payload.physicalSize) state.physicalSize = payload.physicalSize;
+    }
+    updateDisplayChip();
+  });
+
+  window.edex.onSettingsUpdated((payload) => {
+    const prevGrid = gridSize();
+    const prevGridSetting = settingsGridSize();
+    const prevClock = clockScale();
+    const prevMode = layoutMode();
+    const prevUi = displayUiScale();
+    const previousLocale = state.settings.locale || "zh-Hant";
+    state.settings = payload.settings || state.settings;
+    window.edexI18n?.setLocale?.(state.settings.locale || "zh-Hant");
+    state.themeName = payload.themeName || state.themeName;
+    if (payload.displays) state.displays = payload.displays;
+    if (payload.theme) applyTheme(payload.theme, state.settings.wallpaper || "grid");
+    else applyUiMetrics();
+    applyClockMetrics();
+    applyRainMetrics();
+    updateDisplayChip();
+    renderClock();
+    if (previousLocale !== (state.settings.locale || "zh-Hant")) {
+      rebuildWorkspace();
+    } else if (
+      settingsGridSize() !== prevGridSetting
+      || gridSize() !== prevGrid
+      || layoutMode() !== prevMode
+      || displayUiScale() !== prevUi
+    ) {
+      snapAllLayoutToGrid();
+      rebuildWorkspace();
+    } else if (clockScale() !== prevClock) {
+      applyClockMetrics();
+      renderClock();
+    }
+  });
+
+  window.edex.onReceiveWidget((widget) => receiveWidget(widget));
+  setupDesktopClickThrough();
+  bindDesktopIconClicks();
+
+  window.addEventListener("resize", () => {
+    applyUiMetrics();
+    updateDisplayChip();
+  });
+
+  await doScan();
+})();

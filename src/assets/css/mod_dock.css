@@ -1,0 +1,164 @@
+/* Dock — opaque frame flush to the selected screen edge; circuit glow on canvas */
+
+#mod_dock.dock-root {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    user-select: none;
+    pointer-events: none !important;
+    contain: layout paint;
+}
+
+.dock-shell {
+    position: absolute;
+    inset: 0;
+    background: rgb(8, 12, 14);
+    border: none;
+    pointer-events: none;
+    transform: translateZ(0);
+}
+
+.dock-items {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.45rem 0.8rem;
+    pointer-events: auto;
+    z-index: 3;
+}
+
+.dock-item {
+    min-width: 5.6rem;
+    max-width: 7.5rem;
+    min-height: 4.8rem;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    overflow: hidden;
+    padding: 0.2rem 0.35rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgb(var(--ddj));
+    font: inherit;
+    font-size: clamp(10px, calc(var(--fs) * 0.52), 14px);
+    letter-spacing: 0.05em;
+    cursor: pointer;
+}
+
+.dock-item-icon {
+    width: 3.1rem;
+    height: 3.1rem;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 0;
+    background-color: transparent;
+    background-image: none;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    image-rendering: auto;
+    overflow: hidden;
+}
+
+.dock-item-icon-cpu { background-image: url("../misc/dock-icons/cpu.png"); }
+.dock-item-icon-processes { background-image: url("../misc/dock-icons/processes.png"); }
+.dock-item-icon-clock { background-image: url("../misc/dock-icons/clock.png"); }
+.dock-item-icon-world { background-image: url("../misc/dock-icons/world.png"); }
+.dock-item-icon-ram { background-image: url("../misc/dock-icons/ram.png"); }
+.dock-item-icon-network { background-image: url("../misc/dock-icons/network.png"); }
+.dock-item-icon-drive { background-image: url("../misc/dock-icons/drive.png"); }
+.dock-item-icon-folders { background-image: url("../misc/dock-icons/folders.png"); }
+.dock-item-icon-fallback {
+    background-image: none;
+    background-color: rgba(var(--ddj), 0.12);
+}
+
+.dock-item-icon-fallback::after {
+    content: "◆";
+    color: rgb(var(--ddj));
+    font-size: 1.25em;
+    line-height: 1;
+}
+
+.dock-item-label {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.dock-item:hover,
+.dock-item:focus-visible {
+    background: rgba(var(--ddj), 0.08);
+    border-color: rgba(var(--ddj), 0.45);
+    outline: none;
+}
+
+/* Rounded — only top corners; bottom flush to screen edge */
+#mod_dock.is-rounded .dock-shell {
+    border-radius: 0.95rem 0.95rem 0 0;
+}
+
+#mod_dock.is-rounded.is-top .dock-shell {
+    border-radius: 0 0 0.95rem 0.95rem;
+}
+
+/* Sharp rectangle */
+#mod_dock.is-rect .dock-shell {
+    border-radius: 0;
+}
+
+/* Trapezoid — wide base flush to screen bottom (symmetric inset) */
+#mod_dock.is-trap .dock-shell {
+    border-radius: 0;
+    clip-path: polygon(7% 0%, 93% 0%, 100% 100%, 0% 100%);
+}
+
+.dock-fx {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+    transform: translateZ(0);
+}
+
+.hud-card.dock-bare {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    overflow: visible;
+    z-index: 0;
+    pointer-events: none !important;
+    /* Geometry is owned by dock-panel (bottom-center); ignore layout % drift */
+    position: fixed !important;
+}
+
+.hud-card.dock-bare .card-title,
+.hud-card.dock-bare .resize-handle {
+    display: none !important;
+}
+
+.hud-card.dock-bare .card-body {
+    overflow: visible;
+    background: transparent !important;
+    padding: 0;
+    height: 100%;
+    pointer-events: none !important;
+}
+
+.hud-card.dock-bare .card-body > #mod_dock {
+    height: 100%;
+}
