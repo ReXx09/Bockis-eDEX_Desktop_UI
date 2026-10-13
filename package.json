@@ -1,13 +1,13 @@
 {
   "name": "edex-desktop-organizer",
   "productName": "eDEX Desktop Organizer",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Desktop organizer using the eDEX-UI sci-fi HUD layout",
   "main": "main.js",
   "author": "bananamax9113",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bananamax9113/Bockis-eDEX_Desktop_UI.git"
+    "url": "https://github.com/ReXx09/Bockis-eDEX_Desktop_UI.git"
   },
   "scripts": {
     "test": "node --test test/organizer.test.js",
@@ -70,7 +70,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "bananamax9113",
+        "owner": "ReXx09",
         "repo": "Bockis-eDEX_Desktop_UI"
       }
     ]

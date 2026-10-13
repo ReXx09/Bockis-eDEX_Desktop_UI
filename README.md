@@ -72,8 +72,8 @@ Ergebnis: `dist/eDEX-Desktop-Organizer-Setup-<version>.exe` (NSIS-Installer, Ins
 
 ## Veröffentlichung
 
-- Repository: https://github.com/bananamax9113/Bockis-eDEX_Desktop_UI
-- Releases: https://github.com/bananamax9113/Bockis-eDEX_Desktop_UI/releases
+- Repository: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI
+- Releases: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases
 
 ## Lizenz und Quellen
 
