@@ -20,6 +20,8 @@ const { dirIcon } = require("./lib/icons");
 const { loadSettings, saveSettings } = require("./lib/settings-store");
 const { WALLPAPERS, listThemes, loadTheme, resolveThemeName } = require("./lib/themes");
 const { applyAppWallpaper, restoreWallpaper, hideDesktopIcons, restoreDesktopIcons } = require("./lib/system-desktop");
+const rainmeter = require("./lib/rainmeter");
+const appLog = require("./lib/app-log");
 const {
   pinWindowBottom,
   stopZOrderDaemon,
@@ -114,6 +116,7 @@ let syncTimer = null;
 let quitting = false;
 let tray = null;
 const terminalSessions = new Map();
+const terminalSessionShells = new Map();
 
 function makeTrayIcon() {
   const size = 16;
@@ -134,7 +137,7 @@ function makeTrayIcon() {
 function createTray() {
   if (tray) return;
   tray = new Tray(makeTrayIcon());
-  tray.setToolTip("eDEX Desktop Organizer");
+  tray.setToolTip("Bockis-eDEX Desktop UI");
   const menu = Menu.buildFromTemplate([
     {
       label: "顯示容器",
@@ -190,7 +193,7 @@ function listDisplays() {
       size: { width, height },
       physicalSize: { width: physW, height: physH },
       scaleFactor: scale,
-      label: `顯示器 ${index + 1}（${physW}×${physH}${display.id === primaryId ? "，主螢幕" : ""}）`
+      label: `Monitor ${index + 1} (${physW}×${physH}${display.id === primaryId ? ", Hauptmonitor" : ""})`
     };
   });
 }
@@ -313,7 +316,7 @@ function createWindowForDisplay(display, index) {
   const { x, y, width, height } = display.bounds;
   const scale = display.scaleFactor || 1;
   const win = new BrowserWindow({
-    title: `Desktop Organizer - Monitor ${index + 1}`,
+    title: `Bockis-eDEX Desktop UI - Monitor ${index + 1}`,
     x,
     y,
     width,
@@ -484,6 +487,14 @@ function scheduleWallpaper() {
   }, 400);
 }
 
+function scheduleRainmeter() {
+  clearTimeout(scheduleRainmeter.timer);
+  scheduleRainmeter.timer = setTimeout(() => {
+    rainmeter.syncRainmeter(loadTheme(settings.theme || "tron"), settings.rainmeterEnabled === true)
+      .catch((err) => console.error("rainmeter", err));
+  }, 250);
+}
+
 function broadcast(channel, payload) {
   for (const win of windows.values()) {
     if (!win.isDestroyed()) win.webContents.send(channel, payload);
@@ -511,7 +522,14 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    appLog.init(app.getPath("userData"));
     settings = loadSettings(app.getPath("userData"));
+    try {
+      await restoreDesktopIcons(app.getPath("userData"));
+      await restoreWallpaper(app.getPath("userData"));
+    } catch (err) {
+      console.error("recover desktop", err);
+    }
     currentRoot = resolveDesktop();
     createTray();
     await ensureDaemon();
@@ -525,6 +543,7 @@ if (!gotLock) {
     syncAllWindows();
     setTimeout(() => syncAllWindows(), 600);
     scheduleWallpaper();
+    scheduleRainmeter();
     hideDesktopIcons(app.getPath("userData")).catch((err) => console.error("desktop icons", err));
 
     screen.on("display-added", () => scheduleSync("added"));
@@ -544,17 +563,18 @@ if (!gotLock) {
       quitting = true;
       clearTimeout(syncTimer);
       clearTimeout(scheduleWallpaper.timer);
+      clearTimeout(scheduleRainmeter.timer);
       try { tray?.destroy(); } catch { /* ignore */ }
       tray = null;
       stopZOrderDaemon();
       stopOleDragDaemon();
       try { await win32Embed.releaseAllEmbeds(); } catch { /* ignore */ }
       try { win32Embed.stopEmbedDaemon(); } catch { /* ignore */ }
+      try { await rainmeter.stopRainmeter(); } catch { /* ignore */ }
+      appLog.close();
       try {
         await restoreDesktopIcons(app.getPath("userData"));
-        if (settings?.keepThemeWallpaper !== true) {
-          await restoreWallpaper(app.getPath("userData"));
-        }
+        await restoreWallpaper(app.getPath("userData"));
       } catch (err) {
         console.error("restore desktop", err);
       }
@@ -610,6 +630,13 @@ ipcMain.handle("get-bootstrap", (event) => {
   };
 });
 
+ipcMain.on("ui-log", (event, payload) => {
+  requireTrustedWindow(event);
+  const item = payload && typeof payload === "object" ? payload : {};
+  const level = ["info", "warn", "error"].includes(String(item.level)) ? String(item.level) : "info";
+  appLog[level](String(item.event || "ui.action"), String(item.message || ""), item.details);
+});
+
 ipcMain.handle("get-windows-colors", (event) => {
   requireTrustedWindow(event);
   let accent = "#00eaff";
@@ -649,6 +676,11 @@ ipcMain.handle("save-settings", (event, patch) => {
   } else {
     settings = loadSettings(app.getPath("userData"));
   }
+  appLog.info("settings.update", "Einstellungen aktualisiert", {
+    theme: settings.theme,
+    wallpaper: settings.wallpaper,
+    rainmeterEnabled: settings.rainmeterEnabled
+  });
 
   const themeName = resolveThemeName(settings.theme || "tron");
   const payload = {
@@ -673,7 +705,18 @@ ipcMain.handle("save-settings", (event, patch) => {
   ) {
     scheduleWallpaper();
   }
+  if (
+    Object.prototype.hasOwnProperty.call(globalPatch, "theme")
+    || Object.prototype.hasOwnProperty.call(globalPatch, "rainmeterEnabled")
+  ) {
+    scheduleRainmeter();
+  }
   return payload;
+});
+
+ipcMain.handle("rainmeter-status", (event) => {
+  requireTrustedWindow(event);
+  return { ...rainmeter.status(), enabled: settings.rainmeterEnabled === true };
 });
 
 ipcMain.handle("save-display-layout", (event, layout) => {
@@ -780,7 +823,7 @@ ipcMain.handle("terminal-run", async (event, command, cwd) => {
     });
   });
 });
-ipcMain.handle("terminal-create", (event, paneId, cwd) => {
+ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
   const win = requireTrustedWindow(event);
   if (!nodePty) throw new Error("ConPTY ist nicht verfügbar. Bitte node-pty für Electron rebuilden.");
   const key = `${win.id}:${String(paneId || "default")}`;
@@ -788,20 +831,34 @@ ipcMain.handle("terminal-create", (event, paneId, cwd) => {
   const workingDirectory = typeof cwd === "string" && fs.existsSync(cwd) && fs.statSync(cwd).isDirectory()
     ? cwd
     : os.homedir();
-  const shell = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  const session = nodePty.spawn(shell, ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass"], {
+  const selectedShell = shellType === "cmd" ? "cmd" : "powershell";
+  const shell = selectedShell === "cmd"
+    ? (process.env.ComSpec || path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe"))
+    : path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const shellArgs = selectedShell === "cmd"
+    ? []
+    : ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass"];
+  const session = nodePty.spawn(shell, shellArgs, {
     cwd: workingDirectory,
     name: "xterm-256color",
     cols: 120,
     rows: 32,
     useConpty: true,
     backend: "conpty",
-    env: { ...process.env, TERM: "xterm-256color" }
+    env: { ...process.env, TERM: "xterm-256color", EDEX_SHELL: selectedShell }
   });
   terminalSessions.set(key, session);
+  terminalSessionShells.set(key, selectedShell);
+  appLog.info("terminal.create", "Terminal-Sitzung gestartet", { paneId, shell: selectedShell, cwd: workingDirectory });
   let lastCwd = workingDirectory;
+  let promptBuffer = "";
   const sendData = (data) => {
-    const promptMatch = String(data).match(/(?:^|\r?\n)PS\s+([^\r\n>]+)>\s*$/m);
+    promptBuffer = `${promptBuffer}${String(data || "")}`.slice(-8192);
+    const cleanPromptBuffer = promptBuffer.replace(/\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "");
+    const promptMatches = selectedShell === "cmd"
+      ? [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)([A-Za-z]:\\[^\r\n>]*|\\\\[^\r\n>]+)>[ \t]*/g)]
+      : [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)PS[ \t]+([^\r\n>]+)>[ \t]*/g)];
+    const promptMatch = promptMatches[promptMatches.length - 1];
     if (promptMatch) {
       const nextCwd = String(promptMatch[1] || "").trim();
       if (nextCwd && nextCwd !== lastCwd && fs.existsSync(nextCwd)) {
@@ -814,9 +871,38 @@ ipcMain.handle("terminal-create", (event, paneId, cwd) => {
   session.onData(sendData);
   session.onExit(({ exitCode }) => {
     if (terminalSessions.get(key) === session) terminalSessions.delete(key);
+    terminalSessionShells.delete(key);
     if (!win.isDestroyed()) win.webContents.send("terminal-exit", { paneId, exitCode: exitCode ?? 1 });
   });
   return { ok: true, paneId, cwd: workingDirectory };
+});
+ipcMain.on("terminal-cd", (event, paneId, target) => {
+  const win = getSenderWindow(event);
+  const key = `${win?.id}:${String(paneId || "default")}`;
+  const session = terminalSessions.get(key);
+  if (!session || typeof target !== "string" || !fs.existsSync(target) || !fs.statSync(target).isDirectory()) return;
+  const selectedShell = terminalSessionShells.get(key) || "powershell";
+  if (selectedShell === "cmd") {
+    session.write(`cd /d "${target.replace(/"/g, "")}"\r`);
+    return;
+  }
+  const escaped = target.replace(/'/g, "''");
+  session.write(`Set-Location -LiteralPath '${escaped}'\r`);
+});
+ipcMain.handle("terminal-admin", (event, cwd) => {
+  requireTrustedWindow(event);
+  const workingDirectory = typeof cwd === "string" && fs.existsSync(cwd) && fs.statSync(cwd).isDirectory()
+    ? cwd
+    : os.homedir();
+  const escaped = workingDirectory.replace(/'/g, "''");
+  const child = spawn("powershell.exe", [
+    "-NoLogo",
+    "-NoProfile",
+    "-Command",
+    `Start-Process -FilePath powershell.exe -Verb RunAs -WorkingDirectory '${escaped}'`
+  ], { windowsHide: true, stdio: "ignore", detached: true });
+  child.unref();
+  return { ok: true };
 });
 ipcMain.on("terminal-input", (event, paneId, data) => {
   const win = getSenderWindow(event);
@@ -838,6 +924,7 @@ ipcMain.on("terminal-close", (event, paneId) => {
   if (session) {
     session.kill();
     terminalSessions.delete(key);
+    terminalSessionShells.delete(key);
   }
 });
 ipcMain.handle("search-files", async (event, query, limit) => {
@@ -1447,14 +1534,16 @@ ipcMain.handle("embed-putty", async (event, payload = {}) => {
   }
   if (!puttyPath || !fs.existsSync(puttyPath)) throw new Error("PuTTY wurde nicht gefunden");
   const target = String(payload.target || "").trim();
-  if (!target) throw new Error("Kein PuTTY-Ziel angegeben");
-  const args = target.toLowerCase().startsWith("session:")
-    ? ["-load", target.slice(8).trim()]
-    : ["-ssh", target];
+  const args = !target
+    ? []
+    : target.toLowerCase().startsWith("session:")
+      ? ["-load", target.slice(8).trim()]
+      : ["-ssh", target];
   const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {}, resolveEmbedZone({ ...payload, kind: "putty" }));
   return win32Embed.launchAndDock(puttyPath, screenBounds, {
     timeoutMs: 15000,
     hostHwnd: parentHwndOf(event),
+    processName: "putty.exe",
     args
   });
 });

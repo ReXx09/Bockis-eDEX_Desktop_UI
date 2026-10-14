@@ -1,8 +1,8 @@
 {
-  "name": "edex-desktop-organizer",
-  "productName": "eDEX Desktop Organizer",
+  "name": "bockis-edex-desktop-ui",
+  "productName": "Bockis-eDEX Desktop UI",
   "version": "1.2.3",
-  "description": "Desktop organizer using the eDEX-UI sci-fi HUD layout",
+  "description": "Desktop UI using the eDEX-UI sci-fi HUD layout",
   "main": "main.js",
   "author": "bananamax9113",
   "repository": {
@@ -26,9 +26,9 @@
     "electron-builder": "^26.15.3"
   },
   "build": {
-    "appId": "com.edex.desktop-organizer",
-    "productName": "eDEX Desktop Organizer",
-    "copyright": "Copyright © eDEX Desktop Organizer",
+    "appId": "com.bockis.edex-desktop-ui",
+    "productName": "Bockis-eDEX Desktop UI",
+    "copyright": "Copyright © Bockis-eDEX Desktop UI",
     "directories": {
       "output": "dist"
     },
@@ -43,7 +43,7 @@
     "asar": true,
     "npmRebuild": true,
     "forceCodeSigning": false,
-    "artifactName": "eDEX-Desktop-Organizer-Setup-${version}.${ext}",
+    "artifactName": "Bockis-eDEX-Desktop-UI-Setup-${version}.${ext}",
     "win": {
       "target": [
         {
@@ -62,7 +62,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "eDEX Desktop Organizer",
+      "shortcutName": "Bockis-eDEX Desktop UI",
       "deleteAppDataOnUninstall": false,
       "installerLanguages": [
         "de_DE",

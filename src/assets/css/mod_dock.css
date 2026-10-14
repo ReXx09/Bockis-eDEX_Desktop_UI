@@ -69,14 +69,29 @@
     overflow: hidden;
 }
 
-.dock-item-icon-cpu { background-image: url("../misc/dock-icons/cpu.png"); }
-.dock-item-icon-processes { background-image: url("../misc/dock-icons/processes.png"); }
-.dock-item-icon-clock { background-image: url("../misc/dock-icons/clock.png"); }
-.dock-item-icon-world { background-image: url("../misc/dock-icons/world.png"); }
-.dock-item-icon-ram { background-image: url("../misc/dock-icons/ram.png"); }
-.dock-item-icon-network { background-image: url("../misc/dock-icons/network.png"); }
-.dock-item-icon-drive { background-image: url("../misc/dock-icons/drive.png"); }
-.dock-item-icon-folders { background-image: url("../misc/dock-icons/folders.png"); }
+.dock-item-icon-cpu { background-image: url("../misc/dock-icons/nur-icon/cpu.png"); }
+.dock-item-icon-processes { background-image: url("../misc/dock-icons/nur-icon/processes.png"); }
+.dock-item-icon-clock { background-image: url("../misc/dock-icons/nur-icon/clock.png"); }
+.dock-item-icon-world { background-image: url("../misc/dock-icons/nur-icon/world.png"); }
+.dock-item-icon-ram { background-image: url("../misc/dock-icons/nur-icon/ram.png"); }
+.dock-item-icon-network { background-image: url("../misc/dock-icons/nur-icon/network.png"); }
+.dock-item-icon-drive { background-image: url("../misc/dock-icons/nur-icon/drive.png"); }
+.dock-item-icon-folders { background-image: url("../misc/dock-icons/nur-icon/folders.png"); }
+.dock-item-icon-search { background-image: url("../misc/dock-icons/nur-icon/search.png"); }
+.dock-item-icon-terminal { background-image: url("../misc/dock-icons/nur-icon/terminal.png"); }
+.dock-item-icon-weather { background-image: url("../misc/dock-icons/nur-icon/weather.png"); }
+
+[data-dock-icon-set="labelled"] .dock-item-icon-cpu { background-image: url("../misc/dock-icons/mit-beschriftung/cpu.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-processes { background-image: url("../misc/dock-icons/mit-beschriftung/processes.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-clock { background-image: url("../misc/dock-icons/mit-beschriftung/clock.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-world { background-image: url("../misc/dock-icons/mit-beschriftung/world.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-ram { background-image: url("../misc/dock-icons/mit-beschriftung/ram.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-network { background-image: url("../misc/dock-icons/mit-beschriftung/network.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-drive { background-image: url("../misc/dock-icons/mit-beschriftung/drive.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-folders { background-image: url("../misc/dock-icons/mit-beschriftung/folders.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-search { background-image: url("../misc/dock-icons/mit-beschriftung/search.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-terminal { background-image: url("../misc/dock-icons/mit-beschriftung/terminal.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-weather { background-image: url("../misc/dock-icons/mit-beschriftung/weather.png"); }
 .dock-item-icon-fallback {
     background-image: none;
     background-color: rgba(var(--ddj), 0.12);

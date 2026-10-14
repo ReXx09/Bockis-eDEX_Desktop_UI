@@ -1,6 +1,6 @@
-# eDEX Desktop Organizer
+# Bockis-eDEX Desktop UI
 
-Ein auf [eDEX-UI](https://github.com/GitSquared/edex-ui) basierendes **Windows-Desktop-Organisationstool für mehrere Monitore**.
+Ein auf [eDEX-UI](https://github.com/GitSquared/edex-ui) basierendes **Windows-Desktop-UI für mehrere Monitore**.
 Es übernimmt die futuristische Terminal- und Hacker-Ästhetik von eDEX (fast schwarzer Hintergrund, Cyan-Weiß-Farben, Raster-Hintergrund und HUD-Container) und macht aus der ursprünglichen Vollbildoberfläche eine dauerhaft über dem Systemdesktop nutzbare Arbeitsoberfläche.
 
 ## Projektbeschreibung
@@ -9,7 +9,7 @@ Dieses Projekt ist kein Terminal-Emulator wie das originale eDEX, sondern:
 
 1. **Übernimmt die visuelle Sprache und die Panel-Struktur von eDEX**
    Theme-Farben, Schriftarten, Rahmen, Globus, Code-Regen sowie CPU-, Speicher- und Netzwerk-Überwachung stammen aus den eDEX-Themes und den Modul-CSS-Dateien.
-2. **Erweitert eDEX zu einer Desktop-Organizer-Oberfläche**
+2. **Erweitert eDEX zu einer Desktop-UI-Oberfläche**
    Transparente Overlay-Fenster bedecken jeden Monitor, blenden die Windows-Desktopsymbole aus und bieten stattdessen Container für Dateien, Verknüpfungen, Laufwerke und Kalenderfunktionen.
 3. **Bietet einen durchgängigen Hacker-Desktop-Stil**
    Dunkler Raster-Hintergrund, kantige Rahmen, Monospace- und Sci-Fi-Schriften sowie halbtransparente Panel-Ebenen erzeugen eine terminalartige Desktop-Atmosphäre.
@@ -65,12 +65,22 @@ Zusätzlich stehen im Terminal-Panel zur Verfügung:
 
 Die Terminal-Ausgabe wird ereignisbasiert an den Renderer übertragen. Die übrigen HUD-Panels liefern ihre Live-Systemdaten unabhängig davon.
 
+## Optionale Rainmeter-Integration
+
+Wenn Rainmeter installiert ist, kann in den eDEX-Einstellungen **Rainmeter-HUD** aktiviert werden. Die Anwendung erzeugt dann eine eigene `Bockis-eDEX`-Skin mit Uhr, Datum, CPU- und RAM-Anzeige. Farben und Hintergrund werden aus dem aktiven eDEX-Theme übernommen; ein Themewechsel aktualisiert die Skin automatisch.
+
+Rainmeter wird nicht automatisch installiert. Die Skin liegt unter `%USERPROFILE%\\Documents\\Rainmeter\\Skins\\Bockis-eDEX`. Wird die Option deaktiviert oder die Anwendung beendet, wird die Skin ausgeblendet. Ohne installierte Rainmeter-Anwendung bleibt die eDEX-Oberfläche vollständig funktionsfähig.
+
 ## Ausführen
 
 ```powershell
 npm install
 npm start
 ```
+
+## Fehlerprotokoll
+
+Die Anwendung schreibt Aktionen und Fehler als JSON-Zeilen in `%APPDATA%\\Bockis-eDEX Desktop UI\\logs\\edex-ui.log`. Das Log wird bei einer Größe von 5 MB automatisch rotiert. Renderer-Fehler, unbehandelte Promise-Fehler, App-Start und Einstellungsänderungen werden erfasst; Terminal-Eingaben, Befehle und Geheimnisse werden nicht protokolliert.
 
 ## Windows-Installer erstellen
 
@@ -84,7 +94,7 @@ npm run dist
 
 `npm run dist` führt den nativen Rebuild über den `predist`-Hook automatisch aus. `xterm.js`, das Fit-Addon und `node-pty` werden in die Electron-App und damit in den NSIS-Installer aufgenommen. Der installierte Endanwender benötigt kein Node.js, npm oder Visual Studio.
 
-Ergebnis: `dist/eDEX-Desktop-Organizer-Setup-<version>.exe` (NSIS-Installer, Installationsverzeichnis kann geändert werden).
+Ergebnis: `dist/Bockis-eDEX-Desktop-UI-Setup-<version>.exe` (NSIS-Installer, Installationsverzeichnis kann geändert werden).
 
 Für einen entpackten Test-Build:
 

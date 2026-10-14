@@ -33,30 +33,16 @@ div#mod_globe_innercontainer {
     width: 100%;
 }
 
-div#mod_globe h1 {
-    font-size: 1.48vh;
-    margin: 0vh;
-    margin-bottom: -1vh;
+div#mod_globe .globe-meta {
     width: 98%;
+    min-height: 1.3vh;
+    text-align: right;
 }
 
-div#mod_globe h2 {
-    font-size: 1.4vh;
-    margin: 0vh;
-    margin-bottom: -0.7vh;
-    width: 98%;
-    opacity: .5;
-}
-
-div#mod_globe i {
+div#mod_globe .globe-meta i {
     font-style: normal;
     font-size: 1.20vh;
     opacity: 0.5;
-    text-align: right;
-    display: inline-block;
-    position: relative;
-    bottom: 1.5vh;
-    width: 100%;
 }
 
 div#mod_globe i.mod_globe_headerInfo {
@@ -64,17 +50,23 @@ div#mod_globe i.mod_globe_headerInfo {
 }
 
 .globe-filters {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.35vh;
     align-self: flex-start;
-    width: 98%;
+    width: 100%;
+    min-width: 0;
     margin-top: 0.45vh;
     margin-bottom: 0.15vh;
     flex-shrink: 0;
 }
 
 .globe-filter {
-    min-width: 5.6vh;
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     padding: 0.12vh 0.45vh;
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.04);

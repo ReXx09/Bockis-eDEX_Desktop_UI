@@ -35,6 +35,18 @@
     return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(raw)));
   }
 
+  function contentDockWidth(state) {
+    const configured = dockWidth(state);
+    const host = document.querySelector("[data-dock-items]");
+    const items = host ? [...host.querySelectorAll(":scope > .dock-item")] : [];
+    if (!items.length) return configured;
+    const style = getComputedStyle(host);
+    const gap = parseFloat(style.columnGap || style.gap) || 0;
+    const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const content = items.reduce((total, item) => total + item.getBoundingClientRect().width, 0);
+    return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.ceil(content + gap * Math.max(0, items.length - 1) + padding)));
+  }
+
   function dockHeight(state) {
     const raw = Number(state?.settings?.dockHeight);
     if (!Number.isFinite(raw)) return DEFAULT_HEIGHT;
@@ -147,7 +159,7 @@
 
   function applyGeometry(state) {
     const position = dockPosition(state);
-    const placed = placeCard(dockWidth(state), dockHeight(state), position);
+    const placed = placeCard(contentDockWidth(state), dockHeight(state), position);
     if (!placed || !state.layout?.dock) return;
     const { w, h, pageW, pageH } = placed;
     const left = (pageW - w) / 2;
@@ -167,6 +179,7 @@
     if (!root) return;
     const style = frameStyle(state);
     root.dataset.dockFrame = style;
+    root.dataset.dockIconSet = state?.settings?.dockIconSet === "labelled" ? "labelled" : "icon";
     root.classList.toggle("is-trap", style === "trapezoid");
     root.classList.toggle("is-rect", style === "rect");
     root.classList.toggle("is-rounded", style === "rounded");
@@ -397,6 +410,7 @@
     embedBounds,
     syncEmbedBounds,
     dockWidth,
+    refresh,
     dockHeight,
     FRAME_STYLES,
     DEFAULT_WIDTH,

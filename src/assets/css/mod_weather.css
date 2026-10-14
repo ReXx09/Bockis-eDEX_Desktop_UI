@@ -100,7 +100,7 @@
 .weather-days {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.25rem;
+    gap: 0.35rem;
 }
 
 .weather-day {
@@ -108,10 +108,10 @@
     min-width: 0;
     flex-direction: column;
     align-items: center;
-    gap: 0.16rem;
-    padding: 0.25rem 0.1rem;
+    gap: 0.24rem;
+    padding: 0.35rem 0.12rem;
     border-top: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.25);
-    font-size: 0.58em;
+    font-size: 0.76em;
 }
 
 .weather-day span,
@@ -121,7 +121,7 @@
 
 .weather-day b {
     color: #ffd23c;
-    font-size: 1.2em;
+    font-size: 1.25em;
     font-weight: 400;
 }
 

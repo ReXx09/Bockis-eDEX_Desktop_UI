@@ -51,8 +51,8 @@
       "時間格式": "Zeitformat",
       "時鐘高亮": "Uhr-Hervorhebung",
       "搜尋字體": "Suchschriftgröße",
-      "瀑布字體": "Code-Regen-Schriftgröße",
-      "瀑布速度": "Code-Regen-Geschwindigkeit",
+      "瀑布字體": "Code-Hintergrund-Schriftgröße",
+      "瀑布速度": "Code-Hintergrund-Geschwindigkeit",
       "佈局解析度": "Layout-Auflösung",
       "介面比例": "Interface-Skalierung",
       "遷移檔案": "Dateien verschieben",
@@ -92,7 +92,7 @@
       "Freigeben": "Freigeben",
       "Windows-Fenstereinbettung": "Windows-Fenstereinbettung",
       "時鐘": "Uhr",
-      "瀑布代碼": "Code-Regen",
+      "瀑布代碼": "Code-Hintergrund",
       "處理器": "Prozessor",
       "記憶體": "Arbeitsspeicher",
       "進程": "Prozesse",
@@ -143,7 +143,7 @@
       "關閉容器": "Container schließen",
       "系統桌面": "Systemdesktop",
       "系統桌面僅能顯示在主顯示器": "Der Systemdesktop kann nur auf dem Hauptmonitor angezeigt werden",
-      "確定退出桌面整理？": "Desktop Organizer wirklich beenden?",
+      "確定退出桌面整理？": "Bockis-eDEX Desktop UI wirklich beenden?",
       "讀取中…": "Wird geladen …",
       "此資料夾沒有可顯示的項目": "Dieser Ordner enthält keine anzeigbaren Elemente",
       "輸入事項內容…": "Termininhalt eingeben …",
@@ -166,7 +166,7 @@
       "自訂": "Benutzerdefiniert",
       "容器背景": "Container-Hintergrund",
       "時鐘高亮": "Uhr-Hervorhebung",
-      "桌面整理": "Desktop Organizer",
+      "桌面整理": "Bockis-eDEX Desktop UI",
       "最小化到 Dock": "Ins Dock minimieren",
       "原版網格": "Originalraster",
       "純色背景": "Einfarbiger Hintergrund",
@@ -179,7 +179,7 @@
       "在時間下方另起一行顯示年月日": "Datum in einer eigenen Zeile unter der Uhrzeit anzeigen",
       "點陣點亮顏色（色票或 #RRGGBB）": "Farbe der LED-Punkte (Farbfeld oder #RRGGBB)",
       "快速搜尋檔名、路徑與輸入框統一字級（px，預設 12）": "Einheitliche Schriftgröße für Dateinamen, Pfade und Suchfelder (px, Standard 12)",
-      "代碼雨字級（px，8–72，手動輸入後套用）": "Schriftgröße des Code-Regens (px, 8–72; nach Eingabe anwenden)",
+      "代碼雨字級（px，8–72，手動輸入後套用）": "Schriftgröße des Code-Hintergrunds (px, 8–72; nach Eingabe anwenden)",
       "下落倍率（0.1–8.0，手動輸入後套用）": "Fallgeschwindigkeit (0,1–8,0; nach Eingabe anwenden)",
       "全顯示器同步。2K 螢幕依同一尺縮小，網格密度與 4K 一致": "Auf allen Monitoren synchronisiert. 2K-Bildschirme werden entsprechend skaliert; Rasterdichte wie bei 4K",
       "全顯示器同步，疊加在佈局解析度上": "Auf allen Monitoren synchronisiert und auf die Layout-Auflösung angewendet",
@@ -188,7 +188,14 @@
       "保存本顯示器全部容器：插件開關與位置、系統桌面、路徑卡、桌面標籤。關閉的插件不會在下次啟動復原。": "Alle Container dieses Monitors speichern: Plugins, Positionen, Systemdesktop, Pfadkarten und Desktop-Tabs. Geschlossene Plugins werden beim nächsten Start nicht wiederhergestellt."
     },
     en: {
-      "Windows-Farben": "Windows colors", "Windows-Akzentfarbe in das aktive Theme einmischen": "Blend the Windows accent color into the active theme", "Theme-Hintergrund beibehalten": "Keep theme wallpaper", "Theme-Wallpaper auch ohne aktive Organizer-Oberfläche als Windows-Desktop verwenden": "Use the theme wallpaper as the Windows desktop even when the Organizer is closed", "Aus": "Off", "Dezent": "Subtle", "Stark": "Strong",
+      "Uhr": "Clock", "Code-Hintergrund": "Code background", "Prozessor": "Processor", "Arbeitsspeicher": "Memory", "Prozesse": "Processes",
+      "Weltansicht": "Globe", "Netzwerkverkehr": "Network traffic", "Kalender": "Calendar", "Laufwerke": "Local drives", "Terminal": "Terminal",
+      "Wetter": "Weather", "Cockpit": "Cockpit", "Musikkassette": "Music cassette", "CPU-Versorgung": "CPU power", "Rechner": "Calculator", "Dock": "Dock",
+      "Container hinzufügen": "Add container", "Plugin-Schalter": "Plugin switches", "Plugin-Panels": "Plugin panels", "Sonstige": "Other",
+      "Desktop-Container": "Desktop container", "Ordner-Panel": "Folder panel", "Schließen": "Close", "Position": "Position", "Rahmen": "Frame",
+      "Breite": "Width", "Höhe": "Height", "Abgerundet": "Rounded", "Rechteckig": "Square", "Dock-Icon-Set": "Dock icon set", "Nur Icon": "Icon only", "Mit Beschriftung": "With labels", "Oberes Dock (am oberen Bildschirmrand)": "Top Dock (screen edge)",
+      "Unteres Dock (am unteren Bildschirmrand)": "Bottom Dock (screen edge)", "Dock nur auf dem Hauptbildschirm": "Dock only on the primary monitor",
+      "Windows-Farben": "Windows colors", "Windows-Akzentfarbe in das aktive Theme einmischen": "Blend the Windows accent color into the active theme", "Theme-Hintergrund beibehalten": "Keep theme wallpaper", "Theme-Wallpaper auch ohne aktive Desktop-UI-Oberfläche als Windows-Desktop verwenden": "Use the theme wallpaper as the Windows desktop even when the Desktop UI is closed", "Aus": "Off", "Dezent": "Subtle", "Stark": "Strong",
       "設定": "Settings", "添加容器": "Add container", "插件開關": "Plugin switches",
       "底部 Dock（貼螢幕底邊）": "Bottom Dock (screen edge)", "外框": "Frame", "寬度": "Width", "高度": "Height", "像素": "Pixels",
       "圓角": "Rounded", "梯形": "Trapezoid", "直角": "Square", "插件面板": "Plugin panels", "其他": "Other options",
@@ -199,12 +206,12 @@
       "主題": "Theme", "原版介面主題": "Original interface theme", "壁紙": "Wallpaper", "所有顯示器共用背景": "Shared background on all monitors",
       "圖示顯示": "Icon view", "桌面容器內圖示排列": "Icon arrangement in desktop containers", "圖示網格": "Icon grid", "圖示列表": "Icon list",
       "自動吸附": "Snap automatically", "底部 Dock": "Bottom Dock", "網格大小": "Grid size", "時鐘字格": "Clock grid", "顯示日期": "Show date",
-      "時鐘高亮": "Clock highlight", "搜尋字體": "Search font size", "瀑布字體": "Code rain font size", "瀑布速度": "Code rain speed", "佈局解析度": "Layout resolution", "介面比例": "Interface scale",
+      "時鐘高亮": "Clock highlight", "搜尋字體": "Search font size", "瀑布字體": "Code background font size", "瀑布速度": "Code background speed", "佈局解析度": "Layout resolution", "介面比例": "Interface scale",
       "遷移檔案": "Move files", "整理資料夾": "Include folders", "桌面佈局": "Desktop layout", "快速搜尋": "Quick search",
       "文件": "Documents", "圖片": "Pictures", "影片": "Videos", "音樂": "Audio", "壓縮檔": "Archives", "應用程式": "Applications", "其他": "Other", "全部": "All",
       "文件夾": "Folder", "資料夾": "Folder", "圖標": "Icons", "圖示": "Icons", "桌面分類": "Desktop categories", "桌面捷徑": "Desktop shortcuts", "中": "Center", "路徑": "Path",
       "可用": "free", "已用": "used", "可移除": "Removable", "網路": "Network", "本機": "Local", "找不到本機磁碟": "No local drives found", "無法讀取磁碟": "Could not read drives",
-      "本機索引": "Local index", "索引中": "Indexing", "搜尋尚未就緒": "Search is not ready", "時鐘": "Clock", "瀑布代碼": "Code rain", "處理器": "Processor", "記憶體": "Memory", "進程": "Processes",
+      "本機索引": "Local index", "索引中": "Indexing", "搜尋尚未就緒": "Search is not ready", "時鐘": "Clock", "瀑布代碼": "Code background", "處理器": "Processor", "記憶體": "Memory", "進程": "Processes",
       "地球視圖": "Globe", "網路流量": "Network traffic", "日曆": "Calendar", "本機磁碟": "Local drives", "終端機": "Terminal", "駕駛室": "Cockpit", "音樂磁帶": "Music cassette", "計算器": "Calculator",
       "更多操作": "More actions", "標記": "Label", "無": "None", "點陣時鐘": "Dot-matrix clock", "搜尋": "Search", "輸入關鍵字開始搜尋": "Enter a search term to begin",
       "重新整理": "Refresh", "新增資料夾／網路磁碟": "Add folder/network drive", "新增局域網路徑": "Add LAN path", "管理搜尋路徑": "Manage search paths", "重建索引": "Rebuild index",
@@ -212,8 +219,17 @@
       "還原上次": "Undo last action", "啟用此路徑": "Enable this path", "開啟資料夾": "Open folder", "在 VS Code 開啟": "Open in VS Code", "更換路徑": "Change path", "關閉容器": "Close container",
       "系統桌面": "System desktop", "讀取中…": "Loading…", "此資料夾沒有可顯示的項目": "This folder has no items to display", "新增事項": "Add event", "編輯": "Edit", "刪除": "Delete",
       "紅色": "Red", "橙色": "Orange", "黃色": "Yellow", "綠色": "Green", "藍色": "Blue", "紫色": "Purple", "灰色": "Gray", "白": "White", "紅": "Red", "黃": "Yellow", "青": "Cyan",
-      "預設": "Default", "自訂": "Custom", "容器背景": "Container background", "桌面整理": "Desktop Organizer", "最小化到 Dock": "Minimize to Dock", "原版網格": "Original grid", "純色背景": "Solid background", "掃描線": "Scanlines",
+      "預設": "Default", "自訂": "Custom", "容器背景": "Container background", "桌面整理": "Bockis-eDEX Desktop UI", "最小化到 Dock": "Minimize to Dock", "原版網格": "Original grid", "純色背景": "Solid background", "掃描線": "Scanlines",
       "解鎖": "Unlock", "鎖定": "Lock", "隱藏日期": "Hide date", "背景顏色": "Background color", "添加容器": "Add container"
+    },
+    "zh-Hant": {
+      "Uhr": "時鐘", "Code-Hintergrund": "代碼背景", "Prozessor": "處理器", "Arbeitsspeicher": "記憶體", "Prozesse": "進程",
+      "Weltansicht": "地球視圖", "Netzwerkverkehr": "網路流量", "Kalender": "日曆", "Laufwerke": "本機磁碟", "Terminal": "終端機",
+      "Wetter": "天氣", "Cockpit": "駕駛室", "Musikkassette": "音樂磁帶", "CPU-Versorgung": "CPU 供電", "Rechner": "計算器", "Dock": "Dock",
+      "Container hinzufügen": "添加容器", "Plugin-Schalter": "插件開關", "Plugin-Panels": "插件面板", "Sonstige": "其他",
+      "Desktop-Container": "桌面容器", "Ordner-Panel": "資料夾面板", "Schließen": "關閉", "Position": "位置", "Rahmen": "外框",
+      "Breite": "寬度", "Höhe": "高度", "Abgerundet": "圓角", "Rechteckig": "直角", "Dock-Icon-Set": "Dock 圖示組", "Nur Icon": "僅圖示", "Mit Beschriftung": "含標籤", "Oberes Dock (am oberen Bildschirmrand)": "頂部 Dock（貼螢幕頂邊）",
+      "Unteres Dock (am unteren Bildschirmrand)": "底部 Dock（貼螢幕底邊）", "Dock nur auf dem Hauptbildschirm": "Dock 僅主螢幕可用"
     }
   };
   const dynamicRules = [
@@ -292,7 +308,7 @@
   }
 
   function translatePage(root = document.body) {
-    if (current === "zh-Hant" || !root) return;
+    if (!root) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);

@@ -40,14 +40,20 @@ div#mod_conninfo h1 {
     width: 98%;
 }
 
-div#mod_conninfo h2 {
-    font-size: 1.4vh;
-    margin: 0vh;
-    margin-bottom: -0.7vh;
+div#mod_conninfo .conninfo-meta {
     width: 98%;
-    opacity: .5;
+    min-height: 1.3vh;
+    padding-left: 2%;
+    text-align: right;
 }
 
+div#mod_conninfo .conninfo-meta i {
+    font-style: normal;
+    font-size: 1.20vh;
+    opacity: 0.5;
+}
+
+div#mod_conninfo h2 {
 div#mod_conninfo i {
     font-style: normal;
     font-size: 1.20vh;
@@ -92,4 +98,69 @@ div#mod_conninfo.offline canvas {
 
 div#mod_conninfo.offline h3:last-child {
     opacity: 1;
+}
+
+#mod_conninfo #mod_conninfo_innercontainer {
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.35rem;
+}
+
+#mod_conninfo .conninfo-meta,
+#mod_conninfo .conninfo-total-label {
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.58);
+    font-size: 0.68em;
+    letter-spacing: 0.12em;
+    text-align: left;
+}
+
+#mod_conninfo .conninfo-current,
+#mod_conninfo .conninfo-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+    width: 100%;
+}
+
+#mod_conninfo .conninfo-current > div,
+#mod_conninfo .conninfo-total {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.12rem;
+    padding: 0.35rem 0.45rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.035);
+}
+
+#mod_conninfo .conninfo-current span,
+#mod_conninfo .conninfo-total span {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.58);
+    font-size: 0.68em;
+    letter-spacing: 0.08em;
+}
+
+#mod_conninfo .conninfo-current strong,
+#mod_conninfo .conninfo-total strong {
+    overflow: hidden;
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font-size: 1.08em;
+    font-weight: 400;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#mod_conninfo .conninfo-total.out {
+    border-color: rgba(0, 246, 255, 0.34);
+}
+
+#mod_conninfo .conninfo-total.in {
+    border-color: rgba(0, 255, 117, 0.34);
+}
+
+#mod_conninfo .conn-pointmap-block {
+    width: 100%;
 }

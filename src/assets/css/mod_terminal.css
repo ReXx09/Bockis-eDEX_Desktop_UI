@@ -86,7 +86,13 @@
 }
 
 .terminal-pane-files .terminal-output {
-    display: none;
+    display: block;
+    flex: 1 1 58%;
+    min-width: 0;
+}
+
+.terminal-pane-files .terminal-file-browser {
+    flex: 1 1 42%;
 }
 
 .terminal-pane-putty .terminal-output {

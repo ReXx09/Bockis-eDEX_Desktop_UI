@@ -531,14 +531,14 @@
     paintSeriesPointmap(document.getElementById("mod_conninfo_pointmap_down"), trafficHistory.down, {
       cols: 48, rows: 10, max: peak
     });
-    const current = document.querySelector("#mod_conninfo_innercontainer > h1 > i");
-    const total = document.querySelector("#mod_conninfo_innercontainer > h2 > i");
-    if (current) {
-      current.textContent = `UP / DOWN, ${prettyBytes(sample.upBps || 0)}/S · ${prettyBytes(sample.downBps || 0)}/S`;
-    }
-    if (total) {
-      total.textContent = `${prettyBytes(sample.totalUp || 0)} OUT, ${prettyBytes(sample.totalDown || 0)} IN`;
-    }
+    const up = document.getElementById("mod_conninfo_up");
+    const down = document.getElementById("mod_conninfo_down");
+    const totalOut = document.getElementById("mod_conninfo_total_out");
+    const totalIn = document.getElementById("mod_conninfo_total_in");
+    if (up) up.textContent = `${prettyBytes(sample.upBps || 0)}/S`;
+    if (down) down.textContent = `${prettyBytes(sample.downBps || 0)}/S`;
+    if (totalOut) totalOut.textContent = prettyBytes(sample.totalUp || 0);
+    if (totalIn) totalIn.textContent = prettyBytes(sample.totalDown || 0);
   }
 
   async function refreshCpu() {
@@ -731,6 +731,19 @@
         topSort = button.dataset.topSort || "cpu";
         document.querySelectorAll("[data-top-sort]").forEach((item) => item.classList.toggle("on", item === button));
         refreshToplist();
+      });
+    });
+    document.querySelectorAll("[data-ram-gauge]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const mode = button.dataset.ramGauge || "used";
+        document.documentElement.dataset.ramGaugeMode = mode;
+        document.querySelectorAll("[data-ram-gauge]").forEach((item) => item.classList.toggle("on", item === button));
+        try {
+          await window.edex.saveSettings({ ramGaugeMode: mode });
+        } catch {
+          // Keep the visual selection until the next settings refresh.
+        }
+        refreshMem();
       });
     });
     if (document.getElementById("mod_globe")) {
