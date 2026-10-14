@@ -62,14 +62,26 @@
 }
 
 .weather-current {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
     padding: 0.4rem;
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
     background: rgba(0, 0, 0, 0.25);
 }
 
+.weather-current-day {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.68);
+    font-size: 0.7em;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
 .weather-main {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem;
 }
 
@@ -100,7 +112,7 @@
 .weather-days {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.35rem;
+    gap: 0.45rem;
 }
 
 .weather-day {
@@ -109,9 +121,10 @@
     flex-direction: column;
     align-items: center;
     gap: 0.24rem;
-    padding: 0.35rem 0.12rem;
-    border-top: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.25);
-    font-size: 0.76em;
+    padding: 0.45rem 0.25rem 0.5rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.045);
+    font-size: 0.78em;
 }
 
 .weather-day span,
@@ -121,7 +134,7 @@
 
 .weather-day b {
     color: #ffd23c;
-    font-size: 1.25em;
+    font-size: 1.4em;
     font-weight: 400;
 }
 

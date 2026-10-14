@@ -6,6 +6,7 @@ Var EDEXConPtyDependency
 Var EDEXXtermDependency
 Var EDEXNativeDependency
 Var EDEXNetworkDependency
+Var EDEXRainmeter
 
 Page custom EDEXComponentsPageCreate EDEXComponentsPageLeave
 
@@ -46,11 +47,22 @@ Function EDEXComponentsPageCreate
   Pop $EDEXNetworkDependency
   ${NSD_Check} $EDEXNetworkDependency
 
-  ${NSD_CreateLabel} 0 146u 100% 18u "Visual Studio Build Tools, Node.js und npm werden auf dem Zielrechner nicht benoetigt. Die Laufzeitkomponenten werden mit der Anwendung installiert."
+  ${NSD_CreateCheckBox} 0 142u 100% 12u "Rainmeter installieren (optionales Desktop-HUD)"
+  Pop $EDEXRainmeter
+  ${NSD_Check} $EDEXRainmeter
+
+  ${NSD_CreateLabel} 0 160u 100% 24u "Visual Studio Build Tools, Node.js und npm werden auf dem Zielrechner nicht benoetigt. Die Laufzeitkomponenten werden mit der Anwendung installiert. Rainmeter wird nur bei Auswahl dieser Option installiert."
   Pop $0
 
   nsDialogs::Show
 FunctionEnd
+
+!macro customInstall
+  ${If} $EDEXRainmeter == ${BST_CHECKED}
+    File /oname=$PLUGINSDIR\Rainmeter-Setup.exe "${BUILD_RESOURCES_DIR}\Rainmeter-Setup.exe"
+    ExecWait '"$PLUGINSDIR\Rainmeter-Setup.exe" /S'
+  ${EndIf}
+!macroend
 
 Function EDEXComponentsPageLeave
   ${NSD_GetState} $EDEXTransparencyNotice $0

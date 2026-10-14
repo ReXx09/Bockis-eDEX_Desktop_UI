@@ -45,6 +45,8 @@ Filterung nach Kategorien wie Ordner, Symbole, Dateien und Bilder; mit Tabs, Kon
 
 - **Mehrmonitor-Unterstützung**: Eigenes Fenster pro Monitor; der **Systemdesktop wird nur auf dem Hauptmonitor angezeigt**; die Rasterdichte wird mit dem Maßstab des Hauptmonitors synchronisiert.
 - **Container-System**: Verschieben, Skalieren, Sperren und Hintergrundfarbe ändern; neue Container lassen sich nacheinander hinzufügen und suchen automatisch freie Rasterzellen.
+- **Container hinzufügen**: Panels, Desktop-Container und Ordner-Container werden über den zentralen Dialog hinzugefügt, automatisch platziert und im aktuellen Monitor-Layout gespeichert.
+- **Panel-Setup**: Jedes Panel kann über das Zahnrad eigene Einstellungen, Hintergrundfarbe und Panel-Icon erhalten.
 - **Systemdesktop**: Filter, Tabs, Kontextmenü für „Inhalt aktualisieren“ und „Automatisch sortieren“, schnelle Aktualisierung nach externem Drag-and-drop.
 - **Pfad-Container**: Ordner als eigenständige Browserbereiche hinzufügen; neue Ordner werden nach Eingabe eines Namens erstellt.
 - **Plugins**: Taschenrechner, Musik-Kassette, Cockpit, CPU-Versorgungspfad, Code-Regen, Kalender und weitere.
@@ -52,6 +54,9 @@ Filterung nach Kategorien wie Ordner, Symbole, Dateien und Bilder; mit Tabs, Kon
 - **Schnellsuche**: Dateinamensuche auf lokalen Laufwerken und in zusätzlichen Stammverzeichnissen.
 - **Wetter-Panel**: Ortsbasierte aktuelle Wetterdaten und 4-Tage-Prognose über Open-Meteo, ohne API-Key; der Ort kann direkt im Panel gesucht werden.
 - **Theme-Hintergründe**: eDEX-Theme-JSON-Dateien sowie Raster-, Scanline- und weitere Hintergrundstile.
+- **Task-Dock**: Angeheftete Windows-Taskleisten-Apps werden dynamisch mit ihren Original-Icons übernommen und können direkt aus dem Dock gestartet werden.
+- **Autostart-Panel**: Windows-Autostart-Einträge werden dynamisch aus der Startup-Konfiguration gelesen und mit Name, Quelle, Benutzer und Startbefehl angezeigt.
+- **Log-Panel**: Das JSON-Lines-Fehlerprotokoll kann als Panel mit Level-Filtern und automatischer Aktualisierung geöffnet werden.
 
 ## Terminal
 
@@ -67,9 +72,9 @@ Die Terminal-Ausgabe wird ereignisbasiert an den Renderer übertragen. Die übri
 
 ## Optionale Rainmeter-Integration
 
-Wenn Rainmeter installiert ist, kann in den eDEX-Einstellungen **Rainmeter-HUD** aktiviert werden. Die Anwendung erzeugt dann eine eigene `Bockis-eDEX`-Skin mit Uhr, Datum, CPU- und RAM-Anzeige. Farben und Hintergrund werden aus dem aktiven eDEX-Theme übernommen; ein Themewechsel aktualisiert die Skin automatisch.
+Der Installer enthaelt optional Rainmeter. Auf der Seite **Hinweise und Abhaengigkeiten** kann die Rainmeter-Installation aktiviert oder abgewählt werden. Danach kann in den eDEX-Einstellungen **Rainmeter-HUD** aktiviert werden. Die Anwendung erzeugt dann eine eigene `Bockis-eDEX`-Skin mit Uhr, Datum, CPU- und RAM-Anzeige. Farben und Hintergrund werden aus dem aktiven eDEX-Theme übernommen; ein Themewechsel aktualisiert die Skin automatisch.
 
-Rainmeter wird nicht automatisch installiert. Die Skin liegt unter `%USERPROFILE%\\Documents\\Rainmeter\\Skins\\Bockis-eDEX`. Wird die Option deaktiviert oder die Anwendung beendet, wird die Skin ausgeblendet. Ohne installierte Rainmeter-Anwendung bleibt die eDEX-Oberfläche vollständig funktionsfähig.
+Der Build lädt dafür den offiziellen Rainmeter-Installer herunter und bettet ihn in das NSIS-Paket ein. Die Skin liegt unter `%USERPROFILE%\\Documents\\Rainmeter\\Skins\\Bockis-eDEX`. Wird die Option deaktiviert oder die Anwendung beendet, wird die Skin ausgeblendet. Ohne installierte Rainmeter-Anwendung bleibt die eDEX-Oberfläche vollständig funktionsfähig.
 
 ## Ausführen
 
@@ -81,6 +86,10 @@ npm start
 ## Fehlerprotokoll
 
 Die Anwendung schreibt Aktionen und Fehler als JSON-Zeilen in `%APPDATA%\\Bockis-eDEX Desktop UI\\logs\\edex-ui.log`. Das Log wird bei einer Größe von 5 MB automatisch rotiert. Renderer-Fehler, unbehandelte Promise-Fehler, App-Start und Einstellungsänderungen werden erfasst; Terminal-Eingaben, Befehle und Geheimnisse werden nicht protokolliert.
+
+Das Log kann direkt in der UI geöffnet werden: Im zentralen Menü **Plugin-Panels** öffnen, **Log** hinzufügen und anschließend das Log-Panel anzeigen. Dort stehen die Level-Filter **ALLE**, **ERROR**, **WARN** und **INFO** sowie eine Aktualisieren-Schaltfläche zur Verfügung. Die Datei kann zusätzlich im Windows-Explorer über den oben genannten Pfad geöffnet werden.
+
+Das **Autostart-Panel** wird ebenfalls über **Plugin-Panels** hinzugefügt. Es aktualisiert die Windows-Autostart-Einträge automatisch und kann über die Aktualisieren-Schaltfläche sofort neu geladen werden. Das **Task-Dock** übernimmt angeheftete Windows-Apps automatisch; ein Klick auf ein Icon startet die jeweilige Verknüpfung.
 
 ## Windows-Installer erstellen
 
@@ -112,6 +121,7 @@ npm test
 
 - Repository: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI
 - Releases: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases
+- Aktueller Release: `v1.2.4`
 
 ## Lizenz und Quellen
 

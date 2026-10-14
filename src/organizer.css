@@ -1232,6 +1232,181 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     line-height: 1.65rem;
 }
 
+.log-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    gap: 0.5rem;
+    font-family: var(--font_mono);
+}
+
+.log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2rem;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.75);
+}
+
+.log-toolbar span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.log-toolbar select,
+.log-toolbar button {
+    background: transparent;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font: inherit;
+    padding: 0.2rem 0.35rem;
+}
+
+.log-list {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: auto;
+    border-top: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+}
+
+.log-entry {
+    display: grid;
+    grid-template-columns: 10rem 4rem 10rem minmax(0, 1fr);
+    gap: 0.45rem;
+    padding: 0.25rem 0.35rem;
+    border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.12);
+    font-size: 0.78em;
+}
+
+.log-entry time,
+.log-entry span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+}
+
+.log-entry em {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-style: normal;
+}
+
+.log-error b { color: #ff5f6d; }
+.log-warn b { color: #ffd23c; }
+.log-empty { padding: 0.8rem; opacity: 0.65; }
+
+.autostart-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    gap: 0.5rem;
+    font-family: var(--font_mono);
+}
+
+.autostart-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2rem;
+}
+
+.autostart-toolbar span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.75;
+}
+
+.autostart-toolbar button {
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.autostart-list {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: auto;
+    border-top: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+}
+
+.autostart-entry {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) 8rem 7rem minmax(12rem, 2fr);
+    gap: 0.45rem;
+    align-items: center;
+    padding: 0.3rem 0.35rem;
+    border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.12);
+    font-size: 0.78em;
+}
+
+.autostart-entry span,
+.autostart-entry small,
+.autostart-entry em {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+}
+
+.autostart-entry em { font-style: normal; }
+
+.panel-icon-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(3rem, 1fr));
+    gap: 0.3rem;
+    margin-top: 0.35rem;
+}
+
+.panel-icon-choice {
+    display: grid;
+    justify-items: center;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.25rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.panel-icon-choice:hover,
+.panel-icon-choice.on {
+    border-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.8);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.12);
+}
+
+.panel-icon-choice .dock-item-icon {
+    width: 2rem;
+    height: 2rem;
+}
+
+.panel-icon-choice small {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.62em;
+}
+
+.panel-bg-value {
+    display: inline-block;
+    min-width: 5rem;
+    margin-left: 0.5rem;
+    opacity: 0.7;
+    font-family: var(--font_mono);
+}
+
 .hud-card.clock-bare {
     background: transparent;
     border: none;
@@ -1560,6 +1735,13 @@ div.modal_popup {
 
 .modal_popup.scrollable {
     display: block !important;
+}
+
+.modal_popup.central-settings-modal {
+    height: calc(100vh - 2rem);
+    max-height: calc(100vh - 2rem) !important;
+    overflow-y: scroll !important;
+    scrollbar-gutter: stable;
 }
 
 div.modal_popup button,

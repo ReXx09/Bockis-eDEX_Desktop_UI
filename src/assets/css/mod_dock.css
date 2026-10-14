@@ -69,6 +69,10 @@
     overflow: hidden;
 }
 
+.dock-item-icon-image {
+    object-fit: contain;
+}
+
 .dock-item-icon-cpu { background-image: url("../misc/dock-icons/nur-icon/cpu.png"); }
 .dock-item-icon-processes { background-image: url("../misc/dock-icons/nur-icon/processes.png"); }
 .dock-item-icon-clock { background-image: url("../misc/dock-icons/nur-icon/clock.png"); }
@@ -80,6 +84,8 @@
 .dock-item-icon-search { background-image: url("../misc/dock-icons/nur-icon/search.png"); }
 .dock-item-icon-terminal { background-image: url("../misc/dock-icons/nur-icon/terminal.png"); }
 .dock-item-icon-weather { background-image: url("../misc/dock-icons/nur-icon/weather.png"); }
+.dock-item-icon-calendar { background-image: url("../misc/dock-icons/nur-icon/clock.png"); }
+.dock-item-icon-calculator { background-image: url("../misc/dock-icons/nur-icon/terminal.png"); }
 
 [data-dock-icon-set="labelled"] .dock-item-icon-cpu { background-image: url("../misc/dock-icons/mit-beschriftung/cpu.png"); }
 [data-dock-icon-set="labelled"] .dock-item-icon-processes { background-image: url("../misc/dock-icons/mit-beschriftung/processes.png"); }
@@ -92,6 +98,8 @@
 [data-dock-icon-set="labelled"] .dock-item-icon-search { background-image: url("../misc/dock-icons/mit-beschriftung/search.png"); }
 [data-dock-icon-set="labelled"] .dock-item-icon-terminal { background-image: url("../misc/dock-icons/mit-beschriftung/terminal.png"); }
 [data-dock-icon-set="labelled"] .dock-item-icon-weather { background-image: url("../misc/dock-icons/mit-beschriftung/weather.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-calendar { background-image: url("../misc/dock-icons/mit-beschriftung/clock.png"); }
+[data-dock-icon-set="labelled"] .dock-item-icon-calculator { background-image: url("../misc/dock-icons/mit-beschriftung/terminal.png"); }
 .dock-item-icon-fallback {
     background-image: none;
     background-color: rgba(var(--ddj), 0.12);

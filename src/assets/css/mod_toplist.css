@@ -67,40 +67,55 @@ div#mod_toplist .toplist-filter:hover {
 }
 
 div#mod_toplist .toplist-columns {
+    display: grid;
+    grid-template-columns: 20% 55% 25%;
     font-style: normal;
     font-size: 1.20vh;
     opacity: 0.5;
-    text-align: right;
     width: 100%;
     padding: 0 0.5vh;
     box-sizing: border-box;
 }
 
+div#mod_toplist .toplist-columns span:last-child {
+    text-align: right;
+}
+
 table#mod_toplist_table {
     margin: 0px;
     margin-top: 0.2vh;
-    width: 99%;
-    padding-left: 0.5vh;
+    width: 100%;
+    padding: 0 0.5vh;
     min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    display: block;
+    table-layout: fixed;
+    border-collapse: collapse;
+    box-sizing: border-box;
 }
 
 table#mod_toplist_table td {
     font-size: 1.50vh;
-}
-
-table#mod_toplist_table td:nth-child(2) {
-    max-width: 7vw;
-    min-width: 7vw;
+    box-sizing: border-box;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+table#mod_toplist_table td:nth-child(1) {
+    width: 20%;
+}
+
+table#mod_toplist_table td:nth-child(2) {
+    width: 55%;
+    text-overflow: ellipsis;
+}
+
 table#mod_toplist_table td:nth-child(3) {
+    width: 25%;
     text-align: right;
-        max-width: 2.4vw;
-    min-width: 2.4vw;
+}
+
+table#mod_toplist_table td:nth-child(2) strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

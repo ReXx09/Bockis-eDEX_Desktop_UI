@@ -1,7 +1,7 @@
 {
   "name": "bockis-edex-desktop-ui",
   "productName": "Bockis-eDEX Desktop UI",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Desktop UI using the eDEX-UI sci-fi HUD layout",
   "main": "main.js",
   "author": "bananamax9113",
@@ -12,10 +12,11 @@
   "scripts": {
     "test": "node --test test/organizer.test.js",
     "prepare-assets": "node scripts/prepare-assets.js",
+    "prepare-rainmeter": "node scripts/prepare-rainmeter.js",
     "prestart": "node scripts/prepare-assets.js",
     "start": "electron .",
     "rebuild-native": "electron-rebuild -f -w node-pty",
-    "predist": "npm run rebuild-native && node scripts/prepare-assets.js",
+    "predist": "npm run rebuild-native && node scripts/prepare-assets.js && node scripts/prepare-rainmeter.js",
     "dist": "electron-builder --win nsis --x64",
     "dist:dir": "electron-builder --win dir --x64"
   },

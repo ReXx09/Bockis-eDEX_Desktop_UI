@@ -44,6 +44,7 @@ const fileOps = require("./lib/file-ops");
 const clipboardFiles = require("./lib/clipboard-files");
 const win32Embed = require("./lib/win32-embed");
 const taskbarDock = require("./lib/taskbar-dock");
+const { listAutostartItems } = require("./lib/autostart");
 const {
   startOleFileDrag,
   warmOleDragDaemon,
@@ -635,6 +636,11 @@ ipcMain.on("ui-log", (event, payload) => {
   const item = payload && typeof payload === "object" ? payload : {};
   const level = ["info", "warn", "error"].includes(String(item.level)) ? String(item.level) : "info";
   appLog[level](String(item.event || "ui.action"), String(item.message || ""), item.details);
+});
+
+ipcMain.handle("get-app-log", (event, limit) => {
+  requireTrustedWindow(event);
+  return { file: appLog.file(), entries: appLog.read(limit) };
 });
 
 ipcMain.handle("get-windows-colors", (event) => {
@@ -1365,6 +1371,15 @@ ipcMain.handle("list-taskbar-pinned", async () => {
     return { items };
   } catch (err) {
     console.error("list-taskbar-pinned", err);
+    return { items: [] };
+  }
+});
+
+ipcMain.handle("list-autostart-items", async () => {
+  try {
+    return { items: await listAutostartItems() };
+  } catch (err) {
+    console.error("list-autostart-items", err);
     return { items: [] };
   }
 });

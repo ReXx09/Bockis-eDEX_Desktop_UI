@@ -714,8 +714,21 @@
       const nameStrong = document.createElement("strong");
       pid.textContent = String(p.pid ?? "");
       nameStrong.textContent = String(p.name ?? "");
-      const suffix = topSort === "conn" ? "" : "%";
-      value.textContent = `${String(p[topSort] ?? "")}${suffix}`;
+      const rawValue = Number(p[topSort]) || 0;
+      if (topSort === "energy") {
+        const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+        let amount = rawValue;
+        let unit = 0;
+        while (amount >= 1024 && unit < units.length - 1) {
+          amount /= 1024;
+          unit += 1;
+        }
+        value.textContent = `${amount >= 100 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
+      } else if (topSort === "conn") {
+        value.textContent = `${rawValue} CONN`;
+      } else {
+        value.textContent = `${rawValue}%`;
+      }
       name.appendChild(nameStrong);
       row.append(pid, name, value);
       return row;
@@ -731,6 +744,15 @@
         topSort = button.dataset.topSort || "cpu";
         document.querySelectorAll("[data-top-sort]").forEach((item) => item.classList.toggle("on", item === button));
         refreshToplist();
+      });
+    });
+    document.querySelectorAll("[data-conn-view]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const root = document.getElementById("mod_conninfo");
+        if (!root) return;
+        const mode = button.dataset.connView || "live";
+        root.dataset.connMode = mode;
+        document.querySelectorAll("[data-conn-view]").forEach((item) => item.classList.toggle("on", item === button));
       });
     });
     document.querySelectorAll("[data-ram-gauge]").forEach((button) => {

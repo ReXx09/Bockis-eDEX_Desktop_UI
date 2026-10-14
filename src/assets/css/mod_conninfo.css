@@ -106,6 +106,34 @@ div#mod_conninfo.offline h3:last-child {
     gap: 0.35rem;
 }
 
+#mod_conninfo .conninfo-filters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.3rem;
+    width: 100%;
+}
+
+#mod_conninfo .conninfo-filter {
+    min-width: 0;
+    overflow: hidden;
+    padding: 0.28vh 0.12vw;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
+    background: transparent;
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font: inherit;
+    font-size: clamp(8px, 1.05vh, 12px);
+    letter-spacing: 0.06em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+#mod_conninfo .conninfo-filter.on,
+#mod_conninfo .conninfo-filter:hover {
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+}
+
 #mod_conninfo .conninfo-meta,
 #mod_conninfo .conninfo-total-label {
     width: 100%;
@@ -123,6 +151,37 @@ div#mod_conninfo.offline h3:last-child {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.4rem;
     width: 100%;
+}
+
+#mod_conninfo[data-conn-mode="live"] .conninfo-totals,
+#mod_conninfo[data-conn-mode="up"] .conninfo-totals,
+#mod_conninfo[data-conn-mode="down"] .conninfo-totals,
+#mod_conninfo[data-conn-mode="total"] .conninfo-current {
+    display: none;
+}
+
+#mod_conninfo[data-conn-mode="total"] .conninfo-meta,
+#mod_conninfo[data-conn-mode="live"] .conninfo-total-label,
+#mod_conninfo[data-conn-mode="up"] .conninfo-total-label,
+#mod_conninfo[data-conn-mode="down"] .conninfo-total-label {
+    display: none;
+}
+
+#mod_conninfo[data-conn-mode="up"] .conninfo-current > div:nth-child(2),
+#mod_conninfo[data-conn-mode="down"] .conninfo-current > div:nth-child(1),
+#mod_conninfo[data-conn-mode="total"] .conninfo-totals > div:nth-child(1) {
+    display: none;
+}
+
+#mod_conninfo .conn-pointmap-block {
+    display: none;
+}
+
+#mod_conninfo[data-conn-mode="live"] .conn-pointmap-block.up,
+#mod_conninfo[data-conn-mode="total"] .conn-pointmap-block.up,
+#mod_conninfo[data-conn-mode="up"] .conn-pointmap-block.up,
+#mod_conninfo[data-conn-mode="down"] .conn-pointmap-block.down {
+    display: block;
 }
 
 #mod_conninfo .conninfo-current > div,

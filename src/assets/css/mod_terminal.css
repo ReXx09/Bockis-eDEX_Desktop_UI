@@ -64,6 +64,7 @@
     flex: 1;
     min-height: 5rem;
     grid-template-columns: repeat(var(--terminal-columns, 2), minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
     gap: 0.55rem;
     overflow: hidden;
 }
@@ -80,9 +81,21 @@
 
 .terminal-pane-body {
     display: flex;
-    flex: 1;
+    flex: 1 1 0;
+    height: auto;
     min-height: 0;
     min-width: 0;
+    overflow: hidden;
+}
+
+.terminal-file-browser[hidden],
+.terminal-native-slot[hidden] {
+    display: none !important;
+}
+
+.terminal-pane:not(.terminal-pane-files):not(.terminal-pane-putty) .terminal-output {
+    width: 100%;
+    flex: 1 1 auto;
 }
 
 .terminal-pane-files .terminal-output {
@@ -242,7 +255,8 @@
 }
 
 .terminal-output {
-    flex: 1;
+    flex: 1 1 0;
+    height: 100%;
     min-height: 0;
     margin: 0;
     overflow: auto;

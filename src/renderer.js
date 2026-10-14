@@ -46,7 +46,7 @@ const PANEL_META = {
   toplist: { title: "Prozesse", box: { x: 1.2, y: 51, w: 16, h: 18 } },
   globe: { title: "Weltansicht", box: { x: 82, y: 2, w: 16.5, h: 48 } },
   conninfo: { title: "Netzwerkverkehr", box: { x: 82, y: 52, w: 16.5, h: 23 } },
-  calendar: { title: "Kalender", box: { x: 66, y: 2, w: 15, h: 38 } },
+  calendar: { title: "Kalender", icon: "calendar", box: { x: 66, y: 2, w: 15, h: 38 } },
   drives: { title: "Laufwerke", box: { x: 66, y: 42, w: 15, h: 38 } },
   filesearch: { title: "Schnellsuche", box: { x: 18, y: 82, w: 47, h: 16 } },
   terminal: { title: "Terminal", box: { x: 19, y: 42, w: 31, h: 36 } },
@@ -55,7 +55,9 @@ const PANEL_META = {
   cassette: { title: "Musikkassette", box: { x: 28, y: 28, w: 36, h: 38 } },
   ddj: { title: "DDJ-1000", box: { x: 8, y: 6, w: 84, h: 86 } },
   cpuRail: { title: "CPU-Versorgung", box: { x: 20, y: 28, w: 42, h: 40 } },
-  calculator: { title: "Rechner", box: { x: 40, y: 18, w: 18, h: 48 } },
+  calculator: { title: "Rechner", icon: "calculator", box: { x: 40, y: 18, w: 18, h: 48 } },
+  autostart: { title: "Autostart", icon: "processes", box: { x: 20, y: 28, w: 42, h: 36 } },
+  log: { title: "Log", box: { x: 52, y: 42, w: 29, h: 38 } },
   dock: { title: "Dock", box: { x: 25, y: 94, w: 50, h: 6 } }
 };
 
@@ -82,6 +84,8 @@ const terminalShells = new Map();
 const terminalBrowserState = new Map();
 const terminalBrowserTimers = new Map();
 let terminalBridgeBound = false;
+let taskbarDockItems = [];
+let taskbarDockLoaded = false;
 
 function logUiAction(event, message, details) {
   window.edex?.logAction?.(event, message, details);
@@ -242,7 +246,7 @@ function panelBody(id) {
             <button type="button" class="toplist-filter" data-top-sort="energy">ENERGY</button>
             <button type="button" class="toplist-filter" data-top-sort="conn">CONN</button>
           </div>
-          <div class="toplist-columns">PID | NAME | VALUE</div>
+          <div class="toplist-columns"><span>PID</span><span>NAME</span><span>VALUE</span></div>
           <table id="mod_toplist_table"></table>
         </div>`;
     case "ram":
@@ -323,11 +327,6 @@ function panelBody(id) {
         <div id="mod_globe">
           <div id="mod_globe_innercontainer">
             <div class="globe-meta"><i class="mod_globe_headerInfo">0.0000, 0.0000</i></div>
-            <div class="globe-connection-legend" aria-label="Verbindungsarten">
-              <span><i class="outgoing"></i>OUT</span>
-              <span><i class="incoming"></i>IN</span>
-              <span><i class="local"></i>LOCAL</span>
-            </div>
             <div id="mod_globe_canvas_placeholder"></div>
             <div class="globe-filters" role="group" aria-label="Verbindungsfilter">
               <button type="button" class="globe-filter on" data-globe-filter="world">WORLD</button>
@@ -340,8 +339,14 @@ function panelBody(id) {
         </div>`;
     case "conninfo":
       return `
-        <div id="mod_conninfo">
+        <div id="mod_conninfo" data-conn-mode="live">
           <div id="mod_conninfo_innercontainer">
+            <div class="conninfo-filters" role="group" aria-label="Netzwerkansicht">
+              <button type="button" class="conninfo-filter on" data-conn-view="live">LIVE</button>
+              <button type="button" class="conninfo-filter" data-conn-view="total">TOTAL</button>
+              <button type="button" class="conninfo-filter" data-conn-view="up">UP</button>
+              <button type="button" class="conninfo-filter" data-conn-view="down">DOWN</button>
+            </div>
             <div class="conninfo-meta">AKTUELL</div>
             <div class="conninfo-current">
               <div><span>UP</span><strong id="mod_conninfo_up">—/S</strong></div>
@@ -352,11 +357,11 @@ function panelBody(id) {
               <div class="conninfo-total out"><span>TOTAL OUT</span><strong id="mod_conninfo_total_out">—</strong></div>
               <div class="conninfo-total in"><span>TOTAL IN</span><strong id="mod_conninfo_total_in">—</strong></div>
             </div>
-            <div class="conn-pointmap-block">
+            <div class="conn-pointmap-block up">
               <div class="conn-pointmap-label">UP</div>
               <div id="mod_conninfo_pointmap_up" class="edex-pointmap edex-pointmap-up" data-cols="48" data-rows="10" aria-hidden="true"></div>
             </div>
-            <div class="conn-pointmap-block">
+            <div class="conn-pointmap-block down">
               <div class="conn-pointmap-label">DOWN</div>
               <div id="mod_conninfo_pointmap_down" class="edex-pointmap edex-pointmap-down" data-cols="48" data-rows="10" aria-hidden="true"></div>
             </div>
@@ -405,6 +410,30 @@ function panelBody(id) {
       return window.cpuRailPanel?.bodyHtml?.() || `<div class="path-empty">CPU 供電路徑模組未載入</div>`;
     case "calculator":
       return window.calculatorPanel?.bodyHtml?.() || `<div class="path-empty">計算器模組未載入</div>`;
+    case "log":
+      return `
+        <div id="mod_log" class="log-panel">
+          <div class="log-toolbar">
+            <span data-log-file>Log wird geladen …</span>
+            <select data-log-level aria-label="Log-Level">
+              <option value="all">ALLE</option>
+              <option value="error">ERROR</option>
+              <option value="warn">WARN</option>
+              <option value="info">INFO</option>
+            </select>
+            <button type="button" data-log-refresh title="Log aktualisieren">↻</button>
+          </div>
+          <div class="log-list" data-log-list></div>
+        </div>`;
+    case "autostart":
+      return `
+        <div id="mod_autostart" class="autostart-panel">
+          <div class="autostart-toolbar">
+            <span data-autostart-count>Autostart-Einträge werden geladen …</span>
+            <button type="button" data-autostart-refresh title="Autostart aktualisieren">↻</button>
+          </div>
+          <div class="autostart-list" data-autostart-list></div>
+        </div>`;
     case "dock":
       return window.dockPanel?.bodyHtml?.() || `<div class="path-empty">底部 Dock 模組未載入</div>`;
     default:
@@ -437,8 +466,8 @@ function openCardMenu(anchorBtn, items, pos) {
         <button type="button" class="macos-tag${selected.has(tag.id) ? " on" : ""}" data-tag="${tag.id}" title="${escapeHtml(tag.label)}" style="--tag:${tag.color}"></button>
       `).join("");
       return `<div class="macos-tags" data-tags-idx="${i}">
-        <div class="macos-tags-label">標記</div>
-        <div class="macos-tags-row">${dots}<button type="button" class="macos-tag none" data-tag="" title="無">×</button></div>
+        <div class="macos-tags-label">Markierung</div>
+        <div class="macos-tags-row">${dots}<button type="button" class="macos-tag none" data-tag="" title="Keine">×</button></div>
       </div>`;
     }
     return `<button type="button" data-menu-idx="${i}">${escapeHtml(item.label)}</button>`;
@@ -489,7 +518,7 @@ function openCardMenu(anchorBtn, items, pos) {
           await item.onChange?.(current);
           item.tags = current;
         } catch (err) {
-          toast(err.message || "無法更新標記");
+          toast(err.message || "Markierung konnte nicht aktualisiert werden");
         }
       };
     });
@@ -774,6 +803,11 @@ function clockShowDate() {
 
 function clockDisplayMode() {
   return state.settings?.clockDisplayMode === "analog" ? "analog" : "digital";
+}
+
+function analogClockMinimum() {
+  const cells = 5;
+  return { cells, px: cellsPx(cells) };
 }
 
 function clockTimeFormat() {
@@ -1906,20 +1940,48 @@ function panelHtml(id) {
     </section>`;
 }
 
+const PANEL_ICON_CHOICES = [
+  { id: "calendar", label: "Kalender" },
+  { id: "calculator", label: "Rechner" },
+  { id: "clock", label: "Uhr" },
+  { id: "cpu", label: "Prozessor" },
+  { id: "ram", label: "Arbeitsspeicher" },
+  { id: "network", label: "Netzwerk" },
+  { id: "world", label: "Welt" },
+  { id: "drive", label: "Laufwerk" },
+  { id: "folders", label: "Ordner" },
+  { id: "search", label: "Suche" },
+  { id: "terminal", label: "Terminal" },
+  { id: "weather", label: "Wetter" },
+  { id: "processes", label: "Prozesse" }
+];
+
+function setPanelIcon(id, icon) {
+  if (!state.layout[id] || !PANEL_ICON_CHOICES.some((item) => item.id === icon)) return;
+  state.layout[id] = { ...state.layout[id], icon };
+  persistLayout();
+  renderDockItems();
+  toast(`Icon für „${PANEL_META[id]?.title || id}“ geändert`);
+}
+
 function dockIcon(kind, id) {
   if (kind === "desktop" || kind === "path") return "folders";
   const icons = {
     clock: "clock", cpu: "cpu", ram: "ram", toplist: "processes", globe: "world", conninfo: "network",
     calendar: "clock", drives: "drive", filesearch: "search", terminal: "terminal", weather: "weather",
     cockpit: "world", cassette: "drive", ddj: "cpu", cpuRail: "cpu", calculator: "terminal"
+    , autostart: "processes"
   };
-  return icons[id] || "fallback";
+  return state.layout[id]?.icon || PANEL_META[id]?.icon || icons[id] || "fallback";
 }
 
 function renderDockItems() {
   const host = document.querySelector("[data-dock-items]");
   if (!host) return;
   const items = [];
+  taskbarDockItems.forEach((item) => {
+    items.push({ kind: "taskbar", id: item.id, label: item.name, path: item.path, iconDataUrl: item.iconDataUrl });
+  });
   Object.keys(PANEL_META).forEach((id) => {
     if (id !== "dock" && state.layout[id]?.minimized) {
       items.push({ kind: "panel", id, label: PANEL_META[id].title });
@@ -1932,8 +1994,8 @@ function renderDockItems() {
     if (card.minimized) items.push({ kind: "path", id: card.id, label: pathTitle(card, index) });
   });
   host.innerHTML = items.map((item) => `
-    <button type="button" class="dock-item" data-dock-kind="${item.kind}" data-dock-restore="${escapeHtml(item.id)}" title="${escapeHtml(item.label)}">
-      <span class="dock-item-icon dock-item-icon-${dockIcon(item.kind, item.id)}" aria-hidden="true"></span>
+    <button type="button" class="dock-item" data-dock-kind="${item.kind}" data-dock-restore="${escapeHtml(item.id)}"${item.path ? ` data-dock-taskbar-path="${escapeHtml(item.path)}"` : ""} title="${escapeHtml(item.label)}">
+      ${item.iconDataUrl ? `<img class="dock-item-icon dock-item-icon-image" src="${escapeHtml(item.iconDataUrl)}" alt="" draggable="false">` : `<span class="dock-item-icon dock-item-icon-${dockIcon(item.kind, item.id)}" aria-hidden="true"></span>`}
       <span class="dock-item-label">${escapeHtml(item.label)}</span>
     </button>`).join("");
   window.edexI18n?.translatePage?.(host);
@@ -1943,7 +2005,10 @@ function renderDockItems() {
       const kind = button.dataset.dockKind;
       const id = button.dataset.dockRestore;
       if (!id) return;
-      if (kind === "panel" && state.layout[id]) {
+      if (kind === "taskbar") {
+        const target = button.dataset.dockTaskbarPath;
+        if (target) await window.edex?.openPath?.(target);
+      } else if (kind === "panel" && state.layout[id]) {
         state.layout[id] = { ...state.layout[id], minimized: false };
       } else if (kind === "desktop" && state.desktopStage) {
         state.desktopStage = { ...state.desktopStage, minimized: false };
@@ -2112,10 +2177,6 @@ function menuItemsForCard(kind, ctx) {
       label: locked ? "Entsperren" : "Sperren",
       action: () => ctx.onLock?.()
     },
-    {
-      label: "Hintergrundfarbe",
-      action: () => pickCardBackground(ctx)
-    },
     ...(ctx.setFixedDisplay ? [{
       label: fixedDisplayId === state.displayId
         ? `Monitorbindung lösen (${currentDisplay?.label || "aktueller Monitor"})`
@@ -2170,6 +2231,16 @@ function menuItemsForCard(kind, ctx) {
         }
       });
     });
+    if (!taskbarDockLoaded && window.edex?.listTaskbarPinned) {
+      taskbarDockLoaded = true;
+      window.edex.listTaskbarPinned().then((result) => {
+        taskbarDockItems = Array.isArray(result?.items) ? result.items : [];
+        renderDockItems();
+        window.dockPanel?.refresh?.(state);
+      }).catch(() => {
+        taskbarDockItems = [];
+      });
+    }
   }
   if (kind === "panel" && ctx.widgetId === "clock") {
     const accent = rgbToHex(state.theme?.colors?.r, state.theme?.colors?.g, state.theme?.colors?.b);
@@ -2324,39 +2395,98 @@ function openPanelSetup(el) {
     ? `
       <tr><td>Darstellung</td><td><select id="panel-clock-mode"><option value="digital">Digital</option><option value="analog">Analog</option></select></td></tr>
       <tr><td>Datum</td><td><input id="panel-clock-date" type="checkbox"></td></tr>
-      <tr><td>Skalierung</td><td><input id="panel-clock-scale" type="number" min="0.25" max="2" step="0.05"></td></tr>`
+      <tr><td>Skalierung</td><td><input id="panel-clock-scale" type="number" min="0.25" max="2" step="0.05"></td></tr>
+      <tr><td>Zeitformat</td><td><select id="panel-clock-time-format">
+        <option value="24h-seconds">24h · HH:MM:SS</option>
+        <option value="24h-short">24h · HH:MM</option>
+        <option value="12h-seconds">12h · hh:MM:SS</option>
+        <option value="12h-short">12h · hh:MM</option>
+      </select></td></tr>
+      <tr><td>Datumsformat</td><td><select id="panel-clock-date-format">
+        <option value="yy/m/d">YY/M/D</option>
+        <option value="dd/mm/yy">DD/MM/YY</option>
+        <option value="mm/dd/yy">MM/DD/YY</option>
+        <option value="dd.mm.yy">DD.MM.YY</option>
+        <option value="yyyy/mm/dd">YYYY/MM/DD</option>
+      </select></td></tr>
+      <tr><td>Uhr-Hervorhebung</td><td><input id="panel-clock-led" type="color"><input id="panel-clock-led-hex" type="text" spellcheck="false"></td></tr>
+      <tr><td>Rastergröße</td><td>${gridSize()} × ${gridSize()} px</td></tr>
+      <tr><td>Mindestgröße analog</td><td>${analogClockMinimum().cells} × ${analogClockMinimum().cells} Rasterfelder (${analogClockMinimum().px} × ${analogClockMinimum().px} px)</td></tr>`
     : id === "ram"
       ? `<tr><td>Anzeige</td><td><select id="panel-ram-mode"><option value="used">USED</option><option value="free">FREE</option><option value="cached">CACHED</option><option value="available">AVAILABLE</option><option value="total">TOTAL</option></select></td></tr>`
       : id === "filesearch"
         ? `<tr><td>Schriftgröße</td><td><input id="panel-search-font" type="number" min="8" max="72" step="1"></td></tr>`
         : `<tr><td>Panel-Einstellungen</td><td>Für dieses Panel sind derzeit keine individuellen Optionen vorhanden.</td></tr>`;
+  const backgroundSetup = id !== "desktop" && id !== "path"
+    ? `<tr><td>Hintergrundfarbe</td><td><button type="button" id="panel-bg-picker">Farbe auswählen</button><span id="panel-bg-value" class="panel-bg-value"></span></td></tr>`
+    : "";
+  const iconSetup = id !== "desktop" && id !== "path"
+    ? `<tr><td>Panel-Icon</td><td><div class="panel-icon-grid panel-setup-icon-grid">${PANEL_ICON_CHOICES.map((icon) => `<button type="button" class="panel-icon-choice${dockIcon("panel", id) === icon.id ? " on" : ""}" data-panel-setup-icon="${escapeHtml(icon.id)}" title="${escapeHtml(icon.label)}"><span class="dock-item-icon dock-item-icon-${escapeHtml(icon.id)}" aria-hidden="true"></span><small>${escapeHtml(icon.label)}</small></button>`).join("")}</div></td></tr>`
+    : "";
   const modal = document.createElement("div");
   modal.className = "modal_popup info panel-setup-modal";
   modal.innerHTML = `
     <h1>${escapeHtml(title)} - Setup</h1>
-    <table><tr><th>Option</th><th>Wert</th></tr>${body}</table>
+    <table><tr><th>Option</th><th>Wert</th></tr>${backgroundSetup}${iconSetup}${body}</table>
     <div class="settings-footer">
       <button type="button" id="panel-setup-save">Speichern</button>
       <button type="button" id="panel-setup-close">Schließen</button>
     </div>`;
   document.body.appendChild(modal);
+  placeCentered(modal);
   const clockMode = modal.querySelector("#panel-clock-mode");
   const clockDate = modal.querySelector("#panel-clock-date");
   const clockScaleInput = modal.querySelector("#panel-clock-scale");
+  const clockTimeFormatInput = modal.querySelector("#panel-clock-time-format");
+  const clockDateFormatInput = modal.querySelector("#panel-clock-date-format");
+  const clockLedInput = modal.querySelector("#panel-clock-led");
+  const clockLedHexInput = modal.querySelector("#panel-clock-led-hex");
   if (clockMode) clockMode.value = state.settings.clockDisplayMode || "digital";
   if (clockDate) clockDate.checked = state.settings.clockShowDate !== false;
   if (clockScaleInput) clockScaleInput.value = String(state.settings.clockScale || 1);
+  if (clockTimeFormatInput) clockTimeFormatInput.value = clockTimeFormat();
+  if (clockDateFormatInput) clockDateFormatInput.value = clockDateFormat();
+  if (clockLedInput) clockLedInput.value = clockLedColor();
+  if (clockLedHexInput) clockLedHexInput.value = clockLedColor();
   const ramMode = modal.querySelector("#panel-ram-mode");
   if (ramMode) ramMode.value = state.settings.ramGaugeMode || "used";
   const searchFont = modal.querySelector("#panel-search-font");
   if (searchFont) searchFont.value = String(state.settings.searchFontSize || 12);
+  let selectedPanelIcon = id !== "desktop" && id !== "path" ? dockIcon("panel", id) : "";
+  const panelBgValue = modal.querySelector("#panel-bg-value");
+  const currentPanelBg = id !== "desktop" && id !== "path" ? colorToFill(state.layout[id]?.bg) : "";
+  if (panelBgValue) panelBgValue.textContent = currentPanelBg || "Standard";
+  modal.querySelector("#panel-bg-picker")?.addEventListener("click", () => pickCardBackground({
+    el,
+    getBg: () => state.layout[id]?.bg || "",
+    setBg: (color) => {
+      state.layout[id] = { ...state.layout[id], bg: color };
+      persistLayout();
+      if (panelBgValue) panelBgValue.textContent = colorToFill(color) || "Standard";
+    }
+  }));
+  modal.querySelectorAll("[data-panel-setup-icon]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedPanelIcon = button.dataset.panelSetupIcon || selectedPanelIcon;
+      modal.querySelectorAll("[data-panel-setup-icon]").forEach((item) => item.classList.toggle("on", item.dataset.panelSetupIcon === selectedPanelIcon));
+    });
+  });
   modal.querySelector("#panel-setup-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#panel-setup-save")?.addEventListener("click", async () => {
     const patch = {};
+    const previousPanelIcon = id !== "desktop" && id !== "path" ? dockIcon("panel", id) : "";
+    const panelIconChanged = selectedPanelIcon && selectedPanelIcon !== previousPanelIcon;
     if (id === "clock") {
       patch.clockDisplayMode = clockMode?.value === "analog" ? "analog" : "digital";
       patch.clockShowDate = Boolean(clockDate?.checked);
       patch.clockScale = Math.max(0.25, Math.min(2, Number(clockScaleInput?.value) || 1));
+      patch.clockTimeFormat = ["24h-seconds", "24h-short", "12h-seconds", "12h-short"].includes(clockTimeFormatInput?.value)
+        ? clockTimeFormatInput.value
+        : "24h-seconds";
+      patch.clockDateFormat = ["yy/m/d", "dd/mm/yy", "mm/dd/yy", "dd.mm.yy", "yyyy/mm/dd"].includes(clockDateFormatInput?.value)
+        ? clockDateFormatInput.value
+        : "yy/m/d";
+      patch.clockLedColor = toHex6(clockLedHexInput?.value || clockLedInput?.value || clockLedColor());
     } else if (id === "ram") {
       patch.ramGaugeMode = ["used", "free", "cached", "available", "total"].includes(ramMode?.value)
         ? ramMode.value
@@ -2364,6 +2494,7 @@ function openPanelSetup(el) {
     } else if (id === "filesearch") {
       patch.searchFontSize = Math.max(8, Math.min(72, Math.round(Number(searchFont?.value) || 12)));
     }
+    if (panelIconChanged) setPanelIcon(id, selectedPanelIcon);
     if (!Object.keys(patch).length) {
       modal.remove();
       return;
@@ -2371,6 +2502,12 @@ function openPanelSetup(el) {
     try {
       const result = await window.edex.saveSettings(patch);
       state.settings = result.settings || { ...state.settings, ...patch };
+      if (id === "clock" && patch.clockDisplayMode === "analog" && state.layout.clock) {
+        const minimum = analogClockMinimum().px;
+        const box = pxFromBox(state.layout.clock);
+        applyBoxPx(state.layout.clock, box.x, box.y, Math.max(box.w, minimum), Math.max(box.h, minimum));
+        persistLayout();
+      }
       modal.remove();
       rebuildWorkspace();
     } catch (error) {
@@ -2479,17 +2616,17 @@ function themeColorSwatches() {
   const globe = state.theme?.globe || {};
   const accent = rgbToHex(colors.r, colors.g, colors.b);
   const list = [
-    { label: "主題色", color: accent },
-    { label: "主題色 55%", color: `rgba(${Number(colors.r) || 170}, ${Number(colors.g) || 207}, ${Number(colors.b) || 209}, 0.55)` },
-    { label: "深底", color: colors.light_black || "#05080d" },
-    { label: "黑", color: colors.black || "#000000" },
-    { label: "灰", color: colors.grey || "#262828" },
-    { label: "終端前景", color: term.foreground },
-    { label: "終端背景", color: term.background },
-    { label: "地球", color: globe.base },
-    { label: "標記", color: globe.marker },
-    { label: "紅", color: "#ff3c3c" },
-    { label: "黃", color: "#ffd23c" }
+    { label: "Theme-Farbe", color: accent },
+    { label: "Theme-Farbe 55%", color: `rgba(${Number(colors.r) || 170}, ${Number(colors.g) || 207}, ${Number(colors.b) || 209}, 0.55)` },
+    { label: "Dunkler Hintergrund", color: colors.light_black || "#05080d" },
+    { label: "Schwarz", color: colors.black || "#000000" },
+    { label: "Grau", color: colors.grey || "#262828" },
+    { label: "Terminal-Vordergrund", color: term.foreground },
+    { label: "Terminal-Hintergrund", color: term.background },
+    { label: "Globus", color: globe.base },
+    { label: "Markierung", color: globe.marker },
+    { label: "Rot", color: "#ff3c3c" },
+    { label: "Gelb", color: "#ffd23c" }
   ].filter((item) => item.color);
   const seen = new Set();
   return list.filter((item) => {
@@ -2505,12 +2642,12 @@ function pickCardBackground(ctx) {
   window.edex?.setMouseIgnore?.(false);
   const palette = document.createElement("div");
   palette.className = "color-palette";
-  const swatches = [...themeColorSwatches(), { label: "預設", color: "" }];
+  const swatches = [...themeColorSwatches(), { label: "Standard", color: "" }];
   const current = colorToFill(ctx.getBg?.()) || "#05080d";
   const pickerValue = current.startsWith("#") ? current : (toHex6(current) || "#05080d");
   palette.innerHTML = `
-    <div class="color-palette-title">容器背景</div>
-    <label class="color-palette-custom">自訂
+    <div class="color-palette-title">Panel-Hintergrund</div>
+    <label class="color-palette-custom">Benutzerdefiniert
       <input type="color" id="card_bg_picker" value="${escapeHtml(pickerValue)}">
     </label>
     <div class="color-palette-grid">
@@ -2677,8 +2814,13 @@ function closeDesktopCard() {
   toast("已關閉桌面容器");
 }
 
-/** Keep「添加容器」open across rebuildWorkspace so users can add multiple items. */
+/** Reopen the picker only after the folder chooser returns. */
 let keepAddPicker = false;
+
+function closeAddPicker() {
+  keepAddPicker = false;
+  document.getElementById("addPickerModal")?.remove();
+}
 
 function ensureDesktopCard() {
   if (!state.primary) {
@@ -2689,11 +2831,12 @@ function ensureDesktopCard() {
     toast("桌面容器已存在");
     return;
   }
+  closeAddPicker();
   state.desktopEnabled = true;
   state.desktopStage = findEmptyBox(state.desktopStage || defaultDesktop(), { desktop: true });
   persistLayout();
   rebuildWorkspace();
-  toast("已添加桌面容器");
+  toast("Desktop-Container hinzugefügt");
 }
 
 function dockEnabled() {
@@ -2736,20 +2879,27 @@ async function setDockEnabled(on) {
   toast(enabled ? `已開啟${state.settings.dockPosition === "top" ? "頂部" : "底部"} Dock` : "已關閉 Dock");
 }
 
-function addPanel(id) {
+async function addPanel(id) {
   if (!PANEL_META[id]) return;
   if (id === "dock") {
-    setDockEnabled(true);
+    await setDockEnabled(true);
     return;
   }
   if (state.layout[id]) {
     toast("此顯示器已有該插件");
     return;
   }
+  closeAddPicker();
   state.layout[id] = findEmptyBox({ ...PANEL_META[id].box }, { panelId: id });
-  persistLayout();
+  try {
+    await persistLayout();
+  } catch (error) {
+    delete state.layout[id];
+    toast(error?.message || "Panel konnte nicht gespeichert werden");
+    return;
+  }
   rebuildWorkspace();
-  toast(`已添加「${PANEL_META[id].title}」`);
+  toast(`Panel „${PANEL_META[id].title}“ hinzugefügt`);
 }
 
 function openAddPicker() {
@@ -2771,7 +2921,7 @@ function openAddPicker() {
     ?? (Number(state.settings?.dockHeight) || 72);
   const modal = document.createElement("div");
   modal.id = "addPickerModal";
-  modal.className = "modal_popup info";
+  modal.className = "modal_popup info central-settings-modal";
   modal.innerHTML = `
     <h1>Container hinzufügen</h1>
     <h2>Plugin-Schalter</h2>
@@ -2888,8 +3038,7 @@ function openAddPicker() {
   window.edexI18n?.translatePage?.(modal);
   placeCentered(modal, { width: Math.min(520, window.innerWidth * 0.45), topRatio: 0.18 });
   modal.querySelector("#add-cancel").onclick = () => {
-    keepAddPicker = false;
-    modal.remove();
+    closeAddPicker();
   };
   modal.querySelector("#toggle-dock")?.addEventListener("change", (event) => {
     setDockEnabled(event.target.checked);
@@ -2960,8 +3109,9 @@ function openAddPicker() {
     toast("Fenster freigegeben");
   });
   modal.querySelectorAll("[data-add-panel]").forEach((btn) => {
-    btn.onclick = () => {
-      addPanel(btn.dataset.addPanel);
+    btn.onclick = async () => {
+      btn.disabled = true;
+      await addPanel(btn.dataset.addPanel);
     };
   });
   modal.querySelector("#add-desktop")?.addEventListener("click", () => {
@@ -3084,14 +3234,16 @@ function bindWeatherPanel() {
       const data = await window.edex.getWeather(location);
       if (token !== request) return;
       const now = data.current || {};
+      const dateLocale = locale === "en" ? "en-US" : locale === "zh-Hant" ? "zh-TW" : "de-DE";
+      const todayLabel = new Date().toLocaleDateString(dateLocale, { weekday: "long" });
       current.innerHTML = `
+        <div class="weather-current-day">${escapeHtml(todayLabel)}</div>
         <div class="weather-main"><span class="weather-icon">${weatherIcon(now.weather_code)}</span><strong>${Math.round(Number(now.temperature_2m) || 0)}°</strong></div>
         <div class="weather-condition">${escapeHtml(weatherLabel(now.weather_code))}</div>
         <div class="weather-meta">${text.felt} ${Math.round(Number(now.apparent_temperature) || 0)}° · ${Math.round(Number(now.relative_humidity_2m) || 0)}% · ${text.wind} ${Math.round(Number(now.wind_speed_10m) || 0)} km/h</div>`;
       const daily = data.daily || {};
       const dates = daily.time || [];
       days.innerHTML = dates.slice(0, 4).map((date, index) => {
-        const dateLocale = locale === "en" ? "en-US" : locale === "zh-Hant" ? "zh-TW" : "de-DE";
         const day = new Date(`${date}T12:00:00`).toLocaleDateString(dateLocale, { weekday: "short" }).toUpperCase();
         return `<div class="weather-day"><span>${escapeHtml(day)}</span><b>${weatherIcon(daily.weather_code?.[index])}</b><strong>${Math.round(Number(daily.temperature_2m_max?.[index]) || 0)}°</strong><small>${Math.round(Number(daily.temperature_2m_min?.[index]) || 0)}°</small></div>`;
       }).join("");
@@ -3191,6 +3343,8 @@ function buildLayout() {
     makeInteractive(el, {
       widgetType: "panel",
       widgetId: id,
+      minW: id === "clock" && clockDisplayMode() === "analog" ? analogClockMinimum().px : undefined,
+      minH: id === "clock" && clockDisplayMode() === "analog" ? analogClockMinimum().px : undefined,
       widgetData: () => ({ panelId: id, box: state.layout[id] }),
       onTransferred: () => {
         delete state.layout[id];
@@ -3290,6 +3444,71 @@ function bindPluginPanels() {
   if (state.layout.dock && state.primary) window.dockPanel?.bind?.(state);
   else window.dockPanel?.unbind?.(state);
   if (state.layout.weather) bindWeatherPanel();
+  bindLogPanel();
+  bindAutostartPanel();
+}
+
+let logPanelTimer = null;
+
+function bindLogPanel() {
+  if (logPanelTimer) clearInterval(logPanelTimer);
+  logPanelTimer = null;
+  const root = document.getElementById("mod_log");
+  if (!root || !window.edex?.getAppLog) return;
+  const list = root.querySelector("[data-log-list]");
+  const level = root.querySelector("[data-log-level]");
+  const file = root.querySelector("[data-log-file]");
+  const load = async () => {
+    try {
+      const result = await window.edex.getAppLog(300);
+      if (file) file.textContent = result.file || "Log-Datei nicht verfügbar";
+      const selected = level?.value || "all";
+      const entries = (result.entries || []).filter((entry) => selected === "all" || entry.level === selected);
+      if (!list) return;
+      list.innerHTML = entries.map((entry) => {
+        const details = entry.details == null ? "" : ` ${JSON.stringify(entry.details)}`;
+        return `<div class="log-entry log-${escapeHtml(entry.level || "info")}"><time>${escapeHtml(String(entry.time || "").replace("T", " ").replace("Z", ""))}</time><b>${escapeHtml(String(entry.level || "INFO").toUpperCase())}</b><span>${escapeHtml(String(entry.event || ""))}</span><em>${escapeHtml(`${entry.message || ""}${details}`)}</em></div>`;
+      }).join("") || `<div class="log-empty">Keine Einträge für diesen Filter</div>`;
+      list.scrollTop = list.scrollHeight;
+    } catch (error) {
+      if (list) list.innerHTML = `<div class="log-empty">${escapeHtml(error.message || "Log konnte nicht gelesen werden")}</div>`;
+    }
+  };
+  level?.addEventListener("change", load);
+  root.querySelector("[data-log-refresh]")?.addEventListener("click", load);
+  load();
+  logPanelTimer = setInterval(load, 3000);
+}
+
+let autostartPanelTimer = null;
+
+function bindAutostartPanel() {
+  if (autostartPanelTimer) clearInterval(autostartPanelTimer);
+  autostartPanelTimer = null;
+  const root = document.getElementById("mod_autostart");
+  if (!root || !window.edex?.listAutostartItems) return;
+  const list = root.querySelector("[data-autostart-list]");
+  const count = root.querySelector("[data-autostart-count]");
+  const load = async () => {
+    try {
+      const result = await window.edex.listAutostartItems();
+      const entries = Array.isArray(result?.items) ? result.items : [];
+      if (count) count.textContent = `${entries.length} Autostart-Einträge`;
+      if (!list) return;
+      list.innerHTML = entries.map((entry) => `
+        <div class="autostart-entry" title="${escapeHtml(entry.command || "")}">
+          <strong>${escapeHtml(entry.name || "Unbenannt")}</strong>
+          <span>${escapeHtml(entry.location || "Unbekannte Quelle")}</span>
+          <small>${escapeHtml(entry.user || "")}</small>
+          <em>${escapeHtml(entry.command || "Kein Befehl hinterlegt")}</em>
+        </div>`).join("") || `<div class="log-empty">Keine Autostart-Einträge gefunden</div>`;
+    } catch (error) {
+      if (list) list.innerHTML = `<div class="log-empty">${escapeHtml(error.message || "Autostart konnte nicht gelesen werden")}</div>`;
+    }
+  };
+  root.querySelector("[data-autostart-refresh]")?.addEventListener("click", load);
+  load();
+  autostartPanelTimer = setInterval(load, 10000);
 }
 
 function updateDesktopViewToggle() {
@@ -3789,6 +4008,8 @@ function bindTerminal() {
       terminalInstances.set(id, terminal);
       terminal.open(output);
       terminal.loadAddon(new window.FitAddon.FitAddon());
+      const bufferedOutput = terminalBuffers.get(id);
+      if (bufferedOutput) terminal.write(bufferedOutput);
       terminal.onData((data) => window.edex.writeTerminal(id, data));
       terminal.onResize(({ cols, rows }) => window.edex.resizeTerminal(id, cols, rows));
     }
@@ -3858,6 +4079,7 @@ function bindTerminal() {
       bindTerminal();
     });
     terminal.fit?.();
+    requestAnimationFrame(() => terminal.fit?.());
     if (!terminalStarted.has(id) && window.edex?.createTerminal) {
       terminalStarted.add(id);
       window.edex.createTerminal(id, terminalCwds.get(id), "powershell").then((result) => {
@@ -3898,6 +4120,7 @@ function bindTerminal() {
     bindTerminal();
   });
   window.addEventListener("resize", () => {
+    terminalInstances.forEach((terminal) => terminal.fit?.());
     terminalPaneIds.forEach((id) => {
       const pane = root.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
       const embedded = terminalNativePanes.get(id);
@@ -5532,19 +5755,9 @@ function openSettings(focusPanel = "") {
         </td>
       </tr>
       <tr>
-        <td>網格大小</td>
-        <td>以主顯示器為準，所有顯示器使用同一格距（像素）</td>
+        <td>Rastergröße</td>
+        <td>Alle Monitore verwenden denselben Rasterabstand in Pixeln</td>
         <td><input id="set-grid" type="number" min="12" max="96" step="1" value="${settingsGridSize()}"></td>
-      </tr>
-      <tr>
-        <td>時鐘字格</td>
-        <td>相對壁紙網格倍率（0.25–2.0，可縮小）</td>
-        <td><input id="set-clock-scale" type="number" min="0.25" max="2" step="0.05" value="${clockScale()}"></td>
-      </tr>
-      <tr>
-        <td>顯示日期</td>
-        <td>在時間下方另起一行顯示年月日</td>
-        <td><input id="set-clock-date" type="checkbox" ${clockShowDate() ? "checked" : ""}></td>
       </tr>
       <tr>
         <td>Uhr als Panel</td>
@@ -5552,66 +5765,23 @@ function openSettings(focusPanel = "") {
         <td><input id="set-clock-panel" type="checkbox" ${state.settings.clockPanelFrame === true ? "checked" : ""}></td>
       </tr>
       <tr>
-        <td>Uhrdarstellung</td>
-        <td>Digitale LED-Anzeige oder analoge Zeigeruhr</td>
-        <td>
-          <select id="set-clock-display-mode">
-            <option value="digital" ${clockDisplayMode() === "digital" ? "selected" : ""}>Digital</option>
-            <option value="analog" ${clockDisplayMode() === "analog" ? "selected" : ""}>Analog</option>
-          </select>
-        </td>
-      </tr>
-      <tr>
-        <td>時間格式</td>
-        <td>12 小時或 24 小時制；可隱藏秒數</td>
-        <td>
-          <select id="set-clock-time-format">
-            <option value="24h-seconds" ${clockTimeFormat() === "24h-seconds" ? "selected" : ""}>24h · HH:MM:SS</option>
-            <option value="24h-short" ${clockTimeFormat() === "24h-short" ? "selected" : ""}>24h · HH:MM</option>
-            <option value="12h-seconds" ${clockTimeFormat() === "12h-seconds" ? "selected" : ""}>12h · hh:MM:SS</option>
-            <option value="12h-short" ${clockTimeFormat() === "12h-short" ? "selected" : ""}>12h · hh:MM</option>
-          </select>
-        </td>
-      </tr>
-      <tr>
-        <td>Datumsformat</td>
-        <td>Numerisches Format für die Datumszeile</td>
-        <td>
-          <select id="set-clock-date-format">
-            <option value="yy/m/d" ${clockDateFormat() === "yy/m/d" ? "selected" : ""}>YY/M/D</option>
-            <option value="dd/mm/yy" ${clockDateFormat() === "dd/mm/yy" ? "selected" : ""}>DD/MM/YY</option>
-            <option value="mm/dd/yy" ${clockDateFormat() === "mm/dd/yy" ? "selected" : ""}>MM/DD/YY</option>
-            <option value="dd.mm.yy" ${clockDateFormat() === "dd.mm.yy" ? "selected" : ""}>DD.MM.YY</option>
-            <option value="yyyy/mm/dd" ${clockDateFormat() === "yyyy/mm/dd" ? "selected" : ""}>YYYY/MM/DD</option>
-          </select>
-        </td>
-      </tr>
-      <tr>
-        <td>時鐘高亮</td>
-        <td>點陣點亮顏色（色票或 #RRGGBB）</td>
-        <td>
-          <input id="set-clock-led" type="color" value="${escapeHtml(clockLedColor())}">
-          <input id="set-clock-led-hex" type="text" spellcheck="false" value="${escapeHtml(clockLedColor())}" style="width:7rem">
-        </td>
-      </tr>
-      <tr>
-        <td>搜尋字體</td>
-        <td>快速搜尋檔名、路徑與輸入框統一字級（px，預設 12）</td>
+        <td>Suchschriftgröße</td>
+        <td>Einheitliche Schriftgröße für Dateisuche, Pfade und Eingabefelder (px, Standard 12)</td>
         <td><input id="set-search-font" type="text" inputmode="numeric" spellcheck="false" value="${searchFontSize()}"></td>
       </tr>
       <tr>
-        <td>瀑布字體</td>
-        <td>代碼雨字級（px，8–72，手動輸入後套用）</td>
+        <td>Code-Regen-Schriftgröße</td>
+        <td>Schriftgröße des Code-Hintergrunds (px, 8–72)</td>
         <td><input id="set-rain-font" type="text" inputmode="numeric" spellcheck="false" value="${rainFontSize()}"></td>
       </tr>
       <tr>
-        <td>瀑布速度</td>
-        <td>下落倍率（0.1–8.0，手動輸入後套用）</td>
+        <td>Code-Regen-Geschwindigkeit</td>
+        <td>Fallgeschwindigkeit (0,1–8,0)</td>
         <td><input id="set-rain-speed" type="text" inputmode="decimal" spellcheck="false" value="${rainSpeed()}"></td>
       </tr>
       <tr>
-        <td>佈局解析度</td>
-        <td>全顯示器同步。2K 螢幕依同一尺縮小，網格密度與 4K 一致</td>
+        <td>Layout-Auflösung</td>
+        <td>Für alle Monitore synchron. 2K-Bildschirme werden proportional skaliert</td>
         <td>
           <select id="set-layout-mode">
             <option value="2k" ${layoutMode() === "2k" ? "selected" : ""}>2K（2560×1440）</option>
@@ -5620,35 +5790,35 @@ function openSettings(focusPanel = "") {
         </td>
       </tr>
       <tr>
-        <td>介面比例</td>
-        <td>全顯示器同步，疊加在佈局解析度上</td>
+        <td>UI-Skalierung</td>
+        <td>Für alle Monitore synchron, zusätzlich zur Layout-Auflösung</td>
         <td><input id="set-ui-scale" type="number" min="0.4" max="1.2" step="0.05" value="${displayUiScale()}"></td>
       </tr>
       <tr>
-        <td>遷移檔案</td>
-        <td>開啟後自動整理會把檔案搬到「分類／副檔名」資料夾；關閉則只篩選顯示</td>
+        <td>Dateien verschieben</td>
+        <td>Die automatische Sortierung verschiebt Dateien in Kategorie-/Endungsordner; deaktiviert werden sie nur gefiltert</td>
         <td><input id="set-migrate" type="checkbox" ${state.settings?.migrateFiles ? "checked" : ""}></td>
       </tr>
       <tr>
-        <td>整理資料夾</td>
-        <td>遷移時一併把資料夾收到「資料夾」</td>
+        <td>Ordner einbeziehen</td>
+        <td>Ordner beim Verschieben ebenfalls in den Ordnerbereich einsortieren</td>
         <td><input id="set-dirs" type="checkbox" ${state.includeFolders ? "checked" : ""}></td>
       </tr>
       <tr>
-        <td>桌面佈局</td>
-        <td>保存本顯示器全部容器：插件開關與位置、系統桌面、路徑卡、桌面標籤。關閉的插件不會在下次啟動復原。</td>
+        <td>Desktop-Layout</td>
+        <td>Alle Container dieses Monitors speichern: Panels, Positionen, Systemdesktop und Ordnerkarten</td>
         <td>
-          <button type="button" id="set-save-layout">保存佈局</button>
+          <button type="button" id="set-save-layout">Layout speichern</button>
         </td>
       </tr>
     </table>
 
     <div class="settings-footer">
-      <button type="button" id="set-reset">重設容器位置</button>
-      <button type="button" id="set-quit">結束程式</button>
-      <button type="button" id="set-cancel">關閉</button>
-      <button type="button" id="set-save-layout-footer">保存佈局</button>
-      <button type="button" id="set-save">套用設定並保存佈局</button>
+      <button type="button" id="set-reset">Container zurücksetzen</button>
+      <button type="button" id="set-quit">Programm beenden</button>
+      <button type="button" id="set-cancel">Schließen</button>
+      <button type="button" id="set-save-layout-footer">Layout speichern</button>
+      <button type="button" id="set-save">Einstellungen und Layout speichern</button>
     </div>
   `;
   const settingsTable = modal.querySelector("#settingsEditor");
@@ -5753,41 +5923,6 @@ function openSettings(focusPanel = "") {
     toast(`Preset „${name}“ gelöscht`);
   });
 
-  const ledColor = modal.querySelector("#set-clock-led");
-  const ledHex = modal.querySelector("#set-clock-led-hex");
-  const previewLed = () => {
-    const hex = toHex6(ledHex?.value || ledColor?.value || clockLedColor());
-    state.settings = { ...state.settings, clockLedColor: hex };
-    applyClockMetrics();
-  };
-  ledColor?.addEventListener("input", () => {
-    if (ledHex) ledHex.value = ledColor.value;
-    previewLed();
-  });
-  ledHex?.addEventListener("input", () => {
-    const hex = toHex6(ledHex.value);
-    if (ledColor && /^#[0-9a-fA-F]{6}$/.test(hex)) ledColor.value = hex;
-    previewLed();
-  });
-  modal.querySelector("#set-clock-date")?.addEventListener("change", (event) => {
-    setClockShowDate(event.target.checked);
-  });
-  modal.querySelector("#set-clock-time-format")?.addEventListener("change", (event) => {
-    state.settings = { ...state.settings, clockTimeFormat: event.target.value };
-    renderClock();
-  });
-  modal.querySelector("#set-clock-date-format")?.addEventListener("change", (event) => {
-    state.settings = { ...state.settings, clockDateFormat: event.target.value };
-    renderClock();
-  });
-  modal.querySelector("#set-clock-scale")?.addEventListener("input", (event) => {
-    const next = Number(event.target.value);
-    if (!Number.isFinite(next)) return;
-    state.settings = { ...state.settings, clockScale: Math.max(0.25, Math.min(2, next)) };
-    applyClockMetrics();
-    renderClock();
-  });
-
   const previewRain = () => {
     const fontRaw = Number(modal.querySelector("#set-rain-font")?.value);
     const speedRaw = Number(modal.querySelector("#set-rain-speed")?.value);
@@ -5840,7 +5975,7 @@ function openSettings(focusPanel = "") {
     snapAllLayoutToGrid();
     try {
       await persistLayout();
-      toast("本顯示器桌面佈局已保存（含全部插件）");
+      toast("Desktop-Layout dieses Monitors gespeichert (einschließlich aller Panels)");
       return true;
     } catch (err) {
       toast(err?.message || "佈局保存失敗");
@@ -5879,26 +6014,7 @@ function openSettings(focusPanel = "") {
     state.settings = { ...state.settings, layoutMode: layoutModeValue, uiScale };
     const gridRaw = Number(modal.querySelector("#set-grid").value);
     const gridSizeValue = Number.isFinite(gridRaw) ? Math.max(12, Math.min(96, Math.round(gridRaw))) : 32;
-    const clockRaw = Number(modal.querySelector("#set-clock-scale").value);
-    const clockScaleValue = Number.isFinite(clockRaw)
-      ? Math.max(0.25, Math.min(2, Math.round(clockRaw * 20) / 20))
-      : 1;
-    const clockLedValue = toHex6(
-      modal.querySelector("#set-clock-led-hex")?.value
-      || modal.querySelector("#set-clock-led")?.value
-      || clockLedColor()
-    );
-    const clockDateValue = Boolean(modal.querySelector("#set-clock-date")?.checked);
     const clockPanelFrame = Boolean(modal.querySelector("#set-clock-panel")?.checked);
-    const clockDisplayModeValue = modal.querySelector("#set-clock-display-mode")?.value === "analog"
-      ? "analog"
-      : "digital";
-    const clockTimeValue = ["24h-seconds", "24h-short", "12h-seconds", "12h-short"].includes(modal.querySelector("#set-clock-time-format")?.value)
-      ? modal.querySelector("#set-clock-time-format").value
-      : "24h-seconds";
-    const clockDateFormatValue = ["yy/m/d", "dd/mm/yy", "mm/dd/yy", "dd.mm.yy", "yyyy/mm/dd"].includes(modal.querySelector("#set-clock-date-format")?.value)
-      ? modal.querySelector("#set-clock-date-format").value
-      : "yy/m/d";
     const rainFontRaw = Number(modal.querySelector("#set-rain-font").value);
     const rainFontValue = Number.isFinite(rainFontRaw)
       ? Math.max(8, Math.min(72, Math.round(rainFontRaw)))
@@ -5949,13 +6065,7 @@ function openSettings(focusPanel = "") {
       dockEnabled: dockEnabledValue,
       dockFrameStyle: dockFrameValue,
       gridSize: gridSizeValue,
-      clockScale: clockScaleValue,
-      clockLedColor: clockLedValue,
-      clockShowDate: clockDateValue,
       clockPanelFrame,
-      clockDisplayMode: clockDisplayModeValue,
-      clockTimeFormat: clockTimeValue,
-      clockDateFormat: clockDateFormatValue,
       rainFontSize: rainFontValue,
       rainSpeed: rainSpeedValue,
       searchFontSize: searchFontValue,
@@ -5984,7 +6094,7 @@ function openSettings(focusPanel = "") {
     snapAllLayoutToGrid();
     await persistLayout();
     closeSettings();
-    toast("設定與桌面佈局已保存");
+    toast("Einstellungen und Desktop-Layout gespeichert");
     rebuildWorkspace();
   };
 }
@@ -6002,9 +6112,6 @@ function rebuildWorkspace() {
   fillDrivesStage();
   bindTerminal();
   bindPluginPanels();
-  if (keepAddPicker) {
-    queueMicrotask(() => openAddPicker());
-  }
   window.edexI18n?.translatePage?.();
 }
 
@@ -6122,7 +6229,7 @@ async function runOrganize() {
       persistLayout();
       await loadDesktopListing();
       arrangeDesktop();
-      log("已依文件夾、圖標與檔案格式大類篩選顯示（未遷移檔案）");
+      log("Anzeige nach Ordnern, Symbolen und Dateiformaten gefiltert (Dateien nicht verschoben)");
       toast("已按格式大類篩選顯示，檔案仍在系統桌面");
       return;
     }

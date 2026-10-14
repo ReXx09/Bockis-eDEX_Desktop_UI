@@ -29,6 +29,7 @@ div#mod_ramwatcher::after {
 
 div#mod_ramwatcher_inner {
     width: 100%;
+    min-width: 0;
 }
 
 div#mod_ramwatcher_inner .ram-gauge-filters {
@@ -36,11 +37,15 @@ div#mod_ramwatcher_inner .ram-gauge-filters {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.3vw;
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     margin-bottom: 0.45vh;
 }
 
 div#mod_ramwatcher_inner .ram-gauge-filter {
     min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
     overflow: hidden;
     padding: 0.3vh 0.12vw;
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
