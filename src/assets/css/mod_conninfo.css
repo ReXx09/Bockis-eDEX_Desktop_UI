@@ -178,7 +178,9 @@ div#mod_conninfo.offline h3:last-child {
 }
 
 #mod_conninfo[data-conn-mode="live"] .conn-pointmap-block.up,
+#mod_conninfo[data-conn-mode="live"] .conn-pointmap-block.down,
 #mod_conninfo[data-conn-mode="total"] .conn-pointmap-block.up,
+#mod_conninfo[data-conn-mode="total"] .conn-pointmap-block.down,
 #mod_conninfo[data-conn-mode="up"] .conn-pointmap-block.up,
 #mod_conninfo[data-conn-mode="down"] .conn-pointmap-block.down {
     display: block;

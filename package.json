@@ -41,6 +41,16 @@
       "assets/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "start-tron.ps1",
+        "to": "start-tron.ps1"
+      },
+      {
+        "from": "start-tron.cmd",
+        "to": "start-tron.cmd"
+      }
+    ],
     "asar": true,
     "npmRebuild": true,
     "forceCodeSigning": false,
@@ -61,8 +71,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
       "shortcutName": "Bockis-eDEX Desktop UI",
       "deleteAppDataOnUninstall": false,
       "installerLanguages": [

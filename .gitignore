@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-rainmeter/
+build/*.exe
 *.log
 .DS_Store
 *.bak

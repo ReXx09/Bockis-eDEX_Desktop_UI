@@ -2031,10 +2031,23 @@ div.modal_popup input[type="color"],
 }
 
 .conn-pointmap-label {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.12vh;
   font-size: 0.95vh;
   letter-spacing: 0.1em;
   opacity: 0.55;
   text-align: right;
+}
+
+.conn-pointmap-label strong {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font-size: 1.05em;
+    font-weight: 400;
+    letter-spacing: 0.03em;
+    opacity: 1;
+    white-space: nowrap;
 }
 
 #mod_cpuinfo_pointmap {

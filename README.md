@@ -105,6 +105,30 @@ npm run dist
 
 Ergebnis: `dist/Bockis-eDEX-Desktop-UI-Setup-<version>.exe` (NSIS-Installer, Installationsverzeichnis kann geändert werden).
 
+Nach der Installation starten die Desktop- und Startmenü-Verknüpfungen über
+die TRON-Systemkonsole. Sie spielt beim Start kurze Systemtöne, zeigt den
+Bootvorgang an und bleibt geöffnet, solange die eDEX-GUI läuft. Beim Beenden
+der GUI schließt sich auch die Konsole. Der direkte Start ist weiterhin über
+die installierte EXE möglich.
+
+### TRON-Terminal-Installation
+
+Für eine retroartige Installation kann danach `install-tron.cmd` per Doppelklick
+gestartet werden. Das Script zeigt einen schwarzen PowerShell-Terminalablauf,
+findet den neuesten Installer unter `dist\` und startet anschließend den
+normalen NSIS-Installer mit Administratorrechten. Alternativ:
+
+```powershell
+.\install-tron.ps1
+```
+
+Mit einem expliziten Installer-Pfad kann auch eine Release-Datei außerhalb des
+Projekts verwendet werden:
+
+```powershell
+.\install-tron.ps1 -InstallerPath "C:\Downloads\Bockis-eDEX-Desktop-UI-Setup-1.2.4.exe"
+```
+
 Für einen entpackten Test-Build:
 
 ```powershell

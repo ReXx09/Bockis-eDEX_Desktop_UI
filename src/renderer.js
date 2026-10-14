@@ -358,11 +358,11 @@ function panelBody(id) {
               <div class="conninfo-total in"><span>TOTAL IN</span><strong id="mod_conninfo_total_in">—</strong></div>
             </div>
             <div class="conn-pointmap-block up">
-              <div class="conn-pointmap-label">UP</div>
+              <div class="conn-pointmap-label"><span>UP</span><strong id="mod_conninfo_up_chart_rate">—/S</strong></div>
               <div id="mod_conninfo_pointmap_up" class="edex-pointmap edex-pointmap-up" data-cols="48" data-rows="10" aria-hidden="true"></div>
             </div>
             <div class="conn-pointmap-block down">
-              <div class="conn-pointmap-label">DOWN</div>
+              <div class="conn-pointmap-label"><span>DOWN</span><strong id="mod_conninfo_down_chart_rate">—/S</strong></div>
               <div id="mod_conninfo_pointmap_down" class="edex-pointmap edex-pointmap-down" data-cols="48" data-rows="10" aria-hidden="true"></div>
             </div>
             <h3>OFFLINE</h3>

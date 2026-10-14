@@ -533,10 +533,16 @@
     });
     const up = document.getElementById("mod_conninfo_up");
     const down = document.getElementById("mod_conninfo_down");
+    const upChartRate = document.getElementById("mod_conninfo_up_chart_rate");
+    const downChartRate = document.getElementById("mod_conninfo_down_chart_rate");
     const totalOut = document.getElementById("mod_conninfo_total_out");
     const totalIn = document.getElementById("mod_conninfo_total_in");
-    if (up) up.textContent = `${prettyBytes(sample.upBps || 0)}/S`;
-    if (down) down.textContent = `${prettyBytes(sample.downBps || 0)}/S`;
+    const upRate = `${prettyBytes(sample.upBps || 0)}/S`;
+    const downRate = `${prettyBytes(sample.downBps || 0)}/S`;
+    if (up) up.textContent = upRate;
+    if (down) down.textContent = downRate;
+    if (upChartRate) upChartRate.textContent = upRate;
+    if (downChartRate) downChartRate.textContent = downRate;
     if (totalOut) totalOut.textContent = prettyBytes(sample.totalUp || 0);
     if (totalIn) totalIn.textContent = prettyBytes(sample.totalDown || 0);
   }

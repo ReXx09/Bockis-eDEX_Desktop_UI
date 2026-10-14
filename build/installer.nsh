@@ -58,10 +58,21 @@ Function EDEXComponentsPageCreate
 FunctionEnd
 
 !macro customInstall
+  SetShellVarContext current
+  CreateShortCut "$DESKTOP\Bockis-eDEX Desktop UI.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\start-tron.ps1" -AppPath "$INSTDIR\Bockis-eDEX Desktop UI.exe"' "$INSTDIR\Bockis-eDEX Desktop UI.exe" 0 SW_SHOWNORMAL
+  CreateDirectory "$SMPROGRAMS\Bockis-eDEX Desktop UI"
+  CreateShortCut "$SMPROGRAMS\Bockis-eDEX Desktop UI\Bockis-eDEX Desktop UI.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\start-tron.ps1" -AppPath "$INSTDIR\Bockis-eDEX Desktop UI.exe"' "$INSTDIR\Bockis-eDEX Desktop UI.exe" 0 SW_SHOWNORMAL
   ${If} $EDEXRainmeter == ${BST_CHECKED}
     File /oname=$PLUGINSDIR\Rainmeter-Setup.exe "${BUILD_RESOURCES_DIR}\Rainmeter-Setup.exe"
     ExecWait '"$PLUGINSDIR\Rainmeter-Setup.exe" /S'
   ${EndIf}
+!macroend
+
+!macro customUnInstall
+  SetShellVarContext current
+  Delete "$DESKTOP\Bockis-eDEX Desktop UI.lnk"
+  Delete "$SMPROGRAMS\Bockis-eDEX Desktop UI\Bockis-eDEX Desktop UI.lnk"
+  RMDir "$SMPROGRAMS\Bockis-eDEX Desktop UI"
 !macroend
 
 Function EDEXComponentsPageLeave
