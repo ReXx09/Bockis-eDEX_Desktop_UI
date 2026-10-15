@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 
 internal static class TronBootstrap
@@ -110,7 +111,6 @@ internal static class TronBootstrap
                 WorkingDirectory = Path.GetTempPath()
             }))
             {
-                string[] frames = { "|", "/", "-", "\\" };
                 string[] phases =
                 {
                     "Phase 2/4: Electron application files are being installed",
@@ -118,10 +118,12 @@ internal static class TronBootstrap
                     "Phase 4/4: Finalizing installation"
                 };
                 DateTime started = DateTime.UtcNow;
-                int frame = 0;
                 int phase = 0;
-                while (!installer.WaitForExit(160))
+                DateTime nextStatus = started;
+                long logOffset = 0;
+                while (!installer.WaitForExit(200))
                 {
+                    logOffset = ShowNewLogLines(logPath, logOffset);
                     TimeSpan elapsed = DateTime.UtcNow - started;
                     int nextPhase = elapsed.TotalSeconds >= 12 ? 2 : elapsed.TotalSeconds >= 4 ? 1 : 0;
                     if (nextPhase != phase)
@@ -129,11 +131,13 @@ internal static class TronBootstrap
                         phase = nextPhase;
                         WriteLine("  [PROC] " + phases[phase], ConsoleColor.Cyan);
                     }
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.Write("\r  [PROC] " + phases[phase] + " {0}  elapsed {1:mm\\:ss}", frames[frame++ % frames.Length], elapsed);
-                    Console.ResetColor();
+                    if (DateTime.UtcNow >= nextStatus)
+                    {
+                        WriteLine("  [STATE] " + phases[phase] + " | elapsed " + elapsed.ToString(@"mm\:ss"), ConsoleColor.DarkCyan);
+                        nextStatus = DateTime.UtcNow.AddSeconds(1);
+                    }
                 }
-                Console.WriteLine();
+                logOffset = ShowNewLogLines(logPath, logOffset);
                 WriteLine("  [PROC] Installation process finished", ConsoleColor.Cyan);
                 if (installer.ExitCode != 0)
                 {
@@ -180,6 +184,35 @@ internal static class TronBootstrap
         catch (Exception error)
         {
             WriteLine("  [LOG ] Unable to read installer log: " + error.Message, ConsoleColor.DarkYellow);
+        }
+    }
+
+    private static long ShowNewLogLines(string logPath, long offset)
+    {
+        try
+        {
+            if (!File.Exists(logPath)) return offset;
+            using (FileStream stream = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                if (stream.Length < offset) offset = 0;
+                stream.Seek(offset, SeekOrigin.Begin);
+                using (StreamReader reader = new StreamReader(stream, Encoding.Default, false, 1024, true))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (line.Trim().Length > 0)
+                        {
+                            WriteLine("  [NSIS] " + line, ConsoleColor.DarkGray);
+                        }
+                    }
+                    return stream.Position;
+                }
+            }
+        }
+        catch
+        {
+            return offset;
         }
     }
 
