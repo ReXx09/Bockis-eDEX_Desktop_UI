@@ -106,8 +106,8 @@ internal static class TronBootstrap
             {
                 FileName = payloadPath,
                 Arguments = "/S /LOG=\"" + logPath + "\" /D=\"" + installPath + "\"",
-                UseShellExecute = false,
-                CreateNoWindow = true
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetTempPath()
             }))
             {
                 string[] frames = { "|", "/", "-", "\\" };
