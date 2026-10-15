@@ -21,6 +21,49 @@ section#boot_screen.center {
     justify-content: center;
 }
 
+section#boot_screen.brand_boot {
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    background: radial-gradient(circle at center, rgba(var(--color_r), var(--color_g), var(--color_b), 0.08), transparent 48%), rgb(2, 8, 14);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+}
+
+section#boot_screen.brand_boot .brand_logo {
+    width: min(34vh, 34vw);
+    height: min(34vh, 34vw);
+    object-fit: contain;
+    filter: drop-shadow(0 0 1.6vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.8));
+    animation: brandLogoIn 700ms ease-out both;
+}
+
+section#boot_screen.brand_boot .brand_name {
+    margin-top: 1.2vh;
+    font-family: var(--font_main);
+    font-size: 2.2vh;
+    letter-spacing: 0.35vh;
+    text-shadow: 0 0 1vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.85);
+    animation: brandTextIn 500ms 220ms ease-out both;
+}
+
+section#boot_screen.brand_boot .brand_status {
+    margin-top: 1.3vh;
+    font-size: 1.25vh;
+    opacity: 0.75;
+    animation: brandTextIn 500ms 360ms ease-out both;
+}
+
+@keyframes brandLogoIn {
+    from { opacity: 0; transform: scale(0.86); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes brandTextIn {
+    from { opacity: 0; transform: translateY(0.8vh); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 section#boot_screen h1 {
     font-family: var(--font_main);
     font-size: 10vh;

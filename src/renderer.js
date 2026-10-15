@@ -1912,9 +1912,19 @@ function makeInteractive(el, opts) {
 }
 
 async function boot() {
-  document.getElementById("boot_screen")?.remove();
+  const bootScreen = document.getElementById("boot_screen");
+  if (bootScreen) {
+    bootScreen.className = "brand_boot";
+    bootScreen.innerHTML = `
+      <img class="brand_logo" src="assets/misc/bockis-logo.png" alt="ReXx eDEX">
+      <div class="brand_name">BOCKIS-eDEX DESKTOP UI</div>
+      <div class="brand_status">INITIALIZING TRON WORKSPACE...</div>
+    `;
+  }
   applyTheme(state.theme || state.bootstrap?.theme, state.settings.wallpaper || "grid");
   document.documentElement.dataset.ramGaugeMode = ramGaugeMode();
+  await new Promise((resolve) => setTimeout(resolve, 900));
+  bootScreen?.remove();
 }
 
 function styleFromBox(box) {
