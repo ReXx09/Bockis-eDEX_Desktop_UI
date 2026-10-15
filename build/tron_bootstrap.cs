@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using Microsoft.Win32;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -85,6 +86,7 @@ internal static class TronBootstrap
         WriteLine("  [ OK ] Overlay notice accepted", ConsoleColor.DarkCyan);
         WriteLine("  [ OK ] Install path: " + installPath, ConsoleColor.DarkCyan);
         WriteLine("  [ OK ] Rainmeter: " + (installRainmeter ? "enabled" : "disabled"), ConsoleColor.DarkCyan);
+        RunDependencyScan();
 
         string payloadPath = Path.Combine(Path.GetTempPath(), "Bockis-eDEX-Setup-Payload-" + Guid.NewGuid().ToString("N") + ".exe");
         string logPath = Path.Combine(Path.GetTempPath(), "Bockis-eDEX-Setup-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".log");
@@ -186,6 +188,128 @@ internal static class TronBootstrap
         catch (Exception error)
         {
             WriteLine("  [LOG ] Unable to read installer log: " + error.Message, ConsoleColor.DarkYellow);
+        }
+    }
+
+    private static void RunDependencyScan()
+    {
+        WriteLine("", ConsoleColor.DarkGray);
+        WriteLine("  [SCAN] Checking Windows runtime dependencies", ConsoleColor.Cyan);
+
+        if (!Environment.Is64BitOperatingSystem)
+        {
+            WriteLine("  [FAIL] A 64-bit Windows installation is required.", ConsoleColor.Red);
+            throw new InvalidOperationException("64-bit Windows is required.");
+        }
+        WriteLine("  [DEP ] Windows x64 detected", ConsoleColor.DarkCyan);
+
+        string systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        string powershell = Path.Combine(systemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+        if (File.Exists(powershell))
+        {
+            WriteLine("  [DEP ] Windows PowerShell detected", ConsoleColor.DarkCyan);
+        }
+        else
+        {
+            WriteLine("  [WARN] Windows PowerShell was not found; terminal features may be limited.", ConsoleColor.DarkYellow);
+        }
+
+        int build = GetWindowsBuildNumber();
+        if (build >= 17763)
+        {
+            WriteLine("  [DEP ] ConPTY-compatible Windows build detected: " + build, ConsoleColor.DarkCyan);
+        }
+        else
+        {
+            WriteLine("  [WARN] Windows build " + build + " is older than the supported ConPTY baseline.", ConsoleColor.DarkYellow);
+        }
+
+        string vcRuntime = Path.Combine(systemDirectory, "VCRUNTIME140.dll");
+        string vcRuntimeUwp = Path.Combine(systemDirectory, "VCRUNTIME140_1.dll");
+        if (File.Exists(vcRuntime) && File.Exists(vcRuntimeUwp))
+        {
+            WriteLine("  [DEP ] Microsoft Visual C++ runtime detected", ConsoleColor.DarkCyan);
+            return;
+        }
+
+        WriteLine("  [WARN] Microsoft Visual C++ runtime is missing", ConsoleColor.DarkYellow);
+        string winget = FindExecutable("winget.exe");
+        if (winget.Length == 0)
+        {
+            WriteLine("  [WARN] winget is unavailable; continuing without runtime installation", ConsoleColor.DarkYellow);
+            return;
+        }
+
+        WriteLine("  [DEP ] Installing Microsoft Visual C++ runtime via winget", ConsoleColor.Cyan);
+        int exitCode = RunDependencyInstaller(winget,
+            "install --id Microsoft.VCRedist.2015+.x64 --exact --silent --accept-source-agreements --accept-package-agreements");
+        if (exitCode == 0 && File.Exists(vcRuntime) && File.Exists(vcRuntimeUwp))
+        {
+            WriteLine("  [ OK ] Microsoft Visual C++ runtime installed", ConsoleColor.DarkCyan);
+        }
+        else
+        {
+            WriteLine("  [WARN] VC++ runtime installation could not be confirmed; continuing", ConsoleColor.DarkYellow);
+        }
+    }
+
+    private static string FindExecutable(string name)
+    {
+        string path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (string directory in path.Split(Path.PathSeparator))
+        {
+            if (directory.Length == 0) continue;
+            string candidate = Path.Combine(directory.Trim(), name);
+            if (File.Exists(candidate)) return candidate;
+        }
+        return string.Empty;
+    }
+
+    private static int GetWindowsBuildNumber()
+    {
+        try
+        {
+            using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+            {
+                if (key != null)
+                {
+                    string value = key.GetValue("CurrentBuildNumber") as string;
+                    int build;
+                    if (int.TryParse(value, out build)) return build;
+                }
+            }
+        }
+        catch
+        {
+            // Fall back to the process-reported version when registry access is restricted.
+        }
+        return Environment.OSVersion.Version.Build;
+    }
+
+    private static int RunDependencyInstaller(string executable, string arguments)
+    {
+        using (Process process = Process.Start(new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = arguments,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        }))
+        {
+            process.OutputDataReceived += (_, eventArgs) =>
+            {
+                if (!string.IsNullOrWhiteSpace(eventArgs.Data)) WriteLine("  [WINGET] " + eventArgs.Data, ConsoleColor.DarkGray);
+            };
+            process.ErrorDataReceived += (_, eventArgs) =>
+            {
+                if (!string.IsNullOrWhiteSpace(eventArgs.Data)) WriteLine("  [WINGET] " + eventArgs.Data, ConsoleColor.DarkYellow);
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            process.WaitForExit();
+            return process.ExitCode;
         }
     }
 
