@@ -53,10 +53,24 @@ Write-Tron '  [HUD ] Starting desktop interface ...'
 Write-Tron '' [ConsoleColor]::DarkGray
 
 try {
-    $process = Start-Process -FilePath $app -WorkingDirectory (Split-Path $app) -PassThru
+    $runtimeLog = Join-Path $env:TEMP ('Bockis-eDEX-runtime-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+    $runtimeErrorLog = $runtimeLog + '.err'
+    Write-Tron ('  [LOG ] Runtime output: ' + $runtimeLog) [ConsoleColor]::DarkGray
+    $process = Start-Process -FilePath $app -WorkingDirectory (Split-Path $app) -PassThru `
+        -RedirectStandardOutput $runtimeLog -RedirectStandardError $runtimeErrorLog
     Write-Tron '  [ OK ] GUI process active' [ConsoleColor]::Cyan
     Write-Tron '  [WAIT] Console remains linked until GUI shutdown' [ConsoleColor]::DarkGray
     Wait-Process -Id $process.Id
+    if (Test-Path -LiteralPath $runtimeLog) {
+        Get-Content -LiteralPath $runtimeLog -Tail 80 | ForEach-Object {
+            Write-Tron ('  [GUI ] ' + $_) [ConsoleColor]::DarkGray
+        }
+    }
+    if (Test-Path -LiteralPath $runtimeErrorLog) {
+        Get-Content -LiteralPath $runtimeErrorLog -Tail 80 | ForEach-Object {
+            Write-Tron ('  [ERR ] ' + $_) [ConsoleColor]::Red
+        }
+    }
 } catch {
     Write-Tron ('  [FAIL] ' + $_.Exception.Message) [ConsoleColor]::Red
     Pause-Tron 'Press Enter to close'
