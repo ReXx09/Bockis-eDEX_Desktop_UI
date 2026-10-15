@@ -147,8 +147,26 @@ npm test
 - Releases: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases
 - Aktueller Release: `v1.2.4`
 
+### winget
+
+Das Repository enthält unter `manifests/` ein vorbereitetes winget-Manifest
+für `ReXx09.Bockis-eDEXDesktopUI`. Sobald das Repository öffentlich ist und
+das Release-Asset erreichbar ist, kann das Paket lokal geprüft und installiert
+werden:
+
+```powershell
+winget validate .\manifests\ReXx09\Bockis-eDEXDesktopUI\1.2.4
+winget install --id ReXx09.Bockis-eDEXDesktopUI --source winget
+```
+
+Das Manifest verweist auf das Release-Asset, enthält dessen SHA-256-Prüfsumme
+und kennzeichnet das Projekt als GPL-3.0-Weiterentwicklung des ursprünglichen
+[eDEX Desktop Organizer](https://github.com/bananamax9113/edex-desktop-organizer).
+
 ## Lizenz und Quellen
 
-- Dieses Tool verwendet die visuelle Gestaltung und Teile der Frontend-Ressourcen von eDEX-UI (GPL-3.0).
+- Dieses Tool ist eine GPL-3.0-Weiterentwicklung auf Basis von [eDEX Desktop Organizer](https://github.com/bananamax9113/edex-desktop-organizer).
+- Die visuelle Gestaltung und Teile der Frontend-Ressourcen stammen aus eDEX-UI: https://github.com/GitSquared/edex-ui
 - Themes und Modul-Stile orientieren sich an `src/assets` und dem originalen eDEX-CSS.
 - Ergänzende Informationen zur Farbgestaltung stehen in [`tron-theme.md`](tron-theme.md).
+- Vollständige Quellen- und Lizenzhinweise stehen in [`NOTICE.md`](NOTICE.md).

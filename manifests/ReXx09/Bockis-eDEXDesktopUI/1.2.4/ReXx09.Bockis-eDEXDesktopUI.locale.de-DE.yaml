@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
+PackageIdentifier: ReXx09.Bockis-eDEXDesktopUI
+PackageVersion: 1.2.4
+PackageLocale: de-DE
+Publisher: ReXx09
+PublisherUrl: https://github.com/ReXx09
+PublisherSupportUrl: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/issues
+Author: ReXx09
+PackageName: Bockis-eDEX Desktop UI
+PackageUrl: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI
+License: GPL-3.0
+LicenseUrl: https://www.gnu.org/licenses/gpl-3.0.html
+Copyright: Copyright 2026 ReXx09; Weiterentwicklung auf Basis von eDEX Desktop Organizer by bananamax9113
+ShortDescription: TRON-inspirierte Windows-Desktop-UI auf Basis des eDEX-Desktop-Organizer-Projekts.
+Description: |-
+  Bockis-eDEX Desktop UI ist eine Windows-Desktop-Oberflaeche mit mehreren Monitoren, HUD-Panels, echtem PowerShell-ConPTY-Terminal, Netzwerk- und Systemanzeigen sowie optionaler Rainmeter-Integration.
+  Das Projekt ist eine weiterentwickelte Fassung von eDEX Desktop Organizer und verwendet die visuelle Sprache sowie Teile der Panel-Struktur von eDEX-UI.
+  Originalprojekt: https://github.com/bananamax9113/edex-desktop-organizer
+  Aktuelle Quelle: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI
+ReleaseNotesUrl: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases/tag/v1.2.4
+Tags:
+- edex
+- desktop
+- hud
+- terminal
+- tron
+- rainmeter
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0

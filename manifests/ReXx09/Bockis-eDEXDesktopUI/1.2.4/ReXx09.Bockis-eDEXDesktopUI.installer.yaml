@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
+PackageIdentifier: ReXx09.Bockis-eDEXDesktopUI
+PackageVersion: 1.2.4
+InstallerType: exe
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases/download/v1.2.4/Bockis-eDEX-Desktop-UI-Setup-1.2.4.exe
+  InstallerSha256: 1449BE576426AB51AB579DF733F6EED0E594509A5596B6604BC4DDEBB4F38729
+  InstallerSwitches:
+    Silent: /S
+    SilentWithProgress: /S
+ManifestType: installer
+ManifestVersion: 1.10.0

@@ -18,6 +18,7 @@
     "rebuild-native": "electron-rebuild -f -w node-pty",
     "predist": "npm run rebuild-native && node scripts/prepare-assets.js && node scripts/prepare-rainmeter.js",
     "dist": "electron-builder --win nsis --x64",
+    "postdist": "node scripts/build-tron-installer.js",
     "dist:dir": "electron-builder --win dir --x64"
   },
   "license": "GPL-3.0",

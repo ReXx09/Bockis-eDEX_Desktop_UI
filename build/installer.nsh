@@ -62,9 +62,17 @@ FunctionEnd
   CreateShortCut "$DESKTOP\Bockis-eDEX Desktop UI.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\start-tron.ps1" -AppPath "$INSTDIR\Bockis-eDEX Desktop UI.exe"' "$INSTDIR\Bockis-eDEX Desktop UI.exe" 0 SW_SHOWNORMAL
   CreateDirectory "$SMPROGRAMS\Bockis-eDEX Desktop UI"
   CreateShortCut "$SMPROGRAMS\Bockis-eDEX Desktop UI\Bockis-eDEX Desktop UI.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\start-tron.ps1" -AppPath "$INSTDIR\Bockis-eDEX Desktop UI.exe"' "$INSTDIR\Bockis-eDEX Desktop UI.exe" 0 SW_SHOWNORMAL
-  ${If} $EDEXRainmeter == ${BST_CHECKED}
-    File /oname=$PLUGINSDIR\Rainmeter-Setup.exe "${BUILD_RESOURCES_DIR}\Rainmeter-Setup.exe"
-    ExecWait '"$PLUGINSDIR\Rainmeter-Setup.exe" /S'
+  ${If} ${Silent}
+    ReadEnvStr $0 EDEX_INSTALL_RAINMETER
+    ${If} $0 == "1"
+      File /oname=$PLUGINSDIR\Rainmeter-Setup.exe "${BUILD_RESOURCES_DIR}\Rainmeter-Setup.exe"
+      ExecWait '"$PLUGINSDIR\Rainmeter-Setup.exe" /S'
+    ${EndIf}
+  ${Else}
+    ${If} $EDEXRainmeter == ${BST_CHECKED}
+      File /oname=$PLUGINSDIR\Rainmeter-Setup.exe "${BUILD_RESOURCES_DIR}\Rainmeter-Setup.exe"
+      ExecWait '"$PLUGINSDIR\Rainmeter-Setup.exe" /S'
+    ${EndIf}
   ${EndIf}
 !macroend
 
