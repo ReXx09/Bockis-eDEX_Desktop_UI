@@ -106,7 +106,7 @@ internal static class TronBootstrap
             using (Process installer = Process.Start(new ProcessStartInfo
             {
                 FileName = payloadPath,
-                Arguments = "/S /LOG=\"" + logPath + "\" /D=\"" + installPath + "\"",
+                Arguments = "/S /LOG=" + logPath + " /D=" + installPath,
                 UseShellExecute = true,
                 WorkingDirectory = Path.GetTempPath()
             }))
@@ -139,9 +139,11 @@ internal static class TronBootstrap
                 }
                 logOffset = ShowNewLogLines(logPath, logOffset);
                 WriteLine("  [PROC] Installation process finished", ConsoleColor.Cyan);
-                if (installer.ExitCode != 0)
+                string installedExe = Path.Combine(installPath, "Bockis-eDEX Desktop UI.exe");
+                if (installer.ExitCode != 0 || !File.Exists(installedExe))
                 {
-                    WriteLine("  [FAIL] NSIS installer exit code: " + installer.ExitCode, ConsoleColor.Red);
+                    WriteLine("  [FAIL] Installation incomplete. NSIS exit code: " + installer.ExitCode, ConsoleColor.Red);
+                    WriteLine("  [FAIL] Expected application file: " + installedExe, ConsoleColor.Red);
                     WriteLine("  [LOG ] Saved installer log: " + logPath, ConsoleColor.DarkYellow);
                     ShowLogTail(logPath);
                     WaitForClose();

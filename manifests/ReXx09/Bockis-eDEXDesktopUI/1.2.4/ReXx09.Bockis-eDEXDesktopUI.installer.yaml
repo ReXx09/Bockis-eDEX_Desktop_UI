@@ -5,7 +5,7 @@ InstallerType: exe
 Installers:
 - Architecture: x64
   InstallerUrl: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases/download/v1.2.4/Bockis-eDEX-Desktop-UI-Setup-1.2.4.exe
-  InstallerSha256: FA1ACD7C6FDFA2E6DB9B64A02B0542A9ABE7A57B25ABD99EFE46AB5872515C94
+  InstallerSha256: 790805BB3913B7DADD4585FAB3096E8DACAA855D69EF133F79AEFEBA1127DD41
   InstallerSwitches:
     Silent: /S
     SilentWithProgress: /S

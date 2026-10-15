@@ -65,6 +65,10 @@ try {
 
 Beep-Tron 660 80
 Write-Tron '' [ConsoleColor]::DarkGray
-Write-Tron '  [HALT] GUI process ended' [ConsoleColor]::Cyan
-Write-Tron '  [DONE] TRON system console shutting down' [ConsoleColor]::Cyan
-Start-Sleep -Milliseconds 350
+if ($process.ExitCode -eq 0) {
+    Write-Tron '  [HALT] GUI process ended with exit code 0' [ConsoleColor]::Yellow
+} else {
+    Write-Tron ('  [FAIL] GUI process ended with exit code ' + $process.ExitCode) [ConsoleColor]::Red
+}
+Write-Tron '  [LOG ] The GUI closed before the TRON console was closed.' [ConsoleColor]::DarkYellow
+Pause-Tron 'Press Enter to close'

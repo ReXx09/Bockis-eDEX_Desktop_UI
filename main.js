@@ -586,9 +586,10 @@ if (!gotLock) {
 
   app.on("window-all-closed", () => {
     if (syncing || quitting) return;
-    // Keep alive briefly during display reconfiguration races.
+    console.warn(`[edex] window-all-closed windows=${windows.size}; keeping tray process alive`);
+    // Display embedding can briefly close every overlay during startup or reconfiguration.
     setTimeout(() => {
-      if (windows.size === 0 && !syncing) app.quit();
+      if (!quitting && windows.size === 0 && !syncing) syncAllWindows();
     }, 400);
   });
 }
