@@ -9,6 +9,7 @@ const installer = path.join(dist, `Bockis-eDEX-Desktop-UI-Setup-${version}.exe`)
 const payload = `${installer}.payload.exe`;
 const blockmap = `${installer}.blockmap`;
 const bootstrapSource = path.join(root, 'build', 'tron_bootstrap.cs');
+const bootstrapManifest = path.join(root, 'build', 'tron_bootstrap.manifest');
 const icon = path.join(root, 'build', 'icon.ico');
 const cscCandidates = [
   path.join(process.env.SystemRoot, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
@@ -31,6 +32,7 @@ try {
     bootstrapSource
   ];
   if (fs.existsSync(icon)) args.unshift(`/win32icon:${icon}`);
+  if (fs.existsSync(bootstrapManifest)) args.unshift(`/win32manifest:${bootstrapManifest}`);
 
   const result = spawnSync(csc, args, { stdio: 'inherit' });
   if (result.status !== 0) throw new Error(`csc failed with exit code ${result.status}`);
