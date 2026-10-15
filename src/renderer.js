@@ -29,7 +29,8 @@ const DEFAULT_WIDGETS_PRIMARY = {
   calendar: { x: 66, y: 2, w: 15, h: 38 },
   drives: { x: 66, y: 42, w: 15, h: 38 },
   filesearch: { x: 18, y: 82, w: 47, h: 16 },
-  dock: { x: 25, y: 94, w: 50, h: 6, locked: true }
+  dock: { x: 25, y: 94, w: 50, h: 6, locked: true },
+  taskdock: { x: 25, y: 86, w: 50, h: 7 }
 };
 
 // Plugins only default on primary — secondary starts empty.
@@ -58,7 +59,8 @@ const PANEL_META = {
   calculator: { title: "Rechner", icon: "calculator", box: { x: 40, y: 18, w: 18, h: 48 } },
   autostart: { title: "Autostart", icon: "processes", box: { x: 20, y: 28, w: 42, h: 36 } },
   log: { title: "Log", box: { x: 52, y: 42, w: 29, h: 38 } },
-  dock: { title: "Dock", box: { x: 25, y: 94, w: 50, h: 6 } }
+  dock: { title: "Dock", box: { x: 25, y: 94, w: 50, h: 6 } },
+  taskdock: { title: "Task-Dock", box: { x: 25, y: 86, w: 50, h: 7 } }
 };
 
 const MACOS_TAGS = [
@@ -327,7 +329,12 @@ function panelBody(id) {
         <div id="mod_globe">
           <div id="mod_globe_innercontainer">
             <div class="globe-meta"><i class="mod_globe_headerInfo">0.0000, 0.0000</i></div>
+            <div class="globe-view-switch" role="group" aria-label="Ansicht">
+              <button type="button" class="globe-filter on" data-globe-view="globe">GLOBE</button>
+              <button type="button" class="globe-filter" data-globe-view="list">LISTE</button>
+            </div>
             <div id="mod_globe_canvas_placeholder"></div>
+            <div class="globe-connections-list" hidden></div>
             <div class="globe-filters" role="group" aria-label="Verbindungsfilter">
               <button type="button" class="globe-filter on" data-globe-filter="world">WORLD</button>
               <button type="button" class="globe-filter" data-globe-filter="outgoing">OUT</button>
@@ -435,7 +442,9 @@ function panelBody(id) {
           <div class="autostart-list" data-autostart-list></div>
         </div>`;
     case "dock":
-      return window.dockPanel?.bodyHtml?.() || `<div class="path-empty">底部 Dock 模組未載入</div>`;
+      return window.dockPanel?.bodyHtml?.() || `<div class="path-empty">Dock-Modul nicht geladen</div>`;
+    case "taskdock":
+      return `<div id="task-dock-panel" class="task-dock-panel"><div class="task-dock-shell"></div><div class="dock-items task-dock-items" data-task-dock-items aria-label="Windows-Taskleistenverknüpfungen"></div></div>`;
     default:
       return "";
   }
@@ -1194,6 +1203,82 @@ function workspaceRect() {
   };
 }
 
+function panelZoneMode(el) {
+  const id = el?.dataset?.panelId;
+  return id && state.layout[id]?.zone === "edge" ? "edge" : "workspace";
+}
+
+function centralZoneRect() {
+  const ws = workspaceRect();
+  const margins = state.settings.windowZoneMargins || {};
+  const left = ws.width * Math.max(0, Math.min(45, Number(margins.left) || 0)) / 100;
+  const top = ws.height * Math.max(0, Math.min(45, Number(margins.top) || 0)) / 100;
+  const right = ws.width * (1 - Math.max(0, Math.min(45, Number(margins.right) || 0)) / 100);
+  const bottom = ws.height * (1 - Math.max(0, Math.min(45, Number(margins.bottom) || 0)) / 100);
+  return {
+    x: left,
+    y: top,
+    width: Math.max(40, right - left),
+    height: Math.max(40, bottom - top)
+  };
+}
+
+function panelZoneRect(el) {
+  const ws = workspaceRect();
+  if (panelZoneMode(el) === "edge" || state.settings.windowZoneEnabled === false) {
+    return { x: 0, y: 0, width: ws.width, height: ws.height };
+  }
+  return centralZoneRect();
+}
+
+function constrainPanelPosition(el, x, y, w, h) {
+  const ws = workspaceRect();
+  if (state.settings.windowZoneEnabled === false) {
+    return {
+      x: Math.max(0, Math.min(ws.width - w, x)),
+      y: Math.max(0, Math.min(ws.height - h, y))
+    };
+  }
+  if (panelZoneMode(el) === "workspace") {
+    const zone = centralZoneRect();
+    return {
+      x: Math.max(zone.x, Math.min(zone.x + zone.width - w, x)),
+      y: Math.max(zone.y, Math.min(zone.y + zone.height - h, y))
+    };
+  }
+  const central = centralZoneRect();
+  const candidates = [
+    { x: 0, y: Math.max(0, Math.min(ws.height - h, y)) },
+    { x: Math.max(0, ws.width - w), y: Math.max(0, Math.min(ws.height - h, y)) },
+    { x: Math.max(0, Math.min(ws.width - w, x)), y: 0 },
+    { x: Math.max(0, Math.min(ws.width - w, x)), y: Math.max(0, ws.height - h) }
+  ];
+  const overlapsCentral = (candidate) => (
+    candidate.x < central.x + central.width
+    && candidate.x + w > central.x
+    && candidate.y < central.y + central.height
+    && candidate.y + h > central.y
+  );
+  const valid = candidates.filter((candidate) => !overlapsCentral(candidate));
+  return (valid.length ? valid : candidates).sort(
+    (a, b) => ((a.x - x) ** 2 + (a.y - y) ** 2) - ((b.x - x) ** 2 + (b.y - y) ** 2)
+  )[0];
+}
+
+function clampPanelToZone(el) {
+  const id = el?.dataset?.panelId;
+  if (!id || !state.layout[id]) return false;
+  const box = boxToPx(state.layout[id]);
+  const position = constrainPanelPosition(el, box.x, box.y, box.w, box.h);
+  const x = alignGrid(position.x);
+  const y = alignGrid(position.y);
+  if (x === box.x && y === box.y) return false;
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  applyBoxPx(state.layout[id], x, y, box.w, box.h);
+  return true;
+}
+
 function vw(px) {
   const den = layoutProfile().w * layoutFitScale();
   return den > 0 ? (px / den) * 100 : 0;
@@ -1509,6 +1594,7 @@ function itemLabel(item) {
 
 function currentDisplayLayout() {
   return {
+    displayIndex: state.displayIndex,
     layout: state.layout,
     desktopStage: state.desktopStage,
     desktopEnabled: state.desktopEnabled !== false,
@@ -1554,6 +1640,60 @@ function clearSnapGuides() {
   if (!box) return;
   box.classList.remove("on");
   box.innerHTML = "";
+  const zone = document.getElementById("zone-overlay");
+  if (zone) {
+    zone.classList.remove("on");
+    zone.classList.remove("edge");
+  }
+}
+
+function showPanelZone(el) {
+  const overlay = document.getElementById("zone-overlay");
+  if (!overlay) return;
+  const edge = panelZoneMode(el) === "edge" && state.settings.windowZoneEnabled !== false;
+  const zone = edge ? centralZoneRect() : panelZoneRect(el);
+  overlay.classList.toggle("edge", edge);
+  overlay.classList.add("on");
+  overlay.style.left = `${zone.x}px`;
+  overlay.style.top = `${zone.y}px`;
+  overlay.style.width = `${zone.width}px`;
+  overlay.style.height = `${zone.height}px`;
+}
+
+function showWindowZonePreview(settingsModal) {
+  const overlay = document.getElementById("zone-overlay");
+  const guides = document.getElementById("snap-guides");
+  if (!overlay || !guides) return;
+  const enabled = Boolean(settingsModal.querySelector("#set-window-zone-enabled")?.checked);
+  if (!enabled) {
+    overlay.classList.remove("on", "edge", "preview");
+    guides.classList.remove("on");
+    return;
+  }
+  const readMargin = (id, fallback) => {
+    const value = Number(settingsModal.querySelector(id)?.value);
+    return Number.isFinite(value) ? Math.max(0, Math.min(45, value)) : fallback;
+  };
+  const ws = workspaceRect();
+  const left = ws.width * readMargin("#set-zone-left", 18) / 100;
+  const top = ws.height * readMargin("#set-zone-top", 8) / 100;
+  const right = ws.width * (1 - readMargin("#set-zone-right", 18) / 100);
+  const bottom = ws.height * (1 - readMargin("#set-zone-bottom", 8) / 100);
+  const zone = {
+    x: left,
+    y: top,
+    width: Math.max(40, right - left),
+    height: Math.max(40, bottom - top)
+  };
+  overlay.classList.remove("edge");
+  overlay.classList.add("on", "preview");
+  overlay.style.left = `${zone.x}px`;
+  overlay.style.top = `${zone.y}px`;
+  overlay.style.width = `${zone.width}px`;
+  overlay.style.height = `${zone.height}px`;
+  guides.classList.add("on");
+  const grid = gridSize();
+  guides.style.backgroundSize = `${grid}px ${grid}px`;
 }
 
 function showSnapGuides(guides) {
@@ -1706,8 +1846,9 @@ function magneticSnap(el, x, y, w, h, pointer) {
     }
   }
 
-  if (!(nearLeft || nearRight)) nextX = Math.max(0, Math.min(alignGrid(ws.width - w), nextX));
-  if (!(nearTop || nearBottom)) nextY = Math.max(0, Math.min(alignGrid(ws.height - h), nextY));
+  const constrained = constrainPanelPosition(el, nextX, nextY, w, h);
+  nextX = constrained.x;
+  nextY = constrained.y;
   nextX = alignGrid(nextX);
   nextY = alignGrid(nextY);
   if (!(nearLeft || nearRight || nearTop || nearBottom)) {
@@ -1717,6 +1858,9 @@ function magneticSnap(el, x, y, w, h, pointer) {
     });
     nextX = resolved.x;
     nextY = resolved.y;
+    const reclamped = constrainPanelPosition(el, nextX, nextY, w, h);
+    nextX = alignGrid(reclamped.x);
+    nextY = alignGrid(reclamped.y);
   }
   guides.push(
     { type: "v", pos: nextX, match: true },
@@ -1734,6 +1878,7 @@ function gridMinSize(px) {
 
 function magneticResize(el, w, h, left, top, minWPx, minHPx) {
   const { edgesX, edgesY, gap, ws } = collectSnapTargets(el);
+  const zone = panelZoneRect(el);
   const g = gridSize();
   const threshold = g * 0.55;
   const minW = gridMinSize(minWPx || g * 2);
@@ -1763,8 +1908,8 @@ function magneticResize(el, w, h, left, top, minWPx, minHPx) {
   let nextH = Math.max(minH, bottom - top);
   nextW = alignGridSpan(nextW, gridCells(minW));
   nextH = alignGridSpan(nextH, gridCells(minH));
-  const maxW = alignGridSpan(Math.max(minW, snapExclusiveEdge(ws.width) - left), gridCells(minW));
-  const maxH = alignGridSpan(Math.max(minH, snapExclusiveEdge(ws.height) - top), gridCells(minH));
+  const maxW = alignGridSpan(Math.max(minW, snapExclusiveEdge(zone.x + zone.width) - left), gridCells(minW));
+  const maxH = alignGridSpan(Math.max(minH, snapExclusiveEdge(zone.y + zone.height) - top), gridCells(minH));
   nextW = Math.min(maxW, nextW);
   nextH = Math.min(maxH, nextH);
   const clamped = clampResizeNoOverlap(el, left, top, nextW, nextH, minW, minH);
@@ -1793,6 +1938,7 @@ function makeInteractive(el, opts) {
     if (isCardLocked(el)) return;
     event.preventDefault();
     el.classList.add("dragging");
+    showPanelZone(el);
     el.style.zIndex = String(++state.zTop);
     const startX = event.clientX;
     const startY = event.clientY;
@@ -1861,6 +2007,7 @@ function makeInteractive(el, opts) {
       window.edex?.setMouseIgnore?.(false);
       el.style.zIndex = String(++state.zTop);
       el.classList.add("dragging");
+      showPanelZone(el);
       document.body.classList.add("is-card-dragging");
       const startX = event.clientX;
       const startY = event.clientY;
@@ -1961,6 +2108,8 @@ const PANEL_ICON_CHOICES = [
   { id: "drive", label: "Laufwerk" },
   { id: "folders", label: "Ordner" },
   { id: "search", label: "Suche" },
+  { id: "browser", label: "Browser" },
+  { id: "cloud", label: "Cloud" },
   { id: "terminal", label: "Terminal" },
   { id: "weather", label: "Wetter" },
   { id: "processes", label: "Prozesse" }
@@ -1989,9 +2138,6 @@ function renderDockItems() {
   const host = document.querySelector("[data-dock-items]");
   if (!host) return;
   const items = [];
-  taskbarDockItems.forEach((item) => {
-    items.push({ kind: "taskbar", id: item.id, label: item.name, path: item.path, iconDataUrl: item.iconDataUrl });
-  });
   Object.keys(PANEL_META).forEach((id) => {
     if (id !== "dock" && state.layout[id]?.minimized) {
       items.push({ kind: "panel", id, label: PANEL_META[id].title });
@@ -2015,10 +2161,7 @@ function renderDockItems() {
       const kind = button.dataset.dockKind;
       const id = button.dataset.dockRestore;
       if (!id) return;
-      if (kind === "taskbar") {
-        const target = button.dataset.dockTaskbarPath;
-        if (target) await window.edex?.openPath?.(target);
-      } else if (kind === "panel" && state.layout[id]) {
+      if (kind === "panel" && state.layout[id]) {
         state.layout[id] = { ...state.layout[id], minimized: false };
       } else if (kind === "desktop" && state.desktopStage) {
         state.desktopStage = { ...state.desktopStage, minimized: false };
@@ -2034,6 +2177,41 @@ function renderDockItems() {
       persistLayout();
       rebuildWorkspace();
     });
+  });
+  renderTaskDockItems();
+  loadTaskbarDockItems();
+}
+
+function renderTaskDockItems() {
+  const host = document.querySelector("[data-task-dock-items]");
+  if (!host) return;
+  const root = host.closest("#task-dock-panel");
+  const card = host.closest(".hud-card");
+  if (card) card.hidden = taskbarDockItems.length === 0;
+  if (root) root.hidden = false;
+  host.innerHTML = taskbarDockItems.map((item) => `
+    <button type="button" class="dock-item" data-task-dock-path="${escapeHtml(item.path || "")}" title="${escapeHtml(item.name)}">
+      ${item.iconDataUrl ? `<img class="dock-item-icon dock-item-icon-image" src="${escapeHtml(item.iconDataUrl)}" alt="" draggable="false">` : `<span class="dock-item-icon dock-item-icon-fallback" aria-hidden="true"></span>`}
+      <span class="dock-item-label">${escapeHtml(item.name)}</span>
+    </button>`).join("");
+  window.edexI18n?.translatePage?.(host);
+  host.querySelectorAll("[data-task-dock-path]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const target = button.dataset.taskDockPath;
+      if (target) await window.edex?.openPath?.(target);
+    });
+  });
+}
+
+function loadTaskbarDockItems() {
+  if (taskbarDockLoaded || !window.edex?.listTaskbarPinned) return;
+  taskbarDockLoaded = true;
+  window.edex.listTaskbarPinned().then((result) => {
+    taskbarDockItems = Array.isArray(result?.items) ? result.items : [];
+    renderTaskDockItems();
+  }).catch(() => {
+    taskbarDockItems = [];
+    renderTaskDockItems();
   });
 }
 
@@ -2169,12 +2347,12 @@ function pickClockLedColor(ctx) {
 }
 
 function fabBarHtml() {
-  const addBtn = `<button type="button" class="round-fab" id="add-fab" title="添加容器">+</button>`;
+  const addBtn = `<button type="button" class="round-fab" id="add-fab" title="Container hinzufügen">+</button>`;
   if (!state.primary) return addBtn;
   return `
     ${addBtn}
-    <button type="button" class="round-fab" id="settings-fab" title="設定">⚙</button>
-    <button type="button" class="round-fab danger" id="quit-fab" title="退出程式">⏻</button>
+    <button type="button" class="round-fab" id="settings-fab" title="Einstellungen">⚙</button>
+    <button type="button" class="round-fab danger" id="quit-fab" title="Programm beenden">⏻</button>
   `;
 }
 
@@ -2241,16 +2419,7 @@ function menuItemsForCard(kind, ctx) {
         }
       });
     });
-    if (!taskbarDockLoaded && window.edex?.listTaskbarPinned) {
-      taskbarDockLoaded = true;
-      window.edex.listTaskbarPinned().then((result) => {
-        taskbarDockItems = Array.isArray(result?.items) ? result.items : [];
-        renderDockItems();
-        window.dockPanel?.refresh?.(state);
-      }).catch(() => {
-        taskbarDockItems = [];
-      });
-    }
+    loadTaskbarDockItems();
   }
   if (kind === "panel" && ctx.widgetId === "clock") {
     const accent = rgbToHex(state.theme?.colors?.r, state.theme?.colors?.g, state.theme?.colors?.b);
@@ -2401,6 +2570,12 @@ function openPanelSetup(el) {
     : id === "path"
       ? "Ordner-Panel"
       : PANEL_META[id]?.title || id;
+  const currentPanelBg = id !== "desktop" && id !== "path" ? colorToFill(state.layout[id]?.bg) : "";
+  const bgChoices = [...themeColorSwatches(), { label: "Standard", color: "" }];
+  const bgOptions = bgChoices.map((item) => {
+    const color = colorToFill(item.color);
+    return `<option value="${escapeHtml(item.color || "__default__")}" ${color === currentPanelBg ? "selected" : ""}>${escapeHtml(item.label)}</option>`;
+  }).join("");
   const body = id === "clock"
     ? `
       <tr><td>Darstellung</td><td><select id="panel-clock-mode"><option value="digital">Digital</option><option value="analog">Analog</option></select></td></tr>
@@ -2427,17 +2602,23 @@ function openPanelSetup(el) {
       : id === "filesearch"
         ? `<tr><td>Schriftgröße</td><td><input id="panel-search-font" type="number" min="8" max="72" step="1"></td></tr>`
         : `<tr><td>Panel-Einstellungen</td><td>Für dieses Panel sind derzeit keine individuellen Optionen vorhanden.</td></tr>`;
+  const zoneSetup = PANEL_META[id]
+    ? `<tr><td>Positionierungszone</td><td><select id="panel-zone">
+        <option value="workspace" ${state.layout[id]?.zone !== "edge" ? "selected" : ""}>Skalierzone</option>
+        <option value="edge" ${state.layout[id]?.zone === "edge" ? "selected" : ""}>Randzone</option>
+      </select></td></tr>`
+    : "";
   const backgroundSetup = id !== "desktop" && id !== "path"
-    ? `<tr><td>Hintergrundfarbe</td><td><button type="button" id="panel-bg-picker">Farbe auswählen</button><span id="panel-bg-value" class="panel-bg-value"></span></td></tr>`
+    ? `<tr><td>Hintergrundfarbe</td><td><select id="panel-bg-select">${bgOptions}<option value="__custom__" ${currentPanelBg && !bgChoices.some((item) => colorToFill(item.color) === currentPanelBg) ? "selected" : ""}>Benutzerdefiniert</option></select><input id="panel-bg-custom" type="color" value="${escapeHtml(toHex6(currentPanelBg) || "#05080d")}" title="Benutzerdefinierte Farbe"></td></tr>`
     : "";
   const iconSetup = id !== "desktop" && id !== "path"
-    ? `<tr><td>Panel-Icon</td><td><div class="panel-icon-grid panel-setup-icon-grid">${PANEL_ICON_CHOICES.map((icon) => `<button type="button" class="panel-icon-choice${dockIcon("panel", id) === icon.id ? " on" : ""}" data-panel-setup-icon="${escapeHtml(icon.id)}" title="${escapeHtml(icon.label)}"><span class="dock-item-icon dock-item-icon-${escapeHtml(icon.id)}" aria-hidden="true"></span><small>${escapeHtml(icon.label)}</small></button>`).join("")}</div></td></tr>`
+    ? `<tr><td>Panel-Icon</td><td><select id="panel-icon-select">${PANEL_ICON_CHOICES.map((icon) => `<option value="${escapeHtml(icon.id)}" ${dockIcon("panel", id) === icon.id ? "selected" : ""}>${escapeHtml(icon.label)}</option>`).join("")}</select></td></tr>`
     : "";
   const modal = document.createElement("div");
   modal.className = "modal_popup info panel-setup-modal";
   modal.innerHTML = `
     <h1>${escapeHtml(title)} - Setup</h1>
-    <table><tr><th>Option</th><th>Wert</th></tr>${backgroundSetup}${iconSetup}${body}</table>
+    <table><tr><th>Option</th><th>Wert</th></tr>${zoneSetup}${backgroundSetup}${iconSetup}${body}</table>
     <div class="settings-footer">
       <button type="button" id="panel-setup-save">Speichern</button>
       <button type="button" id="panel-setup-close">Schließen</button>
@@ -2462,30 +2643,28 @@ function openPanelSetup(el) {
   if (ramMode) ramMode.value = state.settings.ramGaugeMode || "used";
   const searchFont = modal.querySelector("#panel-search-font");
   if (searchFont) searchFont.value = String(state.settings.searchFontSize || 12);
-  let selectedPanelIcon = id !== "desktop" && id !== "path" ? dockIcon("panel", id) : "";
-  const panelBgValue = modal.querySelector("#panel-bg-value");
-  const currentPanelBg = id !== "desktop" && id !== "path" ? colorToFill(state.layout[id]?.bg) : "";
-  if (panelBgValue) panelBgValue.textContent = currentPanelBg || "Standard";
-  modal.querySelector("#panel-bg-picker")?.addEventListener("click", () => pickCardBackground({
-    el,
-    getBg: () => state.layout[id]?.bg || "",
-    setBg: (color) => {
-      state.layout[id] = { ...state.layout[id], bg: color };
-      persistLayout();
-      if (panelBgValue) panelBgValue.textContent = colorToFill(color) || "Standard";
-    }
-  }));
-  modal.querySelectorAll("[data-panel-setup-icon]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectedPanelIcon = button.dataset.panelSetupIcon || selectedPanelIcon;
-      modal.querySelectorAll("[data-panel-setup-icon]").forEach((item) => item.classList.toggle("on", item.dataset.panelSetupIcon === selectedPanelIcon));
-    });
+  const panelZoneInput = modal.querySelector("#panel-zone");
+  const panelIconSelect = modal.querySelector("#panel-icon-select");
+  const panelBgSelect = modal.querySelector("#panel-bg-select");
+  const panelBgCustom = modal.querySelector("#panel-bg-custom");
+  panelBgCustom?.addEventListener("input", () => {
+    if (panelBgSelect) panelBgSelect.value = "__custom__";
   });
   modal.querySelector("#panel-setup-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#panel-setup-save")?.addEventListener("click", async () => {
     const patch = {};
+    const zoneChanged = Boolean(PANEL_META[id] && panelZoneInput && panelZoneInput.value !== (state.layout[id]?.zone === "edge" ? "edge" : "workspace"));
+    if (zoneChanged) {
+      state.layout[id] = { ...state.layout[id], zone: panelZoneInput.value === "edge" ? "edge" : "workspace" };
+    }
     const previousPanelIcon = id !== "desktop" && id !== "path" ? dockIcon("panel", id) : "";
+    const selectedPanelIcon = panelIconSelect?.value || previousPanelIcon;
     const panelIconChanged = selectedPanelIcon && selectedPanelIcon !== previousPanelIcon;
+    const selectedBg = panelBgSelect?.value === "__custom__"
+      ? (panelBgCustom?.value || "")
+      : panelBgSelect?.value === "__default__" ? "" : (panelBgSelect?.value || "");
+    const backgroundChanged = id !== "desktop" && id !== "path" && selectedBg !== (state.layout[id]?.bg || "");
+    if (backgroundChanged) state.layout[id] = { ...state.layout[id], bg: selectedBg };
     if (id === "clock") {
       patch.clockDisplayMode = clockMode?.value === "analog" ? "analog" : "digital";
       patch.clockShowDate = Boolean(clockDate?.checked);
@@ -2504,14 +2683,18 @@ function openPanelSetup(el) {
     } else if (id === "filesearch") {
       patch.searchFontSize = Math.max(8, Math.min(72, Math.round(Number(searchFont?.value) || 12)));
     }
-    if (panelIconChanged) setPanelIcon(id, selectedPanelIcon);
-    if (!Object.keys(patch).length) {
+    if (panelIconChanged) state.layout[id] = { ...state.layout[id], icon: selectedPanelIcon };
+    if (!Object.keys(patch).length && !zoneChanged && !backgroundChanged && !panelIconChanged) {
       modal.remove();
       return;
     }
     try {
-      const result = await window.edex.saveSettings(patch);
-      state.settings = result.settings || { ...state.settings, ...patch };
+      if (Object.keys(patch).length) {
+        const result = await window.edex.saveSettings(patch);
+        state.settings = result.settings || { ...state.settings, ...patch };
+      }
+      if (zoneChanged) persistLayout();
+      if (backgroundChanged || panelIconChanged) persistLayout();
       if (id === "clock" && patch.clockDisplayMode === "analog" && state.layout.clock) {
         const minimum = analogClockMinimum().px;
         const box = pxFromBox(state.layout.clock);
@@ -2856,6 +3039,7 @@ function dockEnabled() {
 function syncDockLayout(enabled) {
   if (!state.primary || !PANEL_META.dock) {
     if (state.layout.dock) delete state.layout.dock;
+    if (state.layout.taskdock) delete state.layout.taskdock;
     window.dockPanel?.unbind?.(state);
     return;
   }
@@ -2865,15 +3049,17 @@ function syncDockLayout(enabled) {
     } else {
       state.layout.dock = { ...state.layout.dock, locked: true };
     }
+    if (!state.layout.taskdock) state.layout.taskdock = { ...PANEL_META.taskdock.box };
   } else if (state.layout.dock) {
     delete state.layout.dock;
+    delete state.layout.taskdock;
     window.dockPanel?.unbind?.(state);
   }
 }
 
 async function setDockEnabled(on) {
   if (!state.primary) {
-    toast("底部 Dock 僅主螢幕可用");
+    toast("Das Dock ist nur auf dem Hauptbildschirm verfügbar");
     return;
   }
   const enabled = Boolean(on);
@@ -2886,7 +3072,7 @@ async function setDockEnabled(on) {
   }
   await persistLayout();
   rebuildWorkspace();
-  toast(enabled ? `已開啟${state.settings.dockPosition === "top" ? "頂部" : "底部"} Dock` : "已關閉 Dock");
+  toast(enabled ? `${state.settings.dockPosition === "top" ? "Oberes" : "Unteres"} Dock aktiviert` : "Dock deaktiviert");
 }
 
 async function addPanel(id) {
@@ -2917,8 +3103,11 @@ function openAddPicker() {
   document.getElementById("addPicker")?.closest(".modal_popup")?.remove();
   keepAddPicker = true;
   // Dock is toggled separately — not listed as a placeable panel.
+  const panelExistsOnDisplay = (id) => Boolean(
+    state.layout[id] || document.getElementById(`card_${id}`)
+  );
   const missing = Object.keys(PANEL_META).filter((id) => {
-    if (id === "status" || id === "dock" || state.layout[id]) return false;
+    if (id === "status" || id === "dock" || panelExistsOnDisplay(id)) return false;
     return true;
   });
   const deskDisabled = !state.primary || state.desktopEnabled !== false;
@@ -3057,7 +3246,7 @@ function openAddPicker() {
     const next = event.target.value === "top" ? "top" : "bottom";
     window.dockPanel?.setPosition?.(state, next);
     const label = modal.querySelector("[data-dock-label]");
-    if (label) label.textContent = next === "top" ? "頂部 Dock（貼螢幕頂邊）" : "底部 Dock（貼螢幕底邊）";
+    if (label) label.textContent = next === "top" ? "Oberes Dock (am oberen Bildschirmrand)" : "Unteres Dock (am unteren Bildschirmrand)";
     toast(`Dock-Position: ${next === "top" ? "oben" : "unten"}`);
   });
   modal.querySelector("#dock-frame-style")?.addEventListener("change", (event) => {
@@ -3307,6 +3496,7 @@ function buildLayout() {
 
   document.body.innerHTML = `
     <div id="workspace">
+      <div id="zone-overlay" aria-hidden="true"></div>
       <div id="snap-guides"></div>
       ${desktop}
       ${panels}
@@ -3315,10 +3505,12 @@ function buildLayout() {
   `;
   renderDockItems();
 
+  let zoneAdjusted = false;
   Object.keys(state.layout).forEach((id) => {
     if (id === "status") return;
     const el = document.getElementById(`card_${id}`);
     if (!el) return;
+    zoneAdjusted = clampPanelToZone(el) || zoneAdjusted;
     bindCardTools(el, () => menuItemsForCard("panel", {
       el,
       locked: Boolean(state.layout[id]?.locked),
@@ -3368,6 +3560,7 @@ function buildLayout() {
       }
     });
   });
+  if (zoneAdjusted) persistLayout();
 
   const desk = document.getElementById("card_desktop");
   if (desk) {
@@ -5590,7 +5783,33 @@ async function doScan() {
 }
 
 function closeSettings() {
+  clearSnapGuides();
   document.getElementById("settingsEditor")?.closest(".modal_popup")?.remove();
+}
+
+function requestPresetName(parent) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.innerHTML = `
+      <form method="dialog">
+        <h2>Preset speichern</h2>
+        <input name="name" type="text" maxlength="80" value="Mein Preset" autofocus />
+        <div class="settings-footer">
+          <button value="cancel" type="submit">Abbrechen</button>
+          <button value="save" type="submit">Speichern</button>
+        </div>
+      </form>`;
+    parent.appendChild(dialog);
+    const input = dialog.querySelector("input");
+    const finish = () => {
+      const value = dialog.returnValue === "save" ? input.value.trim() : "";
+      dialog.remove();
+      resolve(value || null);
+    };
+    dialog.addEventListener("close", finish, { once: true });
+    dialog.showModal();
+    input.select();
+  });
 }
 
 function presetSettingsSnapshot() {
@@ -5603,7 +5822,7 @@ function presetSettingsSnapshot() {
 function openSettings(focusPanel = "") {
   if (document.getElementById("settingsEditor")) return;
   const modal = document.createElement("div");
-  modal.className = "modal_popup info";
+  modal.className = "modal_popup info settings-modal";
   const themeOpts = state.themes.map((t) =>
     `<option value="${escapeHtml(t)}" ${t === state.themeName ? "selected" : ""}>${escapeHtml(t)}</option>`
   ).join("");
@@ -5615,7 +5834,7 @@ function openSettings(focusPanel = "") {
   ).join("");
 
   modal.innerHTML = `
-    <h1>設定</h1>
+    <h1>Einstellungen</h1>
     <h2>Sprache / 語言</h2>
     <table><tr><td>Sprache</td><td>UI-Sprache der Anwendung</td><td>
       <select id="set-locale">
@@ -5671,7 +5890,12 @@ function openSettings(focusPanel = "") {
       <tr>
         <td>Rainmeter-HUD</td>
         <td>Optionales Rainmeter-Overlay mit Uhr, CPU und RAM im aktiven Theme verwenden</td>
-        <td><input id="set-rainmeter" type="checkbox" ${state.settings.rainmeterEnabled === true ? "checked" : ""}></td>
+        <td><input id="set-rainmeter" type="checkbox" ${state.settings.rainmeterEnabled === true ? "checked" : ""}> <span id="rainmeter-status" class="settings-inline-status">Status wird geprüft …</span></td>
+      </tr>
+      <tr>
+        <td>Mit Windows starten</td>
+        <td>Desktop UI automatisch bei der Windows-Anmeldung öffnen</td>
+        <td><input id="set-start-with-windows" type="checkbox" ${state.settings.startWithWindows === true ? "checked" : ""}></td>
       </tr>
       <tr>
         <td>壁紙</td>
@@ -5728,10 +5952,12 @@ function openSettings(focusPanel = "") {
         <td>Skalierzone-Ränder</td>
         <td>Abstand der Zone vom linken, oberen, rechten und unteren Bildschirmrand in Prozent</td>
         <td>
-          <label>L <input id="set-zone-left" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.left ?? 18)}">%</label>
-          <label>O <input id="set-zone-top" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.top ?? 8)}">%</label>
-          <label>R <input id="set-zone-right" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.right ?? 18)}">%</label>
-          <label>U <input id="set-zone-bottom" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.bottom ?? 8)}">%</label>
+          <div class="zone-margin-fields" aria-label="Skalierzone-Ränder in Prozent">
+            <label>L <input id="set-zone-left" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.left ?? 18)}">%</label>
+            <label>O <input id="set-zone-top" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.top ?? 8)}">%</label>
+            <label>R <input id="set-zone-right" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.right ?? 18)}">%</label>
+            <label>U <input id="set-zone-bottom" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.bottom ?? 8)}">%</label>
+          </div>
         </td>
       </tr>
       <tr>
@@ -5871,6 +6097,37 @@ function openSettings(focusPanel = "") {
   document.body.appendChild(modal);
   window.edexI18n?.translatePage?.(modal);
   placeCentered(modal);
+  window.edex?.getStartWithWindows?.().then((enabled) => {
+    const checkbox = modal.querySelector("#set-start-with-windows");
+    if (checkbox) checkbox.checked = Boolean(enabled);
+  }).catch(() => {});
+  const updateZonePreview = () => showWindowZonePreview(modal);
+  ["#set-zone-left", "#set-zone-top", "#set-zone-right", "#set-zone-bottom", "#set-window-zone-enabled"]
+    .forEach((selector) => {
+      modal.querySelector(selector)?.addEventListener("input", updateZonePreview);
+      modal.querySelector(selector)?.addEventListener("change", updateZonePreview);
+    });
+  updateZonePreview();
+  window.edex?.getRainmeterStatus?.().then((status) => {
+    const statusEl = modal.querySelector("#rainmeter-status");
+    if (!statusEl) return;
+    if (!status?.installed) {
+      statusEl.textContent = "Rainmeter nicht gefunden";
+      statusEl.dataset.state = "missing";
+    } else if (status.enabled) {
+      statusEl.textContent = "installiert · aktiviert";
+      statusEl.dataset.state = "ready";
+    } else {
+      statusEl.textContent = "installiert · deaktiviert";
+      statusEl.dataset.state = "disabled";
+    }
+  }).catch(() => {
+    const statusEl = modal.querySelector("#rainmeter-status");
+    if (statusEl) {
+      statusEl.textContent = "Status nicht verfügbar";
+      statusEl.dataset.state = "unknown";
+    }
+  });
   const focusSection = focusPanel === "coderain"
     ? "Interface & Code-Hintergrund"
     : focusPanel === "clock" ? "Uhr" : focusPanel === "desktop" ? "Desktop UI" : "";
@@ -5888,7 +6145,7 @@ function openSettings(focusPanel = "") {
   };
   presetSelect?.addEventListener("change", updatePresetButtons);
   modal.querySelector("#set-preset-save")?.addEventListener("click", async () => {
-    const name = window.prompt("Name für das Preset:", "Mein Preset")?.trim();
+    const name = await requestPresetName(modal);
     if (!name) return;
     await persistLayout();
     const presets = (state.settings.presets || []).filter((preset) => preset.name !== name);
@@ -5900,9 +6157,9 @@ function openSettings(focusPanel = "") {
     });
     const result = await window.edex.saveSettings({ presets: presets.slice(-20) });
     logUiAction("settings.save", "Einstellungen gespeichert", {
-      theme: themeName,
-      wallpaper,
-      rainmeterEnabled
+      theme: state.themeName || state.settings.theme || "tron",
+      wallpaper: state.settings.wallpaper || "grid",
+      rainmeterEnabled: state.settings.rainmeterEnabled === true
     });
     state.settings = result.settings;
     const option = document.createElement("option");
@@ -6042,6 +6299,7 @@ function openSettings(focusPanel = "") {
       : false;
     const dockFrameValue = String(modal.querySelector("#set-dock-frame")?.value || state.settings?.dockFrameStyle || "rounded");
     const dockIconSetValue = modal.querySelector("#set-dock-icon-set")?.value === "labelled" ? "labelled" : "icon";
+    const startWithWindows = Boolean(modal.querySelector("#set-start-with-windows")?.checked);
     const zonePercent = (selector, fallback) => {
       const value = Number(modal.querySelector(selector)?.value);
       return Number.isFinite(value) ? Math.max(0, Math.min(45, Math.round(value))) : fallback;
@@ -6064,6 +6322,7 @@ function openSettings(focusPanel = "") {
       dockEnabled: dockEnabledValue,
       dockFrameStyle: dockFrameValue,
       dockIconSet: dockIconSetValue,
+      startWithWindows,
       windowZoneEnabled,
       windowZoneMargins,
       panelZones
@@ -6085,6 +6344,7 @@ function openSettings(focusPanel = "") {
       windowsColorMode,
       keepThemeWallpaper,
       rainmeterEnabled,
+      startWithWindows,
       wallpaper,
       iconView: state.iconView,
       includeFolders: state.includeFolders,

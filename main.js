@@ -525,6 +525,7 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     appLog.init(app.getPath("userData"));
     settings = loadSettings(app.getPath("userData"));
+    if (process.platform === "win32") app.setLoginItemSettings(loginItemOptions(settings.startWithWindows));
     try {
       await restoreDesktopIcons(app.getPath("userData"));
       await restoreWallpaper(app.getPath("userData"));
@@ -604,7 +605,10 @@ ipcMain.handle("get-bootstrap", (event) => {
   if (settings.theme !== themeName) {
     settings = saveSettings(app.getPath("userData"), { theme: themeName });
   }
-  const layout = settings.displayLayouts?.[String(displayId)] || null;
+  const exactLayout = settings.displayLayouts?.[String(displayId)] || null;
+  const indexedLayout = Object.values(settings.displayLayouts || {})
+    .find((candidate) => Number(candidate?.displayIndex) === Number(meta?.index));
+  const layout = exactLayout || indexedLayout || null;
 
   return {
     username: os.userInfo().username,
@@ -657,6 +661,28 @@ ipcMain.handle("get-windows-colors", (event) => {
   return { accent, dark: Boolean(nativeTheme.shouldUseDarkColors) };
 });
 
+function loginItemOptions(openAtLogin) {
+  return {
+    openAtLogin: Boolean(openAtLogin),
+    path: process.execPath,
+    args: app.isPackaged ? [] : [app.getAppPath()]
+  };
+}
+
+ipcMain.handle("get-start-with-windows", (event) => {
+  requireTrustedWindow(event);
+  if (process.platform !== "win32") return false;
+  return Boolean(app.getLoginItemSettings(loginItemOptions(true)).openAtLogin);
+});
+
+ipcMain.handle("set-start-with-windows", (event, enabled) => {
+  requireTrustedWindow(event);
+  const next = process.platform === "win32" && Boolean(enabled);
+  if (process.platform === "win32") app.setLoginItemSettings(loginItemOptions(next));
+  settings = saveSettings(app.getPath("userData"), { startWithWindows: next });
+  return next;
+});
+
 ipcMain.handle("save-settings", (event, patch) => {
   requireTrustedWindow(event);
   const win = getSenderWindow(event);
@@ -677,6 +703,11 @@ ipcMain.handle("save-settings", (event, patch) => {
   delete globalPatch.displayLayoutPatch;
   if (Object.prototype.hasOwnProperty.call(globalPatch, "theme")) {
     globalPatch.theme = resolveThemeName(globalPatch.theme);
+  }
+  if (Object.prototype.hasOwnProperty.call(globalPatch, "startWithWindows")) {
+    const startWithWindows = process.platform === "win32" && globalPatch.startWithWindows === true;
+    if (process.platform === "win32") app.setLoginItemSettings(loginItemOptions(startWithWindows));
+    globalPatch.startWithWindows = startWithWindows;
   }
   if (Object.keys(globalPatch).length) {
     settings = saveSettings(app.getPath("userData"), globalPatch);

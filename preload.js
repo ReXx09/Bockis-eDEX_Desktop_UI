@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("edex", {
   launchScale,
   bootstrap: () => ipcRenderer.invoke("get-bootstrap"),
   getWindowsColors: () => ipcRenderer.invoke("get-windows-colors"),
+  getStartWithWindows: () => ipcRenderer.invoke("get-start-with-windows"),
+  setStartWithWindows: (enabled) => ipcRenderer.invoke("set-start-with-windows", Boolean(enabled)),
   getRainmeterStatus: () => ipcRenderer.invoke("rainmeter-status"),
   logAction: (event, message, details) => ipcRenderer.send("ui-log", { level: "info", event, message, details }),
   logError: (event, message, details) => ipcRenderer.send("ui-log", { level: "error", event, message, details }),

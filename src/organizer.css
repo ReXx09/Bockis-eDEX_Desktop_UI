@@ -154,6 +154,51 @@ body.desktop-shell #workspace {
     z-index: 2;
 }
 
+#zone-overlay {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+    z-index: 1;
+    box-sizing: border-box;
+    border: 1px dashed rgba(0, 255, 180, 0.9);
+    background: rgba(0, 255, 180, 0.035);
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.16);
+}
+
+#zone-overlay::before {
+    content: "SKALIERZONE";
+    position: absolute;
+    top: 0.45rem;
+    left: 0.6rem;
+    padding: 0.15rem 0.35rem;
+    color: rgba(0, 255, 180, 0.9);
+    background: rgba(0, 18, 20, 0.8);
+    font-family: var(--font_main);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+}
+
+#zone-overlay.edge {
+    display: block;
+    border-color: rgba(255, 184, 76, 0.9);
+    background: rgba(255, 145, 35, 0.06);
+    box-shadow: none;
+}
+
+#zone-overlay.edge::before {
+    content: "ZENTRALBEREICH GESPERRT";
+    color: rgba(255, 184, 76, 0.95);
+    background: rgba(35, 22, 5, 0.86);
+}
+
+#zone-overlay.on {
+    display: block;
+}
+
+#zone-overlay.preview::before {
+    content: "SKALIERZONE / LIVE";
+}
+
 #snap-guides.on {
     background-image:
         repeating-linear-gradient(
@@ -1661,6 +1706,34 @@ div.modal_popup > h1,
     line-height: 1.4;
 }
 
+.settings-inline-status {
+    opacity: 0.65;
+    margin-left: 0.35rem;
+    white-space: nowrap;
+}
+
+.zone-margin-fields {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.45rem;
+    white-space: nowrap;
+}
+
+.zone-margin-fields label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.zone-margin-fields input {
+    width: 4.2rem;
+    min-width: 0;
+}
+
+.settings-inline-status[data-state="ready"] { color: #00ff75; }
+.settings-inline-status[data-state="missing"] { color: #ff6969; }
+
 .modal_popup h1 {
     margin: 0 0 1rem !important;
 }
@@ -1738,9 +1811,20 @@ div.modal_popup {
 }
 
 .modal_popup.central-settings-modal {
-    height: calc(100vh - 2rem);
+    top: 1rem !important;
+    height: auto !important;
     max-height: calc(100vh - 2rem) !important;
+    min-height: 0;
     overflow-y: scroll !important;
+    scrollbar-gutter: stable;
+}
+
+.modal_popup.settings-modal {
+    top: 1rem !important;
+    height: auto !important;
+    max-height: calc(100vh - 2rem) !important;
+    min-height: 0;
+    overflow-y: auto !important;
     scrollbar-gutter: stable;
 }
 

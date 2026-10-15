@@ -53,7 +53,6 @@ div#mod_conninfo .conninfo-meta i {
     opacity: 0.5;
 }
 
-div#mod_conninfo h2 {
 div#mod_conninfo i {
     font-style: normal;
     font-size: 1.20vh;
@@ -190,36 +189,45 @@ div#mod_conninfo.offline h3:last-child {
 #mod_conninfo .conninfo-total {
     display: flex;
     min-width: 0;
-    flex-direction: column;
-    gap: 0.12rem;
-    padding: 0.35rem 0.45rem;
-    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
-    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.035);
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.4rem;
+    width: 95%;
+    margin: 0 auto;
+    padding: 0.18rem 0.25rem;
+    border: 0;
+    border-bottom: 1px dashed rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    background: transparent;
 }
 
 #mod_conninfo .conninfo-current span,
 #mod_conninfo .conninfo-total span {
     color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.58);
-    font-size: 0.68em;
-    letter-spacing: 0.08em;
+    flex: 0 0 auto;
+    font-size: 0.78em;
+    letter-spacing: 0.1em;
 }
 
 #mod_conninfo .conninfo-current strong,
 #mod_conninfo .conninfo-total strong {
+    min-width: 0;
     overflow: hidden;
     color: rgb(var(--color_r), var(--color_g), var(--color_b));
-    font-size: 1.08em;
+    font-family: var(--font_main);
+    font-size: 1.05em;
     font-weight: 400;
+    letter-spacing: 0.06em;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 #mod_conninfo .conninfo-total.out {
-    border-color: rgba(0, 246, 255, 0.34);
+    border-bottom-color: rgba(0, 246, 255, 0.38);
 }
 
 #mod_conninfo .conninfo-total.in {
-    border-color: rgba(0, 255, 117, 0.34);
+    border-bottom-color: rgba(0, 255, 117, 0.38);
 }
 
 #mod_conninfo .conn-pointmap-block {

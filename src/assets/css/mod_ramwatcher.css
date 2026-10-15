@@ -36,10 +36,11 @@ div#mod_ramwatcher_inner .ram-gauge-filters {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.3vw;
-    width: 100%;
+    width: calc(100% - 0.35rem);
     min-width: 0;
     box-sizing: border-box;
     margin-bottom: 0.45vh;
+    margin-right: 0.35rem;
 }
 
 div#mod_ramwatcher_inner .ram-gauge-filter {

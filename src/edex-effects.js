@@ -7,7 +7,9 @@
   let globeInitTimer = null;
   let globeConnectionsTimer = null;
   let globeRefreshConnections = null;
+  let globeConnections = [];
   let globeFilter = "world";
+  let globeView = "globe";
   let netTimer = null;
   let trafficTimer = null;
   let cpuTimer = null;
@@ -52,6 +54,7 @@
     if (globeConnectionsTimer) clearTimeout(globeConnectionsTimer);
     globeConnectionsTimer = null;
     globeRefreshConnections = null;
+    globeConnections = [];
     const host = document.getElementById("mod_globe_innercontainer");
     host?.querySelector("canvas")?.remove();
     globeInstance = null;
@@ -79,6 +82,50 @@
       || 180
     );
     return { w: Math.max(120, w), h: Math.max(120, h) };
+  }
+
+  function escapeGlobeText(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;");
+  }
+
+  function connectionEndpoint(address, port) {
+    const value = String(address || "-");
+    return value.includes(":") && !value.startsWith("[") ? `[${value}]:${port || "-"}` : `${value}:${port || "-"}`;
+  }
+
+  function renderConnectionList(host, connections) {
+    const list = host.querySelector(".globe-connections-list");
+    if (!list) return;
+    const filtered = globeFilter === "world"
+      ? connections
+      : connections.filter((item) => item.direction === globeFilter);
+    if (!filtered.length) {
+      list.innerHTML = `<div class="globe-list-empty">Keine aktiven Verbindungen</div>`;
+      return;
+    }
+    list.innerHTML = `<div class="globe-list-head"><span>NAME</span><span>IP</span><span>ADRESSE</span></div>${filtered.map((item) => `
+      <div class="globe-list-row ${escapeGlobeText(item.direction || "")}" title="${escapeGlobeText(item.process || "Unbekannt")}">
+        <strong>${escapeGlobeText(item.process || "UNKNOWN")}</strong>
+        <span>${escapeGlobeText(item.address || "-")}</span>
+        <span>${escapeGlobeText(connectionEndpoint(item.localAddress, item.localPort))} → ${escapeGlobeText(connectionEndpoint(item.address, item.port))}</span>
+      </div>`).join("")}`;
+  }
+
+  function applyGlobeView(host) {
+    const canvas = host.querySelector("canvas");
+    const placeholder = host.querySelector("#mod_globe_canvas_placeholder");
+    const list = host.querySelector(".globe-connections-list");
+    const listMode = globeView === "list";
+    if (canvas) canvas.hidden = listMode;
+    if (placeholder) placeholder.hidden = listMode;
+    if (list) list.hidden = !listMode;
+    host.querySelectorAll("[data-globe-view]").forEach((button) => {
+      button.classList.toggle("on", button.dataset.globeView === globeView);
+    });
   }
 
   async function initGlobe() {
@@ -134,11 +181,21 @@
       globeInstance.init(bg, () => {
         if (gen !== globeGen || !globeInstance) return;
         const filterButtons = host.querySelectorAll("[data-globe-filter]");
+        const viewButtons = host.querySelectorAll("[data-globe-view]");
+        viewButtons.forEach((button) => {
+          button.classList.toggle("on", button.dataset.globeView === globeView);
+          button.addEventListener("click", () => {
+            globeView = button.dataset.globeView === "list" ? "list" : "globe";
+            applyGlobeView(host);
+          });
+        });
+        applyGlobeView(host);
         filterButtons.forEach((button) => {
           button.classList.toggle("on", button.dataset.globeFilter === globeFilter);
           button.addEventListener("click", () => {
             globeFilter = button.dataset.globeFilter || "world";
             filterButtons.forEach((item) => item.classList.toggle("on", item.dataset.globeFilter === globeFilter));
+            renderConnectionList(host, globeConnections || []);
             if (globeConnectionsTimer) clearTimeout(globeConnectionsTimer);
             globeRefreshConnections?.();
           });
@@ -154,6 +211,8 @@
           try {
             const connections = await window.edex.getLiveConnections();
             if (gen !== globeGen || !globeInstance) return;
+            globeConnections = connections;
+            renderConnectionList(host, connections);
             const filtered = globeFilter === "world"
               ? connections
               : connections.filter((item) => item.direction === globeFilter);
