@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, screen, Tray, Menu, nativeImage, clipboard, desktopCapturer, systemPreferences, nativeTheme } = require("electron");
-const { spawn } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
@@ -41,6 +41,7 @@ const fileSearch = require("./lib/file-search");
 const { loadNotes, addNote, updateNote, removeNote } = require("./lib/calendar-store");
 const { getNetStatus, getLiveConnections, getTrafficSample, getCpuMetrics, getMemMetrics, getSysMetrics, loadGlobeGrid, getHardwareInfo, getTopProcesses, getWeather } = require("./lib/net-info");
 const fileOps = require("./lib/file-ops");
+const { PathPolicy } = require("./lib/path-policy");
 const clipboardFiles = require("./lib/clipboard-files");
 const win32Embed = require("./lib/win32-embed");
 const taskbarDock = require("./lib/taskbar-dock");
@@ -118,6 +119,35 @@ let quitting = false;
 let tray = null;
 const terminalSessions = new Map();
 const terminalSessionShells = new Map();
+const approvedPathRoots = new PathPolicy();
+
+function systemText(de, en, zh) {
+  const locale = settings?.locale || "de";
+  return locale === "zh-Hant" ? zh : locale === "en" ? en : de;
+}
+
+function approvePathRoot(root) {
+  return approvedPathRoots.add(root);
+}
+
+function requireApprovedPath(target) {
+  if (!approvedPathRoots.allows(target)) {
+    throw new Error("Pfad wurde nicht über einen freigegebenen Ordner ausgewählt");
+  }
+  return String(target);
+}
+
+function approveLayoutRoots(layout) {
+  const roots = [
+    ...(Array.isArray(layout?.pathCards) ? layout.pathCards.map((card) => card?.path) : []),
+    ...(Array.isArray(layout?.desktopFolderTabs) ? layout.desktopFolderTabs.map((tab) => tab?.path) : [])
+  ];
+  for (const root of roots) {
+    if (typeof root === "string" && fs.existsSync(root) && fs.statSync(root).isDirectory()) {
+      approvePathRoot(root);
+    }
+  }
+}
 
 function makeTrayIcon() {
   const size = 16;
@@ -141,7 +171,7 @@ function createTray() {
   tray.setToolTip("Bockis-eDEX Desktop UI");
   const menu = Menu.buildFromTemplate([
     {
-      label: "顯示容器",
+      label: systemText("Container anzeigen", "Show containers", "顯示容器"),
       click: () => {
         for (const win of windows.values()) {
           if (!win.isDestroyed()) showBehindApps(win);
@@ -150,13 +180,16 @@ function createTray() {
       }
     },
     {
-      label: "重新對齊顯示器",
+      label: systemText("Monitore neu ausrichten", "Realign monitors", "重新對齊顯示器"),
       click: () => syncAllWindows()
     },
     { type: "separator" },
     {
       label: "Beenden",
-      click: () => app.quit()
+      click: () => {
+        if (windows.size > 0) broadcast("shutdown-request");
+        else app.quit();
+      }
     }
   ]);
   tray.setContextMenu(menu);
@@ -382,10 +415,6 @@ function createWindowForDisplay(display, index) {
     console.error("render-process-gone", display.id, details);
   });
 
-  win.webContents.on("render-process-gone", (_e, details) => {
-    console.error(`renderer gone display=${display.id}`, details);
-  });
-
   win.once("ready-to-show", () => {
     fitWindowToDisplay(win, findDisplay(display.id));
     if (!win.isDestroyed()) {
@@ -488,10 +517,40 @@ function scheduleWallpaper() {
   }, 400);
 }
 
+function windowsAccentHex() {
+  let accent = "#00eaff";
+  try {
+    const raw = String(systemPreferences.getAccentColor?.() || "").replace(/^#/, "");
+    const hex = raw.length === 8 ? raw.slice(2) : raw;
+    if (/^[0-9a-f]{6}$/i.test(hex)) accent = `#${hex}`;
+  } catch {
+    // Keep the cyan fallback when Windows cannot provide its accent color.
+  }
+  return accent;
+}
+
+function effectiveRainmeterTheme(theme) {
+  const mode = settings.windowsColorMode || "subtle";
+  if (mode === "off") return theme;
+  const accent = windowsAccentHex().slice(1).match(/[0-9a-f]{2}/gi)?.map((part) => parseInt(part, 16)) || [0, 234, 255];
+  const colors = theme?.colors || {};
+  const blend = mode === "strong" ? 0.55 : 0.22;
+  const mix = (base, next) => Math.round(Number(base || 0) * (1 - blend) + next * blend);
+  const r = mix(colors.r, accent[0]);
+  const g = mix(colors.g, accent[1]);
+  const b = mix(colors.b, accent[2]);
+  const foreground = `#${[r, g, b].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+  return {
+    ...theme,
+    colors: { ...colors, r, g, b },
+    terminal: { ...(theme?.terminal || {}), foreground }
+  };
+}
+
 function scheduleRainmeter() {
   clearTimeout(scheduleRainmeter.timer);
   scheduleRainmeter.timer = setTimeout(() => {
-    rainmeter.syncRainmeter(loadTheme(settings.theme || "tron"), settings.rainmeterEnabled === true)
+    rainmeter.syncRainmeter(effectiveRainmeterTheme(loadTheme(settings.theme || "tron")), settings.rainmeterEnabled === true)
       .catch((err) => console.error("rainmeter", err));
   }, 250);
 }
@@ -533,6 +592,7 @@ if (!gotLock) {
       console.error("recover desktop", err);
     }
     currentRoot = resolveDesktop();
+    approvePathRoot(currentRoot);
     createTray();
     await ensureDaemon();
     warmOleDragDaemon();
@@ -596,6 +656,7 @@ if (!gotLock) {
 }
 
 ipcMain.handle("get-bootstrap", (event) => {
+  requireTrustedWindow(event);
   const win = getSenderWindow(event);
   const displayId = getWindowDisplayId(win);
   const display = findDisplay(displayId);
@@ -609,6 +670,7 @@ ipcMain.handle("get-bootstrap", (event) => {
   const indexedLayout = Object.values(settings.displayLayouts || {})
     .find((candidate) => Number(candidate?.displayIndex) === Number(meta?.index));
   const layout = exactLayout || indexedLayout || null;
+  approveLayoutRoots(layout);
 
   return {
     username: os.userInfo().username,
@@ -650,15 +712,110 @@ ipcMain.handle("get-app-log", (event, limit) => {
 
 ipcMain.handle("get-windows-colors", (event) => {
   requireTrustedWindow(event);
-  let accent = "#00eaff";
+  return { accent: windowsAccentHex(), dark: Boolean(nativeTheme.shouldUseDarkColors) };
+});
+
+function runRegistry(args) {
+  return new Promise((resolve) => {
+    const child = spawn("reg.exe", args, { windowsHide: true, stdio: "ignore" });
+    child.once("error", () => resolve(false));
+    child.once("close", (code) => resolve(code === 0));
+  });
+}
+
+function readRegistryDword(key, value) {
+  return new Promise((resolve) => {
+    execFile("reg.exe", ["QUERY", key, "/v", value], { windowsHide: true, encoding: "utf8" }, (error, stdout) => {
+      if (error) return resolve(null);
+      const match = String(stdout || "").match(/\b0x([0-9a-f]+)\b/i);
+      resolve(match ? Number.parseInt(match[1], 16) : null);
+    });
+  });
+}
+
+async function captureWindowsThemeBackup(file) {
+  if (fs.existsSync(file)) return;
+  const personalize = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+  const dwm = "HKCU\\Software\\Microsoft\\Windows\\DWM";
+  const values = await Promise.all([
+    readRegistryDword(dwm, "AccentColor"),
+    readRegistryDword(dwm, "ColorPrevalence"),
+    readRegistryDword(personalize, "AppsUseLightTheme"),
+    readRegistryDword(personalize, "SystemUsesLightTheme")
+  ]);
+  fs.writeFileSync(file, JSON.stringify({
+    AccentColor: values[0],
+    ColorPrevalence: values[1],
+    AppsUseLightTheme: values[2],
+    SystemUsesLightTheme: values[3]
+  }, null, 2), "utf8");
+}
+
+async function restoreWindowsThemeBackup(file, options = {}) {
+  if (!fs.existsSync(file)) return false;
+  const restoreAccent = options.restoreAccent !== false;
+  const remove = options.remove !== false;
+  let backup;
   try {
-    const raw = String(systemPreferences.getAccentColor?.() || "").replace(/^#/, "");
-    const hex = raw.length === 8 ? raw.slice(2) : raw;
-    if (/^[0-9a-f]{6}$/i.test(hex)) accent = `#${hex}`;
+    backup = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch {
-    // Keep the cyan fallback when Windows cannot provide its accent color.
+    return false;
   }
-  return { accent, dark: Boolean(nativeTheme.shouldUseDarkColors) };
+  const personalize = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+  const dwm = "HKCU\\Software\\Microsoft\\Windows\\DWM";
+  const jobs = [];
+  if (restoreAccent && Number.isInteger(backup.AccentColor)) jobs.push(runRegistry(["ADD", dwm, "/v", "AccentColor", "/t", "REG_DWORD", "/d", `0x${backup.AccentColor.toString(16)}`, "/f"]));
+  if (Number.isInteger(backup.ColorPrevalence)) jobs.push(runRegistry(["ADD", dwm, "/v", "ColorPrevalence", "/t", "REG_DWORD", "/d", String(backup.ColorPrevalence), "/f"]));
+  if (Number.isInteger(backup.AppsUseLightTheme)) jobs.push(runRegistry(["ADD", personalize, "/v", "AppsUseLightTheme", "/t", "REG_DWORD", "/d", String(backup.AppsUseLightTheme), "/f"]));
+  if (Number.isInteger(backup.SystemUsesLightTheme)) jobs.push(runRegistry(["ADD", personalize, "/v", "SystemUsesLightTheme", "/t", "REG_DWORD", "/d", String(backup.SystemUsesLightTheme), "/f"]));
+  const results = await Promise.all(jobs);
+  if (results.every(Boolean)) {
+    if (remove) {
+      try { fs.unlinkSync(file); } catch { /* ignore */ }
+    }
+    spawn("rundll32.exe", ["user32.dll,UpdatePerUserSystemParameters"], { windowsHide: true, stdio: "ignore" });
+    return true;
+  }
+  return false;
+}
+
+ipcMain.handle("apply-windows-theme", async (event, payload) => {
+  requireTrustedWindow(event);
+  if (process.platform !== "win32") return { applied: false };
+  const mode = payload?.mode === "strong" ? "strong" : payload?.mode === "subtle" ? "subtle" : "off";
+  const backupFile = path.join(app.getPath("userData"), "windows-theme-backup.json");
+  const stateFile = path.join(app.getPath("userData"), "windows-theme-state.json");
+  if (mode === "off") {
+    const applied = await restoreWindowsThemeBackup(backupFile);
+    try { if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile); } catch { /* ignore */ }
+    return { applied, mode };
+  }
+  await captureWindowsThemeBackup(backupFile);
+  if (mode !== "strong") await restoreWindowsThemeBackup(backupFile, { restoreAccent: false, remove: false });
+  const rgb = payload?.rgb || {};
+  const red = Math.max(0, Math.min(255, Number(rgb.r) || 0));
+  const green = Math.max(0, Math.min(255, Number(rgb.g) || 0));
+  const blue = Math.max(0, Math.min(255, Number(rgb.b) || 0));
+  const accent = `0xFF${blue.toString(16).padStart(2, "0")}${green.toString(16).padStart(2, "0")}${red.toString(16).padStart(2, "0")}`;
+  const personalize = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+  const dwm = "HKCU\\Software\\Microsoft\\Windows\\DWM";
+  const results = await Promise.all([
+    runRegistry(["ADD", dwm, "/v", "AccentColor", "/t", "REG_DWORD", "/d", accent, "/f"]),
+    runRegistry(["ADD", dwm, "/v", "ColorPrevalence", "/t", "REG_DWORD", "/d", "1", "/f"]),
+    ...(mode === "strong"
+      ? [
+        runRegistry(["ADD", personalize, "/v", "AppsUseLightTheme", "/t", "REG_DWORD", "/d", "0", "/f"]),
+        runRegistry(["ADD", personalize, "/v", "SystemUsesLightTheme", "/t", "REG_DWORD", "/d", "0", "/f"])
+      ]
+      : [])
+  ]);
+  spawn("rundll32.exe", ["user32.dll,UpdatePerUserSystemParameters"], { windowsHide: true, stdio: "ignore" });
+  if (results.every(Boolean)) {
+    try {
+      fs.writeFileSync(stateFile, JSON.stringify({ mode, rgb: { r: red, g: green, b: blue } }, null, 2), "utf8");
+    } catch { /* ignore */ }
+  }
+  return { applied: results.every(Boolean), mode };
 });
 
 function loginItemOptions(openAtLogin) {
@@ -759,6 +916,9 @@ ipcMain.handle("rainmeter-status", (event) => {
 
 ipcMain.handle("save-display-layout", (event, layout) => {
   requireTrustedWindow(event);
+  if (!layout || typeof layout !== "object" || Array.isArray(layout)) {
+    throw new Error("Ungültiges Display-Layout");
+  }
   const win = getSenderWindow(event);
   const displayId = getWindowDisplayId(win);
   settings = saveSettings(app.getPath("userData"), {
@@ -792,9 +952,13 @@ ipcMain.handle("transfer-widget", (event, payload) => {
   return { ok: true };
 });
 
-ipcMain.handle("get-theme", (_e, name) => loadTheme(name || settings.theme || "tron"));
+ipcMain.handle("get-theme", (event, name) => {
+  requireTrustedWindow(event);
+  return loadTheme(name || settings.theme || "tron");
+});
 
 ipcMain.handle("pick-folder", async (event) => {
+  requireTrustedWindow(event);
   const win = getSenderWindow(event);
   const result = await dialog.showOpenDialog(win, {
     title: "Ordner für den Organizer auswählen",
@@ -803,6 +967,7 @@ ipcMain.handle("pick-folder", async (event) => {
   });
   if (result.canceled || !result.filePaths[0]) return null;
   currentRoot = result.filePaths[0];
+  approvePathRoot(currentRoot);
   return currentRoot;
 });
 
@@ -810,6 +975,7 @@ ipcMain.handle("scan", async (event, root) => {
   const target = root || currentRoot;
   requireTrustedWindow(event);
   if (!target) throw new Error("未選擇路徑");
+  requireApprovedPath(target);
   if (root) currentRoot = root;
   return scanRoot(target);
 });
@@ -821,7 +987,10 @@ ipcMain.handle("list-folder", async (event, root, options) => {
   return listFolder(root, opts);
 });
 
-ipcMain.handle("list-drives", async () => listDrives());
+ipcMain.handle("list-drives", async (event) => {
+  requireTrustedWindow(event);
+  return listDrives();
+});
 
 ipcMain.handle("terminal-run", async (event, command, cwd) => {
   requireTrustedWindow(event);
@@ -836,7 +1005,7 @@ ipcMain.handle("terminal-run", async (event, command, cwd) => {
       "-NoProfile",
       "-NonInteractive",
       "-ExecutionPolicy",
-      "Bypass",
+      "RemoteSigned",
       "-Command",
       text
     ], {
@@ -875,7 +1044,7 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
     : path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
   const shellArgs = selectedShell === "cmd"
     ? []
-    : ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass"];
+    : ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "RemoteSigned"];
   const session = nodePty.spawn(shell, shellArgs, {
     cwd: workingDirectory,
     name: "xterm-256color",
@@ -915,6 +1084,7 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
   return { ok: true, paneId, cwd: workingDirectory };
 });
 ipcMain.on("terminal-cd", (event, paneId, target) => {
+  requireTrustedWindow(event);
   const win = getSenderWindow(event);
   const key = `${win?.id}:${String(paneId || "default")}`;
   const session = terminalSessions.get(key);
@@ -943,11 +1113,13 @@ ipcMain.handle("terminal-admin", (event, cwd) => {
   return { ok: true };
 });
 ipcMain.on("terminal-input", (event, paneId, data) => {
+  requireTrustedWindow(event);
   const win = getSenderWindow(event);
   const session = terminalSessions.get(`${win?.id}:${String(paneId || "default")}`);
   if (session && typeof data === "string") session.write(data);
 });
 ipcMain.on("terminal-resize", (event, paneId, cols, rows) => {
+  requireTrustedWindow(event);
   const win = getSenderWindow(event);
   const session = terminalSessions.get(`${win?.id}:${String(paneId || "default")}`);
   if (!session) return;
@@ -956,6 +1128,7 @@ ipcMain.on("terminal-resize", (event, paneId, cols, rows) => {
   session.resize(nextCols, nextRows);
 });
 ipcMain.on("terminal-close", (event, paneId) => {
+  requireTrustedWindow(event);
   const win = getSenderWindow(event);
   const key = `${win?.id}:${String(paneId || "default")}`;
   const session = terminalSessions.get(key);
@@ -969,9 +1142,16 @@ ipcMain.handle("search-files", async (event, query, limit) => {
   requireTrustedWindow(event);
   return fileSearch.search(query, limit);
 });
-ipcMain.handle("search-status", () => fileSearch.status());
-ipcMain.handle("search-rebuild", async () => fileSearch.rebuild());
+ipcMain.handle("search-status", (event) => {
+  requireTrustedWindow(event);
+  return fileSearch.status();
+});
+ipcMain.handle("search-rebuild", async (event) => {
+  requireTrustedWindow(event);
+  return fileSearch.rebuild();
+});
 ipcMain.handle("pick-search-root", async (event) => {
+  requireTrustedWindow(event);
   const win = getSenderWindow(event);
   const result = await dialog.showOpenDialog(win, {
     title: "Ordner oder Netzlaufwerk für die Suche auswählen",
@@ -1021,11 +1201,13 @@ ipcMain.handle("reveal-path", async (event, target) => {
 
 ipcMain.handle("plan", async (event, scan, options) => {
   requireTrustedWindow(event);
+  requireApprovedPath(scan?.root);
   return buildPlan(scan, options);
 });
 
 ipcMain.handle("organize", async (event, scan, options) => {
   requireTrustedWindow(event);
+  requireApprovedPath(scan?.root);
   return executePlan(scan, options, journalPath());
 });
 
@@ -1036,24 +1218,43 @@ ipcMain.handle("undo", async (event) => {
 
 ipcMain.handle("import-files", async (event, destDir, sources) => {
   requireTrustedWindow(event);
+  requireApprovedPath(destDir);
   return importFiles(destDir, sources || []);
 });
 
-ipcMain.handle("get-calendar-notes", () => loadNotes(app.getPath("userData")));
-ipcMain.handle("add-calendar-note", (_e, dateKey, text) => addNote(app.getPath("userData"), dateKey, text));
-ipcMain.handle("update-calendar-note", (_e, dateKey, id, text) => updateNote(app.getPath("userData"), dateKey, id, text));
-ipcMain.handle("remove-calendar-note", (_e, dateKey, id) => removeNote(app.getPath("userData"), dateKey, id));
-ipcMain.handle("copy-text", (_e, text) => {
+ipcMain.handle("get-calendar-notes", (event) => {
+  requireTrustedWindow(event);
+  return loadNotes(app.getPath("userData"));
+});
+ipcMain.handle("add-calendar-note", (event, dateKey, text) => {
+  requireTrustedWindow(event);
+  return addNote(app.getPath("userData"), dateKey, text);
+});
+ipcMain.handle("update-calendar-note", (event, dateKey, id, text) => {
+  requireTrustedWindow(event);
+  return updateNote(app.getPath("userData"), dateKey, id, text);
+});
+ipcMain.handle("remove-calendar-note", (event, dateKey, id) => {
+  requireTrustedWindow(event);
+  return removeNote(app.getPath("userData"), dateKey, id);
+});
+ipcMain.handle("copy-text", (event, text) => {
+  requireTrustedWindow(event);
   clipboard.writeText(String(text || ""));
   return true;
 });
 
-ipcMain.handle("clipboard-write-files", (_e, paths) => clipboardFiles.writeFiles(paths || []));
-ipcMain.handle("clipboard-read-files", () => clipboardFiles.readFiles());
+ipcMain.handle("clipboard-write-files", (event, paths) => {
+  requireTrustedWindow(event);
+  return clipboardFiles.writeFiles(paths || []);
+});
+ipcMain.handle("clipboard-read-files", (event) => {
+  requireTrustedWindow(event);
+  return clipboardFiles.readFiles();
+});
 
 ipcMain.handle("prepare-file-drag", async (event) => {
-  const win = getSenderWindow(event);
-  if (!win || win.isDestroyed()) return false;
+  const win = requireTrustedWindow(event);
   try {
     return Boolean(await prepareWindowForFileDrag(win));
   } catch (err) {
@@ -1063,19 +1264,19 @@ ipcMain.handle("prepare-file-drag", async (event) => {
 });
 
 ipcMain.on("cancel-file-drag-prepare", (event) => {
-  const win = getSenderWindow(event);
-  if (win && !win.isDestroyed()) cancelPreparedFileDrag(win);
+  const win = requireTrustedWindow(event);
+  cancelPreparedFileDrag(win);
 });
 
 /** Official Electron startDrag — must run inside Chromium dragstart (sendSync). */
 ipcMain.on("start-file-drag-electron", (event, paths) => {
+  const win = requireTrustedWindow(event);
   // Expand .lnk → real targets (WeChat/IM often reject shortcut files).
   const files = clipboardFiles.normalizeDragPaths(paths || []);
   if (!files.length) {
     event.returnValue = false;
     return;
   }
-  const win = getSenderWindow(event);
   fileDragArmed = true;
   fileDragInFlight = true;
   try {
@@ -1106,11 +1307,11 @@ ipcMain.on("start-file-drag-electron", (event, paths) => {
 
 /** OLE file drag — primary path for overlay → Explorer / other apps. */
 ipcMain.handle("start-file-drag", async (event, paths) => {
+  const win = requireTrustedWindow(event);
   const files = clipboardFiles.normalizeDragPaths(paths || []);
   if (!files.length) {
     return { ok: false, message: "沒有可拖放的檔案" };
   }
-  const win = getSenderWindow(event);
   fileDragArmed = true;
   fileDragInFlight = false;
   try {
@@ -1145,10 +1346,12 @@ ipcMain.handle("start-file-drag", async (event, paths) => {
   }
 });
 
-ipcMain.handle("list-desktop-shortcuts", (_e, options) => (
-  listDesktopShortcuts(resolveDesktop(), options || { decorate: "fast" })
-));
-ipcMain.handle("list-desktop-files", async () => {
+ipcMain.handle("list-desktop-shortcuts", (event, options) => {
+  requireTrustedWindow(event);
+  return listDesktopShortcuts(resolveDesktop(), options || { decorate: "fast" });
+});
+ipcMain.handle("list-desktop-files", async (event) => {
+  requireTrustedWindow(event);
   const dir = resolveDesktop();
   if (!dir) return { items: [], total: 0, root: "" };
   const listing = await listFolder(dir, { systemIcons: "fast" });
@@ -1169,18 +1372,22 @@ ipcMain.handle("list-desktop-files", async () => {
 
 ipcMain.handle("create-folder", async (event, parent, folderName) => {
   requireTrustedWindow(event);
+  requireApprovedPath(parent);
   return fileOps.createFolder(parent, folderName);
 });
 ipcMain.handle("rename-item", async (event, target, name) => {
   requireTrustedWindow(event);
+  requireApprovedPath(target);
   return fileOps.renameItem(target, name);
 });
 ipcMain.handle("trash-item", async (event, target) => {
   const win = requireTrustedWindow(event);
-  return fileOps.trashItem(target, win);
+  requireApprovedPath(target);
+  return fileOps.trashItem(target, win, settings?.locale || "de");
 });
 ipcMain.handle("set-item-tags", async (event, target, tags) => {
   requireTrustedWindow(event);
+  requireApprovedPath(target);
   const next = await fileOps.writeTags(target, tags);
   return { ok: true, tags: next, path: target };
 });
@@ -1235,17 +1442,20 @@ function pinAllOverlaysBottom({ blur = true } = {}) {
 }
 
 /** Soft re-pin (no blur) — safe for dock keepalive while hovering the taskbar. */
-ipcMain.handle("pin-overlays-bottom", (_e, opts = {}) => {
+ipcMain.handle("pin-overlays-bottom", (event, opts = {}) => {
+  requireTrustedWindow(event);
   pinAllOverlaysBottom({ blur: opts?.blur !== false && opts?.soft !== true });
   return { ok: true };
 });
 
-ipcMain.handle("pin-overlays-bottom-soft", () => {
+ipcMain.handle("pin-overlays-bottom-soft", (event) => {
+  requireTrustedWindow(event);
   pinAllOverlaysBottom({ blur: false });
   return { ok: true };
 });
 
 ipcMain.handle("open-path", async (event, target) => {
+  requireTrustedWindow(event);
   if (!target) return { ok: false, message: "空路徑" };
   let value = String(target).trim();
   if (!value) return { ok: false, message: "空路徑" };
@@ -1334,13 +1544,14 @@ ipcMain.handle("open-path", async (event, target) => {
 });
 
 ipcMain.handle("pick-program", async (event) => {
+  requireTrustedWindow(event);
   const win = getSenderWindow(event);
   const result = await dialog.showOpenDialog(win, {
     title: "Programm zum Einbetten auswählen",
     properties: ["openFile"],
     filters: [
-      { name: "程式／捷徑", extensions: ["exe", "lnk", "bat", "cmd", "msc"] },
-      { name: "所有檔案", extensions: ["*"] }
+      { name: systemText("Programm/Verknüpfung", "Program/shortcut", "程式／捷徑"), extensions: ["exe", "lnk", "bat", "cmd", "msc"] },
+      { name: systemText("Alle Dateien", "All files", "所有檔案"), extensions: ["*"] }
     ]
   });
   if (result.canceled || !result.filePaths?.[0]) return null;
@@ -1386,8 +1597,7 @@ ipcMain.handle("open-in-vscode", async (event, target) => {
 });
 
 ipcMain.handle("get-taskbar-metrics", async (event) => {
-  const win = getSenderWindow(event);
-  if (!win || win.isDestroyed()) return null;
+  const win = requireTrustedWindow(event);
   const display = findDisplay(getWindowDisplayId(win));
   try {
     return await taskbarDock.getTaskbarMetricsForWindow(win, display);
@@ -1397,17 +1607,24 @@ ipcMain.handle("get-taskbar-metrics", async (event) => {
   }
 });
 
-ipcMain.handle("list-taskbar-pinned", async () => {
+ipcMain.handle("list-taskbar-pinned", async (event) => {
+  requireTrustedWindow(event);
   try {
     const items = await taskbarDock.listTaskbarPinnedApps();
-    return { items };
+    console.log("list-taskbar-pinned", {
+      directory: taskbarDock.taskbarPinsDir(),
+      files: taskbarDock.countTaskbarPinsSync(),
+      items: items.length
+    });
+    return { items, error: "" };
   } catch (err) {
     console.error("list-taskbar-pinned", err);
-    return { items: [] };
+    return { items: [], error: err?.message || String(err) };
   }
 });
 
-ipcMain.handle("list-autostart-items", async () => {
+ipcMain.handle("list-autostart-items", async (event) => {
+  requireTrustedWindow(event);
   try {
     return { items: await listAutostartItems() };
   } catch (err) {
@@ -1416,12 +1633,14 @@ ipcMain.handle("list-autostart-items", async () => {
   }
 });
 
-ipcMain.handle("get-path-icon", async (_e, target) => {
+ipcMain.handle("get-path-icon", async (event, target) => {
+  requireTrustedWindow(event);
   const dataUrl = await taskbarDock.iconForPath(target);
   return { dataUrl: dataUrl || "" };
 });
 
-ipcMain.handle("list-pinned-programs", async () => {
+ipcMain.handle("list-pinned-programs", async (event) => {
+  requireTrustedWindow(event);
   const list = Array.isArray(settings?.pinnedPrograms) ? settings.pinnedPrograms : [];
   const items = [];
   for (const item of list) {
@@ -1558,7 +1777,8 @@ ipcMain.handle("embed-launch", async (event, payload = {}) => {
   const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {}, resolveEmbedZone(payload));
   return win32Embed.launchAndDock(appPath, screenBounds, {
     timeoutMs: Number(payload.timeoutMs) || 15000,
-    hostHwnd: parentHwndOf(event)
+    hostHwnd: parentHwndOf(event),
+    processName: String(payload.processName || "")
   });
 });
 
@@ -1709,14 +1929,14 @@ ipcMain.handle("quit-app", (event) => {
 });
 
 ipcMain.on("set-file-drag-armed", (event, armed) => {
+  requireTrustedWindow(event);
   fileDragArmed = Boolean(armed);
   if (!armed) fileDragInFlight = false;
   applyFileDragMouseMode(getSenderWindow(event));
 });
 
 ipcMain.on("set-mouse-ignore", (event, ignore) => {
-  const win = getSenderWindow(event);
-  if (!win || win.isDestroyed()) return;
+  const win = requireTrustedWindow(event);
   // Armed / in-flight modes own hit-testing — don't let hover logic override.
   if (fileDragInFlight || isFileDragActive() || fileDragArmed) {
     applyFileDragMouseMode(win);
@@ -1729,11 +1949,7 @@ ipcMain.on("set-mouse-ignore", (event, ignore) => {
 
 /** Screen cursor → renderer CSS client coords (works even while click-through). */
 ipcMain.on("get-cursor-client-point", (event) => {
-  const win = getSenderWindow(event);
-  if (!win || win.isDestroyed()) {
-    event.returnValue = null;
-    return;
-  }
+  const win = requireTrustedWindow(event);
   try {
     const pt = screen.getCursorScreenPoint();
     const bounds = win.getContentBounds();

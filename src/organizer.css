@@ -218,6 +218,83 @@ body.desktop-shell #workspace {
     background-position: 0 0;
 }
 
+.task-embed-frame {
+    position: absolute;
+    z-index: 4;
+    box-sizing: border-box;
+    border: 0.18rem solid rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: var(--color_light_black);
+    box-shadow: 0 0 1rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
+    pointer-events: none;
+}
+
+.task-embed-frame .resize-handle {
+    position: absolute;
+    right: -0.15rem;
+    bottom: -0.15rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    pointer-events: auto;
+    cursor: nwse-resize;
+    z-index: 2;
+}
+
+.task-embed-title {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.55rem;
+    box-sizing: border-box;
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: rgba(2, 7, 11, 0.96);
+    border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+    font-size: var(--fs);
+    pointer-events: auto;
+}
+
+.task-embed-title button {
+    width: 1.7rem;
+    height: 1.7rem;
+    padding: 0;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.8);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: transparent;
+    cursor: pointer;
+}
+
+.path-tab-bar {
+    display: flex;
+    gap: 0.25rem;
+    min-height: 1.65rem;
+    padding: 0.2rem 0.35rem 0;
+    overflow-x: auto;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.path-tab {
+    flex: 0 0 auto;
+    max-width: 12rem;
+    overflow: hidden;
+    padding: 0.18rem 0.45rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.32);
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.72);
+    background: transparent;
+    font: inherit;
+    font-size: 0.78em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.path-tab.active {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    border-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.8);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.12);
+}
+
 .snap-guide {
     position: absolute;
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
@@ -1713,22 +1790,24 @@ div.modal_popup > h1,
 }
 
 .zone-margin-fields {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
-    flex-wrap: nowrap;
-    gap: 0.45rem;
-    white-space: nowrap;
+    gap: 0.3rem 0.55rem;
 }
 
 .zone-margin-fields label {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 0.2rem;
+    white-space: nowrap;
 }
 
 .zone-margin-fields input {
-    width: 4.2rem;
-    min-width: 0;
+    flex: 0 0 3.7rem;
+    width: 3.7rem;
+    min-width: 3.7rem;
 }
 
 .settings-inline-status[data-state="ready"] { color: #00ff75; }
@@ -2106,23 +2185,24 @@ div.modal_popup input[type="color"],
 }
 
 .conn-pointmap-block {
-  display: grid;
-  grid-template-columns: 3.2vh 1fr;
-  align-items: center;
-  gap: 0.35vh;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.12vh;
   width: 100%;
   margin: 0.2vh 0;
 }
 
 .conn-pointmap-label {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.12vh;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    width: 100%;
   font-size: 0.95vh;
   letter-spacing: 0.1em;
   opacity: 0.55;
-  text-align: right;
+    text-align: left;
 }
 
 .conn-pointmap-label strong {

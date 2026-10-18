@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("edex", {
   launchScale,
   bootstrap: () => ipcRenderer.invoke("get-bootstrap"),
   getWindowsColors: () => ipcRenderer.invoke("get-windows-colors"),
+  applyWindowsTheme: (payload) => ipcRenderer.invoke("apply-windows-theme", payload || {}),
   getStartWithWindows: () => ipcRenderer.invoke("get-start-with-windows"),
   setStartWithWindows: (enabled) => ipcRenderer.invoke("set-start-with-windows", Boolean(enabled)),
   getRainmeterStatus: () => ipcRenderer.invoke("rainmeter-status"),
@@ -141,5 +142,8 @@ contextBridge.exposeInMainWorld("edex", {
   },
   onReceiveWidget: (fn) => {
     ipcRenderer.on("receive-widget", (_e, widget) => fn(widget));
+  },
+  onShutdownRequested: (fn) => {
+    ipcRenderer.on("shutdown-request", () => fn());
   }
 });

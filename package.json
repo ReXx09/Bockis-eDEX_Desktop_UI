@@ -10,7 +10,7 @@
     "url": "https://github.com/ReXx09/Bockis-eDEX_Desktop_UI.git"
   },
   "scripts": {
-    "test": "node --test test/organizer.test.js",
+    "test": "node --test test/organizer.test.js test/i18n.test.js",
     "prepare-assets": "node scripts/prepare-assets.js",
     "prepare-rainmeter": "node scripts/prepare-rainmeter.js",
     "prestart": "node scripts/prepare-assets.js",
@@ -50,6 +50,10 @@
       {
         "from": "start-tron.cmd",
         "to": "start-tron.cmd"
+      },
+      {
+        "from": "sync-windows-theme.ps1",
+        "to": "sync-windows-theme.ps1"
       }
     ],
     "asar": true,

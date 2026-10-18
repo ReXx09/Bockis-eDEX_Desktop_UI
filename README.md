@@ -70,11 +70,19 @@ Zusätzlich stehen im Terminal-Panel zur Verfügung:
 
 Die Terminal-Ausgabe wird ereignisbasiert an den Renderer übertragen. Die übrigen HUD-Panels liefern ihre Live-Systemdaten unabhängig davon.
 
+### Vertrauensgrenze und Windows-Sicherheit
+
+Das Terminal ist absichtlich eine echte interaktive PowerShell- bzw. CMD-Sitzung und kann beliebige Befehle im Benutzerkontext ausführen. Die Anwendung darf deshalb nur lokale, unveränderte Renderer-Inhalte laden; fremde Webseiten oder untrusted HTML-Dateien gehören nicht in diese Oberfläche.
+
+Dateioperationen werden über den Electron-Main-Prozess ausgeführt. Organizer-Verschiebungen prüfen Root-Grenzen und lehnen symbolische Pfadkomponenten ab. PowerShell-Hilfsskripte werden mit `RemoteSigned` gestartet. Die Anwendung ersetzt keine Windows-Code-Signatur; veröffentlichte Installer sollten vor dem Verteilen signiert und ihre Prüfsumme dokumentiert werden.
+
 ## Optionale Rainmeter-Integration
 
 Der Installer enthaelt optional Rainmeter. Auf der Seite **Hinweise und Abhaengigkeiten** kann die Rainmeter-Installation aktiviert oder abgewählt werden. Danach kann in den eDEX-Einstellungen **Rainmeter-HUD** aktiviert werden. Die Anwendung erzeugt dann eine eigene `Bockis-eDEX`-Skin mit Uhr, Datum, CPU- und RAM-Anzeige. Farben und Hintergrund werden aus dem aktiven eDEX-Theme übernommen; ein Themewechsel aktualisiert die Skin automatisch.
 
 Der Build lädt dafür den offiziellen Rainmeter-Installer herunter und bettet ihn in das NSIS-Paket ein. Die Skin liegt unter `%USERPROFILE%\\Documents\\Rainmeter\\Skins\\Bockis-eDEX`. Wird die Option deaktiviert oder die Anwendung beendet, wird die Skin ausgeblendet. Ohne installierte Rainmeter-Anwendung bleibt die eDEX-Oberfläche vollständig funktionsfähig.
+
+Der Build verwendet eine festgelegte Rainmeter-Version und prüft den SHA-256-Hash des Installers. Ein abweichendes oder unvollständiges Artefakt wird nicht in das Paket übernommen.
 
 ## Ausführen
 

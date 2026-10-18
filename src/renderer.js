@@ -88,6 +88,9 @@ const terminalBrowserTimers = new Map();
 let terminalBridgeBound = false;
 let taskbarDockItems = [];
 let taskbarDockLoaded = false;
+let taskbarDockLoadPromise = null;
+let taskbarDockRetryTimer = null;
+let taskbarDockLoadAttempts = 0;
 
 function logUiAction(event, message, details) {
   window.edex?.logAction?.(event, message, details);
@@ -1247,22 +1250,21 @@ function constrainPanelPosition(el, x, y, w, h) {
     };
   }
   const central = centralZoneRect();
-  const candidates = [
-    { x: 0, y: Math.max(0, Math.min(ws.height - h, y)) },
-    { x: Math.max(0, ws.width - w), y: Math.max(0, Math.min(ws.height - h, y)) },
-    { x: Math.max(0, Math.min(ws.width - w, x)), y: 0 },
-    { x: Math.max(0, Math.min(ws.width - w, x)), y: Math.max(0, ws.height - h) }
+  const regions = [
+    { x: 0, y: 0, width: central.x, height: ws.height },
+    { x: central.x + central.width, y: 0, width: ws.width - central.x - central.width, height: ws.height },
+    { x: 0, y: 0, width: ws.width, height: central.y },
+    { x: 0, y: central.y + central.height, width: ws.width, height: ws.height - central.y - central.height }
   ];
-  const overlapsCentral = (candidate) => (
-    candidate.x < central.x + central.width
-    && candidate.x + w > central.x
-    && candidate.y < central.y + central.height
-    && candidate.y + h > central.y
-  );
-  const valid = candidates.filter((candidate) => !overlapsCentral(candidate));
-  return (valid.length ? valid : candidates).sort(
+  const candidates = regions
+    .filter((region) => region.width >= w && region.height >= h)
+    .map((region) => ({
+      x: Math.max(region.x, Math.min(region.x + region.width - w, x)),
+      y: Math.max(region.y, Math.min(region.y + region.height - h, y))
+    }));
+  return candidates.sort(
     (a, b) => ((a.x - x) ** 2 + (a.y - y) ** 2) - ((b.x - x) ** 2 + (b.y - y) ** 2)
-  )[0];
+  )[0] || { x: 0, y: 0 };
 }
 
 function clampPanelToZone(el) {
@@ -1398,6 +1400,11 @@ function applyTheme(theme, wallpaperId) {
 
   const wp = wallpaperId || state.settings.wallpaper || "grid";
   document.body.className = `desktop-shell wp-${wp}`;
+  const windowsThemeSync = window.edex?.applyWindowsTheme?.({
+    mode,
+    rgb: { r: c.r ?? 170, g: c.g ?? 207, b: c.b ?? 209 }
+  });
+  windowsThemeSync?.catch?.(() => {});
 }
 
 function ledGlyph(ch) {
@@ -1623,7 +1630,14 @@ function currentDisplayLayout() {
       minimized: Boolean(card.minimized),
       fixedDisplayId: Number.isFinite(Number(card.fixedDisplayId)) ? Number(card.fixedDisplayId) : null,
       iconView: card.iconView === "list" ? "list" : "grid",
-      bg: card.bg || ""
+      bg: card.bg || "",
+      activeTabId: card.activeTabId || `${card.id}:root`,
+      tabs: ensurePathTabs(card).map((tab) => ({
+        id: tab.id,
+        path: tab.path,
+        name: tab.name || "",
+        iconView: tab.iconView === "list" ? "list" : "grid"
+      }))
     })),
     desktopBg: state.desktopStage?.bg || "",
     iconPositions: state.iconPositions,
@@ -2058,20 +2072,179 @@ function makeInteractive(el, opts) {
   }
 }
 
+function bootBytes(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return "?";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let amount = bytes;
+  let index = 0;
+  while (amount >= 1024 && index < units.length - 1) {
+    amount /= 1024;
+    index += 1;
+  }
+  return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+async function loadBootSnapshot() {
+  const api = window.edex;
+  if (!api) return null;
+  const results = await Promise.allSettled([
+    api.getCpuMetrics?.(),
+    api.getMemMetrics?.(),
+    api.getHardwareInfo?.(),
+    api.getTopProcesses?.(),
+    api.getNetStatus?.(),
+    api.listDrives?.()
+  ]);
+  const value = (result) => result?.status === "fulfilled" ? result.value : null;
+  return {
+    cpu: value(results[0]),
+    mem: value(results[1]),
+    hardware: value(results[2]),
+    processes: value(results[3]),
+    network: value(results[4]),
+    drives: value(results[5])
+  };
+}
+
 async function boot() {
   const bootScreen = document.getElementById("boot_screen");
-  if (bootScreen) {
-    bootScreen.className = "brand_boot";
-    bootScreen.innerHTML = `
-      <img class="brand_logo" src="assets/misc/bockis-logo.png" alt="ReXx eDEX">
-      <div class="brand_name">BOCKIS-eDEX DESKTOP UI</div>
-      <div class="brand_status">INITIALIZING TRON WORKSPACE...</div>
-    `;
-  }
+  if (!bootScreen) return;
+
+  let progress = 0;
+  const snapshotPromise = loadBootSnapshot();
+  bootScreen.className = "boot_terminal";
+  bootScreen.innerHTML = `
+    <div class="boot-terminal-head">
+      <div class="boot-brand">
+        <img class="boot-logo" src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
+        <div><strong>BOCKIS-eDEX</strong><span>DESKTOP UI / TRON SYSTEM</span></div>
+      </div>
+      <button type="button" class="boot-skip" data-boot-skip>SKIP &gt;</button>
+    </div>
+    <div class="boot-terminal-title">SYSTEM INITIALIZATION <span>LIVE CHANNEL</span></div>
+    <div class="boot-log" data-boot-log aria-live="polite"></div>
+    <div class="boot-terminal-foot">
+      <span data-boot-percent>BOOT 0%</span>
+      <div class="boot-track"><i data-boot-fill></i></div>
+      <span data-boot-target>DISPLAY ${state.primary ? "PRIMARY" : "SECONDARY"}</span>
+    </div>`;
+
+  const log = bootScreen.querySelector("[data-boot-log]");
+  const fill = bootScreen.querySelector("[data-boot-fill]");
+  const percent = bootScreen.querySelector("[data-boot-percent]");
+  const totalSteps = 13;
+  const bootLine = (label, message, status = "OK") => {
+    const row = document.createElement("div");
+    const tone = status === "WARN" ? "warn" : status === "WAIT" ? "wait" : "ok";
+    row.className = `boot-row ${tone}`;
+    row.innerHTML = `<span class="boot-row-time">${new Date().toLocaleTimeString([], { hour12: false })}</span><b>${escapeHtml(label)}</b><span>${escapeHtml(message)}</span><strong>[${escapeHtml(status)}]</strong>`;
+    log?.appendChild(row);
+    if (log) log.scrollTop = log.scrollHeight;
+  };
+  const step = async (label, message, status = "OK") => {
+    bootLine(label, message, status);
+    progress = Math.min(100, progress + 100 / totalSteps);
+    if (fill) fill.style.width = `${progress}%`;
+    if (percent) percent.textContent = `BOOT ${Math.round(progress)}%`;
+    await delay(105);
+  };
+
+  bootScreen.querySelector("[data-boot-skip]")?.addEventListener("click", () => {
+    bootScreen.remove();
+  });
+
   applyTheme(state.theme || state.bootstrap?.theme, state.settings.wallpaper || "grid");
   document.documentElement.dataset.ramGaugeMode = ramGaugeMode();
-  await new Promise((resolve) => setTimeout(resolve, 900));
-  bootScreen?.remove();
+  bootLine("BOOT", "Bockis eDEX kernel channel", "LOAD");
+  await delay(160);
+  await step("CORE", "Electron IPC bridge", window.edex ? "READY" : "WARN");
+
+  const snapshot = await snapshotPromise;
+  const cpu = snapshot?.cpu || {};
+  const mem = snapshot?.mem || {};
+  const hardware = snapshot?.hardware || {};
+  const processes = snapshot?.processes || {};
+  const network = snapshot?.network || {};
+  const drives = Array.isArray(snapshot?.drives?.items) ? snapshot.drives.items : [];
+  const memoryPercent = mem.total ? Math.round((Number(mem.used || 0) / Number(mem.total)) * 100) : null;
+
+  await step("CPU", `${cpu.name || "CPU unavailable"} / ${cpu.cores || "?"} cores / ${Number(cpu.avg || 0).toFixed(1)}%`, cpu.name ? "READY" : "WARN");
+  await step("MEM", `${bootBytes(mem.used)} / ${bootBytes(mem.total)}${memoryPercent == null ? "" : ` / ${memoryPercent}%`}`, mem.total ? "READY" : "WARN");
+  await step("HOST", `${hardware.manufacturer || "UNKNOWN"} ${hardware.model || window.edex?.displayId || "DISPLAY"}`, hardware.model ? "READY" : "WARN");
+  await step("NET", `${network.state || "OFFLINE"}${network.iface ? ` / ${network.iface}` : ""}${network.ip4 ? ` / ${network.ip4}` : ""}`, network.offline ? "WARN" : "READY");
+  await step("DRIVE", `${drives.length} volume${drives.length === 1 ? "" : "s"} mounted`, drives.length ? "READY" : "WARN");
+  await step("PROC", `${processes.tasks || processes.list?.length || 0} processes indexed`, processes.list ? "READY" : "WARN");
+
+  const modules = [
+    ["EFFECTS", Boolean(window.edexEffects)],
+    ["I18N", Boolean(window.edexI18n)],
+    ["COCKPIT", Boolean(window.cockpitPanel)],
+    ["CPU RAIL", Boolean(window.cpuRailPanel)],
+    ["DOCK", Boolean(window.dockPanel)]
+  ];
+  for (const [name, loaded] of modules) {
+    await step("MODULE", `${name} ${loaded ? "loaded" : "deferred"}`, loaded ? "READY" : "WAIT");
+  }
+  await step("THEME", `${String(state.themeName || "tron").toUpperCase()} renderer synchronized`, "READY");
+  await step("WORKSPACE", `${state.primary ? "PRIMARY" : "SECONDARY"} display ${state.displayIndex + 1}`, "READY");
+  if (fill) fill.style.width = "100%";
+  if (percent) percent.textContent = "BOOT 100%";
+  await delay(220);
+  bootScreen.remove();
+}
+
+let shutdownInProgress = false;
+
+async function shutdown() {
+  if (shutdownInProgress) return;
+  shutdownInProgress = true;
+  document.getElementById("boot_screen")?.remove();
+  document.getElementById("shutdown_screen")?.remove();
+
+  const shutdownScreen = document.createElement("section");
+  shutdownScreen.id = "shutdown_screen";
+  shutdownScreen.innerHTML = `
+    <div class="shutdown-terminal">
+      <div class="shutdown-terminal-head">
+        <span>BOCKIS-eDEX / SHUTDOWN CONSOLE</span>
+        <strong>POWER MANAGEMENT</strong>
+      </div>
+      <div class="shutdown-log" data-shutdown-log aria-live="polite"></div>
+    </div>
+    <div class="shutdown-final" data-shutdown-final>
+      <img src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
+      <strong>BOCKIS-eDEX</strong>
+      <span>SYSTEM POWER DOWN</span>
+    </div>`;
+  document.body.appendChild(shutdownScreen);
+
+  const log = shutdownScreen.querySelector("[data-shutdown-log]");
+  const line = (label, message, status = "OK") => {
+    const row = document.createElement("div");
+    row.className = status === "WAIT" ? "shutdown-row wait" : "shutdown-row";
+    row.innerHTML = `<span>${new Date().toLocaleTimeString([], { hour12: false })}</span><b>${escapeHtml(label)}</b><span>${escapeHtml(message)}</span><strong>[${escapeHtml(status)}]</strong>`;
+    log?.appendChild(row);
+  };
+  const step = async (label, message, status = "OK") => {
+    line(label, message, status);
+    await delay(145);
+  };
+
+  document.body.classList.add("is-shutting-down");
+  await step("STOP", "User interface input locked");
+  try { window.edexEffects?.stop?.(); } catch { /* ignore visual cleanup errors */ }
+  await step("EFFECTS", "HUD effects stopped");
+  try { window.dockPanel?.unbind?.(state); } catch { /* ignore visual cleanup errors */ }
+  await step("DOCK", "Task dock detached");
+  try { await closeTaskDockApp(); } catch { /* ignore stale embedded windows */ }
+  await step("EMBED", "Embedded windows released");
+  await step("PANELS", "Workspace panels released");
+  await step("IPC", "Electron shutdown request queued", "WAIT");
+  await delay(180);
+  shutdownScreen.classList.add("is-final");
+  await delay(1050);
+  window.edex.quitApp();
 }
 
 function styleFromBox(box) {
@@ -2136,7 +2309,11 @@ function dockIcon(kind, id) {
 
 function renderDockItems() {
   const host = document.querySelector("[data-dock-items]");
-  if (!host) return;
+  if (!host) {
+    renderTaskDockItems();
+    loadTaskbarDockItems();
+    return;
+  }
   const items = [];
   Object.keys(PANEL_META).forEach((id) => {
     if (id !== "dock" && state.layout[id]?.minimized) {
@@ -2197,22 +2374,97 @@ function renderTaskDockItems() {
   window.edexI18n?.translatePage?.(host);
   host.querySelectorAll("[data-task-dock-path]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const target = button.dataset.taskDockPath;
-      if (target) await window.edex?.openPath?.(target);
+      const item = taskbarDockItems.find((candidate) => candidate.path === button.dataset.taskDockPath);
+      if (item) await openTaskDockItem(item);
     });
   });
 }
 
+function taskEmbedLayout() {
+  const zone = centralZoneRect();
+  const inset = Math.max(6, Math.round(gridSize() * 0.35));
+  const header = Math.max(34, Math.round(gridSize() * 1.35));
+  const width = Math.max(320, Math.min(zone.width - inset * 2, Math.round(zone.width * 0.68)));
+  const height = Math.max(220, Math.min(zone.height - inset * 2, Math.round(zone.height * 0.68)));
+  const frame = {
+    x: zone.x + Math.max(inset, Math.round((zone.width - width) / 2)),
+    y: zone.y + Math.max(inset, Math.round((zone.height - height) / 2)),
+    w: width,
+    h: height
+  };
+  return { frame, native: taskEmbedNativeBounds(frame, header) };
+}
+
+function taskEmbedNativeBounds(frame) {
+  const header = Math.max(34, Math.round(gridSize() * 1.35));
+  return {
+    x: frame.x,
+    y: frame.y + header,
+    w: frame.w,
+    h: Math.max(80, frame.h - header)
+  };
+}
+
+function syncTaskEmbedBounds(frame, hwnd) {
+  if (!hwnd) return;
+  window.edex?.embedBounds?.({ hwnd, bounds: taskEmbedNativeBounds({
+    x: frame.offsetLeft,
+    y: frame.offsetTop,
+    w: frame.offsetWidth,
+    h: frame.offsetHeight
+  }) });
+}
+
+function removeTaskEmbedFrame() {
+  state.taskEmbedResizeHandler && window.removeEventListener("resize", state.taskEmbedResizeHandler);
+  state.taskEmbedResizeHandler = null;
+  document.getElementById("task-embed-frame")?.remove();
+}
+
+async function closeTaskDockApp() {
+  const hwnd = state.taskDockEmbed?.hwnd;
+  if (hwnd) await window.edex?.embedRelease?.({ hwnd });
+  delete state.taskDockEmbed;
+  removeTaskEmbedFrame();
+}
+
+async function openTaskDockItem(item) {
+  const target = String(item.path || "").trim();
+  if (!target) return;
+  await closeTaskDockApp();
+  const result = await window.edex?.openPath?.(target);
+  if (result?.ok === false) toast(result.message || "Programm konnte nicht geöffnet werden");
+}
+
 function loadTaskbarDockItems() {
-  if (taskbarDockLoaded || !window.edex?.listTaskbarPinned) return;
-  taskbarDockLoaded = true;
-  window.edex.listTaskbarPinned().then((result) => {
-    taskbarDockItems = Array.isArray(result?.items) ? result.items : [];
-    renderTaskDockItems();
-  }).catch(() => {
-    taskbarDockItems = [];
-    renderTaskDockItems();
-  });
+  if (taskbarDockLoaded || taskbarDockLoadPromise || !window.edex?.listTaskbarPinned) return;
+  taskbarDockLoadPromise = window.edex.listTaskbarPinned()
+    .then((result) => {
+      if (result?.error) throw new Error(result.error);
+      taskbarDockItems = Array.isArray(result?.items) ? result.items : [];
+      taskbarDockLoaded = true;
+      taskbarDockLoadAttempts = 0;
+      logUiAction("taskdock.loaded", "Task-Dock geladen", { items: taskbarDockItems.length });
+      renderTaskDockItems();
+    })
+    .catch((error) => {
+      taskbarDockItems = [];
+      taskbarDockLoadAttempts += 1;
+      logUiAction("taskdock.load_failed", "Task-Dock konnte nicht geladen werden", {
+        attempt: taskbarDockLoadAttempts,
+        message: error?.message || String(error)
+      });
+      renderTaskDockItems();
+      if (taskbarDockLoadAttempts < 3 && !taskbarDockRetryTimer) {
+        taskbarDockRetryTimer = setTimeout(() => {
+          taskbarDockRetryTimer = null;
+          loadTaskbarDockItems();
+        }, 3000);
+      }
+    })
+    .finally(() => {
+      taskbarDockLoadPromise = null;
+    });
 }
 
 function setCardLocked(el, locked) {
@@ -2532,7 +2784,7 @@ function menuItemsForCard(kind, ctx) {
         action: () => toggleIconView("path", ctx.id)
       },
       { label: "Diesen Ordner aktivieren", action: () => setActivePath(ctx.id) },
-      { label: "Ordner im Explorer öffnen", action: () => window.edex.openPath(ctx.path) },
+      { label: "Als eDEX-Ordnerfenster öffnen", action: () => setActivePath(ctx.id) },
       { label: "In VS Code öffnen", action: () => openInVsCode(ctx.path) },
       { label: "Pfad ändern", action: () => changePath(ctx.id) },
       { label: "Panel-Namen ändern", action: () => renamePathPanel(ctx.id) },
@@ -3039,7 +3291,6 @@ function dockEnabled() {
 function syncDockLayout(enabled) {
   if (!state.primary || !PANEL_META.dock) {
     if (state.layout.dock) delete state.layout.dock;
-    if (state.layout.taskdock) delete state.layout.taskdock;
     window.dockPanel?.unbind?.(state);
     return;
   }
@@ -3473,6 +3724,11 @@ function buildLayout() {
   }
   stopPluginRuntimes();
   window.edexEffects?.stop?.();
+  if (state.taskDockEmbed?.hwnd) {
+    window.edex?.embedRelease?.({ hwnd: state.taskDockEmbed.hwnd });
+    delete state.taskDockEmbed;
+    removeTaskEmbedFrame();
+  }
   delete state.layout.status;
 
   const panels = Object.keys(PANEL_META).map((id) => panelHtml(id)).join("");
@@ -3615,7 +3871,7 @@ function buildLayout() {
   if (state.primary) {
     document.getElementById("settings-fab")?.addEventListener("click", () => openSettings());
     document.getElementById("quit-fab")?.addEventListener("click", () => {
-      if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?")) window.edex.quitApp();
+      if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?")) shutdown();
     });
   }
 
@@ -3770,6 +4026,50 @@ function pathTitle(card, index) {
   return card?.name?.trim() || (card?.path ? card.path.split(/[/\\]/).filter(Boolean).pop() : `路徑 ${index + 1}`);
 }
 
+function ensurePathTabs(card) {
+  if (!card) return [];
+  if (!Array.isArray(card.tabs) || !card.tabs.length) {
+    card.tabs = [{
+      id: `${card.id}:root`,
+      path: card.path,
+      name: card.name,
+      listing: card.listing,
+      scan: card.scan,
+      listingError: card.listingError
+    }];
+    card.activeTabId = card.tabs[0].id;
+  }
+  return card.tabs;
+}
+
+function syncPathTab(card) {
+  const tab = ensurePathTabs(card).find((item) => item.id === card.activeTabId) || ensurePathTabs(card)[0];
+  if (!tab) return;
+  card.activeTabId = tab.id;
+  Object.assign(tab, {
+    path: card.path,
+    name: card.name,
+    listing: card.listing,
+    scan: card.scan,
+    listingError: card.listingError
+  });
+}
+
+function activatePathTab(card, tabId) {
+  syncPathTab(card);
+  const tab = ensurePathTabs(card).find((item) => item.id === tabId);
+  if (!tab) return;
+  card.activeTabId = tab.id;
+  card.path = tab.path;
+  card.name = tab.name;
+  card.listing = tab.listing;
+  card.scan = tab.scan;
+  card.listingError = tab.listingError || "";
+  state.activePathId = card.id;
+  renderPathCards();
+  scanCard(card);
+}
+
 function listingItems(listing) {
   if (!listing) return [];
   return [...(listing.destFolders || []), ...(listing.items || [])];
@@ -3809,10 +4109,12 @@ async function scanCard(card) {
   fillPathStage(card);
     try {
     card.listing = await window.edex.listFolder(card.path);
+    syncPathTab(card);
     fillPathStage(card);
     if (card.id === state.activePathId) {
       try {
         card.scan = await window.edex.scan(card.path);
+        syncPathTab(card);
         state.scan = card.scan;
         await refreshPlan();
         renderStats();
@@ -3825,6 +4127,7 @@ async function scanCard(card) {
   } catch (err) {
     card.listing = { items: [], total: 0 };
     card.listingError = err.message || "無法讀取資料夾";
+    syncPathTab(card);
     fillPathStage(card);
     toast(card.listingError);
     log(`讀取失敗：${card.listingError}`);
@@ -3843,6 +4146,7 @@ function renderPathCards() {
   const workspace = document.getElementById("workspace");
   state.pathCards.forEach((card, index) => {
     if (card.minimized) return;
+    ensurePathTabs(card);
     const el = document.createElement("section");
     const locked = Boolean(card.locked);
     el.className = `path-card${card.id === state.activePathId ? " active-path" : ""}${locked ? " locked" : ""}`;
@@ -3853,6 +4157,7 @@ function renderPathCards() {
         <span class="card-title-text">${escapeHtml(pathTitle(card, index))}</span>
         ${cardToolsHtml()}
       </h3>
+      <div class="path-tab-bar">${ensurePathTabs(card).map((tab) => `<button type="button" class="path-tab${tab.id === card.activeTabId ? " active" : ""}" data-path-tab="${escapeHtml(tab.id)}" title="${escapeHtml(tab.path || "")}">${escapeHtml(tab.name || pathTitle(tab, 0))}</button>`).join("")}</div>
       <div class="card-body">
         <p class="path-text" title="${escapeHtml(card.path)}">${escapeHtml(card.path)}</p>
         <div class="path-stage view-${card.iconView === "list" ? "list" : "grid"}" data-path-stage="${card.id}"></div>
@@ -3861,6 +4166,12 @@ function renderPathCards() {
     `;
     el.addEventListener("dblclick", () => setActivePath(card.id));
     workspace.appendChild(el);
+    el.querySelectorAll("[data-path-tab]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        activatePathTab(card, button.dataset.pathTab);
+      });
+    });
     bindCardTools(el, () => menuItemsForCard("path", {
       el,
       id: card.id,
@@ -3972,10 +4283,18 @@ async function addPathCardAt(folderPath, options = {}) {
     toast("Dieser Eintrag kann nicht als Ordner-Panel hinzugefügt werden");
     return;
   }
+  const comparablePath = (value) => String(value || "")
+    .trim()
+    .replace(/[\\/]+$/, "")
+    .toLowerCase();
   const existing = state.pathCards.find(
-    (card) => String(card.path || "").toLowerCase() === picked.toLowerCase()
+    (card) => comparablePath(card.path) === comparablePath(picked)
   );
   if (existing) {
+    if (existing.minimized) {
+      existing.minimized = false;
+      renderPathCards();
+    }
     await setActivePath(existing.id);
     toast("Dieses Ordner-Panel ist bereits vorhanden");
     return;
@@ -4001,6 +4320,27 @@ async function addPathCardAt(folderPath, options = {}) {
     h: 52,
     iconView: "grid"
   }, { pathId: id });
+  const occupied = occupiedLayoutRects({ pathId: id });
+  if (overlapsAny(pxFromBox(placed), occupied)) {
+    const targetCard = activeCard();
+    if (targetCard) {
+      ensurePathTabs(targetCard);
+      syncPathTab(targetCard);
+      const tab = {
+        id: `${targetCard.id}:${Date.now()}`,
+        path: picked,
+        name: panelName.trim() || defaultName,
+        listing: null,
+        scan: null,
+        listingError: ""
+      };
+      targetCard.tabs.push(tab);
+      activatePathTab(targetCard, tab.id);
+      persistLayout();
+      toast(`Ordner als Tab „${tab.name}“ geöffnet`);
+      return;
+    }
+  }
   state.pathCards.push(placed);
   state.activePathId = id;
   persistLayout();
@@ -4467,7 +4807,9 @@ function openLanPathPrompt() {
       <button type="button" id="lan-ok">Hinzufügen und indizieren</button>
     </div>`;
   document.body.appendChild(modal);
+  window.edexI18n?.translatePage?.(modal);
   const input = document.getElementById("lan_path_input");
+  if (input && window.edexI18n?.locale?.() !== "zh-Hant") input.placeholder = "\\\\Server\\Share";
   input?.focus();
   document.getElementById("lan-cancel").onclick = () => modal.remove();
   document.getElementById("lan-ok").onclick = async () => {
@@ -4710,7 +5052,7 @@ function openCalNoteEditor(key) {
     });
     if (id) {
       label.textContent = "Eintrag bearbeiten";
-      saveBtn.textContent = "儲存修改";
+      saveBtn.textContent = window.edexI18n?.translateDynamic?.("儲存修改") || "Änderungen speichern";
       input.value = text || "";
       input.focus();
     } else {
@@ -5203,6 +5545,7 @@ function promptTextInput({ title = "輸入", hint = "", value = "", okLabel = "�
         <button type="button" id="text-input-ok">${escapeHtml(okLabel)}</button>
       </div>`;
     document.body.appendChild(modal);
+    window.edexI18n?.translatePage?.(modal);
     placeCentered(modal, { width: Math.min(420, window.innerWidth * 0.42), topRatio: 0.22 });
     const input = modal.querySelector("#text_input_field");
     if (input) {
@@ -5504,12 +5847,13 @@ function renderDeskTabs() {
   if (!bar) return;
   const active = state.desktopTabId || "classify";
   const folderTabs = state.desktopFolderTabs || [];
+  const closeLabel = window.edexI18n?.translateDynamic?.("關閉") || "Schließen";
   bar.innerHTML = [
     `<button type="button" class="desk-tab${active === "classify" ? " on" : ""}" data-desk-tab="classify"><span class="desk-tab-label">Desktop-Kategorien</span></button>`,
     ...folderTabs.map((tab) => `
       <button type="button" class="desk-tab${active === tab.id ? " on" : ""}" data-desk-tab="${escapeHtml(tab.id)}" title="${escapeHtml(tab.path || "")}">
         <span class="desk-tab-label">${escapeHtml(tab.name || folderTabTitle(tab.path))}</span>
-        <span class="desk-tab-close" data-desk-tab-close="${escapeHtml(tab.id)}" title="關閉">×</span>
+        <span class="desk-tab-close" data-desk-tab-close="${escapeHtml(tab.id)}" title="${escapeHtml(closeLabel)}">×</span>
       </button>
     `)
   ].join("");
@@ -5663,7 +6007,7 @@ async function arrangeDesktop() {
   if (folderTab) {
     stage.classList.remove("view-grouped");
     if (!folderTab.listing) {
-      stage.innerHTML = `<p class="path-empty">讀取中…</p>`;
+      stage.innerHTML = `<p class="path-empty">${escapeHtml(window.edexI18n?.translateDynamic?.("讀取中…") || "Loading …")}</p>`;
       await loadFolderTabListing(folderTab);
     }
     const destDir = folderTab.path || "";
@@ -5682,7 +6026,7 @@ async function arrangeDesktop() {
     }
     const items = listingItems(folderTab.listing);
     if (!items.length) {
-      stage.innerHTML = `<p class="path-empty">此資料夾沒有可顯示的項目</p>`;
+      stage.innerHTML = `<p class="path-empty">${escapeHtml(window.edexI18n?.translateDynamic?.("此資料夾沒有可顯示的項目") || "This folder has no items to display")}</p>`;
       bindFileStage(stage, fileOpts);
       return;
     }
@@ -5709,7 +6053,8 @@ async function arrangeDesktop() {
     const list = visibleBuckets.length ? visibleBuckets : buckets;
     stage.innerHTML = list.map((bucket) => {
       const count = all.filter((item) => matchesDeskFilter(item, bucket.id)).length;
-      return `<section class="desk-group" data-bucket="${bucket.id}"><h4>${bucket.label}<em>${count}</em></h4><div class="desk-group-items"></div></section>`;
+      const label = window.edexI18n?.translateDynamic?.(bucket.label) || bucket.label;
+      return `<section class="desk-group" data-bucket="${bucket.id}"><h4>${escapeHtml(label)}<em>${count}</em></h4><div class="desk-group-items"></div></section>`;
     }).join("");
     list.forEach((bucket) => {
       const inner = stage.querySelector(`[data-bucket="${bucket.id}"] .desk-group-items`);
@@ -5717,7 +6062,10 @@ async function arrangeDesktop() {
       const items = all.filter((item) => matchesDeskFilter(item, bucket.id));
       if (!items.length) {
         inner.className = "desk-group-items";
-        inner.innerHTML = `<p class="path-empty">沒有${bucket.label}</p>`;
+        const label = window.edexI18n?.translateDynamic?.(bucket.label) || bucket.label;
+        const locale = window.edexI18n?.locale?.() || "de";
+        const empty = locale === "zh-Hant" ? `沒有${bucket.label}` : locale === "en" ? `No ${label}` : `Keine ${label}`;
+        inner.innerHTML = `<p class="path-empty">${escapeHtml(empty)}</p>`;
         return;
       }
       fillIconStage(inner, items, { draggable: false, view, ...fileOpts });
@@ -5755,7 +6103,9 @@ function updateDisplayChip() {
   const { width, height } = pageSize();
   const role = state.primary ? "主螢幕" : "獨立頁面";
   const who = state.bootstrap?.username || "";
-  chip.textContent = `顯示器 ${state.displayIndex + 1} · ${layoutMode().toUpperCase()} · ${width}×${height} · ${who} · ${role}`;
+  const monitor = `顯示器 ${state.displayIndex + 1} · ${layoutMode().toUpperCase()}`;
+  const localize = (value) => window.edexI18n?.translateDynamic?.(value) || value;
+  chip.textContent = `${localize(monitor)} · ${width}×${height} · ${who} · ${localize(role)}`;
 }
 
 async function refreshPlan() {
@@ -5832,13 +6182,19 @@ function openSettings(focusPanel = "") {
   const presetOpts = (state.settings.presets || []).map((preset) =>
     `<option value="${escapeHtml(preset.name)}">${escapeHtml(preset.name)}</option>`
   ).join("");
+  const currentLocale = state.settings.locale || "de";
+  const zhLanguageLabel = currentLocale === "zh-Hant"
+    ? "繁體中文"
+    : currentLocale === "en"
+      ? "Traditional Chinese"
+      : "Chinesisch (traditionell)";
 
   modal.innerHTML = `
     <h1>Einstellungen</h1>
     <h2>Sprache / 語言</h2>
     <table><tr><td>Sprache</td><td>UI-Sprache der Anwendung</td><td>
       <select id="set-locale">
-        <option value="zh-Hant" ${(state.settings.locale || "zh-Hant") === "zh-Hant" ? "selected" : ""}>繁體中文</option>
+        <option value="zh-Hant" ${currentLocale === "zh-Hant" ? "selected" : ""}>${zhLanguageLabel}</option>
         <option value="de" ${state.settings.locale === "de" ? "selected" : ""}>Deutsch</option>
         <option value="en" ${state.settings.locale === "en" ? "selected" : ""}>English</option>
       </select>
@@ -5873,7 +6229,7 @@ function openSettings(focusPanel = "") {
       </tr>
       <tr>
         <td>Windows-Farben</td>
-        <td>Windows-Akzentfarbe in das aktive Theme einmischen</td>
+        <td>Akzentfarbe anwenden; bei „Stark“ zusätzlich den Windows-Dunkelmodus setzen</td>
         <td>
           <select id="set-windows-colors">
             <option value="off" ${state.settings.windowsColorMode === "off" ? "selected" : ""}>Aus</option>
@@ -6507,7 +6863,8 @@ async function runOrganize() {
       toast("沒有需要遷移的項目");
       return;
     }
-    if (!window.confirm(`將在系統桌面建立分類／副檔名資料夾並遷移 ${state.plan.count} 個項目。確定？`)) {
+    const confirmText = `將在系統桌面建立分類／副檔名資料夾並遷移 ${state.plan.count} 個項目。確定？`;
+    if (!window.confirm(window.edexI18n?.translateDynamic?.(confirmText) || confirmText)) {
       return;
     }
     const result = await window.edex.organize(scan, { includeFolders: state.includeFolders });
@@ -6541,11 +6898,12 @@ window.addEventListener("keydown", (event) => {
   } catch {
     state.windowsColors = null;
   }
-  window.edexI18n?.setLocale?.(state.settings.locale || "zh-Hant");
+  window.edexI18n?.setLocale?.(state.settings.locale || "de");
   state.displays = state.bootstrap.displays || [];
   state.displayId = state.bootstrap.displayId ?? window.edex.displayId;
   state.displayIndex = state.bootstrap.displayIndex ?? window.edex.displayIndex ?? 0;
   state.primary = Boolean(state.bootstrap.primary ?? window.edex.isPrimary);
+  window.edex.onShutdownRequested?.(() => shutdown());
   state.bounds = state.bootstrap.bounds || {
     x: 0,
     y: 0,
@@ -6667,10 +7025,34 @@ window.addEventListener("keydown", (event) => {
   if (Array.isArray(saved?.pathCards) && saved.pathCards.length) {
     state.pathCards = saved.pathCards
       .filter((card) => card?.path && card.id !== "desktop")
-      .map((card) => ({ ...card, name: String(card.name || "") }));
+      .map((card) => {
+        const tabs = Array.isArray(card.tabs)
+          ? card.tabs.filter((tab) => tab?.id && tab?.path).map((tab) => ({
+            id: String(tab.id),
+            path: String(tab.path),
+            name: String(tab.name || ""),
+            listing: null,
+            scan: null,
+            listingError: ""
+          }))
+          : [];
+        return {
+          ...card,
+          name: String(card.name || ""),
+          tabs,
+          activeTabId: String(card.activeTabId || tabs[0]?.id || `${card.id}:root`)
+        };
+      });
   } else {
     state.pathCards = [];
   }
+  state.pathCards.forEach((card) => {
+    ensurePathTabs(card);
+    const active = card.tabs.find((tab) => tab.id === card.activeTabId) || card.tabs[0];
+    card.activeTabId = active.id;
+    card.path = active.path;
+    card.name = active.name || card.name;
+  });
   state.activePathId = state.pathCards[0]?.id || null;
 
   snapAllLayoutToGrid();
@@ -6702,9 +7084,9 @@ window.addEventListener("keydown", (event) => {
     const prevClock = clockScale();
     const prevMode = layoutMode();
     const prevUi = displayUiScale();
-    const previousLocale = state.settings.locale || "zh-Hant";
+    const previousLocale = state.settings.locale || "de";
     state.settings = payload.settings || state.settings;
-    window.edexI18n?.setLocale?.(state.settings.locale || "zh-Hant");
+    window.edexI18n?.setLocale?.(state.settings.locale || "de");
     state.themeName = payload.themeName || state.themeName;
     if (payload.displays) state.displays = payload.displays;
     if (payload.theme) applyTheme(payload.theme, state.settings.wallpaper || "grid");
@@ -6713,7 +7095,7 @@ window.addEventListener("keydown", (event) => {
     applyRainMetrics();
     updateDisplayChip();
     renderClock();
-    if (previousLocale !== (state.settings.locale || "zh-Hant")) {
+    if (previousLocale !== (state.settings.locale || "de")) {
       rebuildWorkspace();
     } else if (
       settingsGridSize() !== prevGridSetting

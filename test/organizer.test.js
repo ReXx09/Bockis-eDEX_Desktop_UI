@@ -13,6 +13,7 @@ require.cache[electronPath] = {
 };
 
 const { executePlan, importFiles, undoLast } = require("../lib/organizer");
+const { PathPolicy } = require("../lib/path-policy");
 
 async function temporaryRoot() {
   return fsp.mkdtemp(path.join(os.tmpdir(), "edex-organizer-test-"));
@@ -85,10 +86,80 @@ async function testImport() {
   }
 }
 
+async function testRejectsOutsideRoot() {
+  const root = await temporaryRoot();
+  const outside = await temporaryRoot();
+  try {
+    const journal = path.join(root, "journal.json");
+    const source = path.join(outside, "secret.txt");
+    await fsp.writeFile(source, "secret");
+
+    await assert.rejects(() => executePlan({
+      root,
+      items: [{ name: "secret.txt", path: source, isDirectory: false, category: "documents" }]
+    }, {}, journal));
+    assert.equal(fs.existsSync(source), true);
+  } finally {
+    await removeRoot(root);
+    await removeRoot(outside);
+  }
+}
+
+async function testRejectsSymlinkedSource() {
+  const root = await temporaryRoot();
+  const outside = await temporaryRoot();
+  try {
+    const link = path.join(root, "linked");
+    try {
+      await fsp.symlink(outside, link, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      if (["EPERM", "EACCES", "ENOSYS"].includes(error.code)) return;
+      throw error;
+    }
+
+    await assert.rejects(() => executePlan({
+      root,
+      items: [{ name: "linked", path: link, isDirectory: true, category: "folders" }]
+    }, { includeFolders: true }, path.join(root, "journal.json")));
+  } finally {
+    await removeRoot(root);
+    await removeRoot(outside);
+  }
+}
+
+async function testPathPolicy() {
+  const root = await temporaryRoot();
+  const outside = await temporaryRoot();
+  try {
+    const nested = path.join(root, "nested");
+    await fsp.mkdir(nested);
+    const policy = new PathPolicy();
+    policy.add(root);
+
+    assert.equal(policy.allows(root), true);
+    assert.equal(policy.allows(nested), true);
+    assert.equal(policy.allows(outside), false);
+
+    const link = path.join(root, "outside-link");
+    try {
+      await fsp.symlink(outside, link, process.platform === "win32" ? "junction" : "dir");
+      assert.equal(policy.allows(link), false);
+    } catch (error) {
+      if (!["EPERM", "EACCES", "ENOSYS"].includes(error.code)) throw error;
+    }
+  } finally {
+    await removeRoot(root);
+    await removeRoot(outside);
+  }
+}
+
 (async () => {
   await testMoveAndUndo();
   await testPartialFailureCanUndo();
   await testImport();
+  await testRejectsOutsideRoot();
+  await testRejectsSymlinkedSource();
+  await testPathPolicy();
   console.log("organizer tests passed");
 })().catch((error) => {
   console.error(error);
