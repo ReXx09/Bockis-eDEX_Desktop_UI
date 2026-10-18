@@ -2111,71 +2111,109 @@ async function boot() {
   const bootScreen = document.getElementById("boot_screen");
   if (!bootScreen) return;
 
-  let progress = 0;
-  const snapshotPromise = loadBootSnapshot();
+  const started = performance.now();
+  let fast = false;
+  let done = 0;
+  let total = 1;
+  const withTimeout = (promise) => Promise.race([promise, delay(9000).then(() => null)]);
+  const snapshotPromise = withTimeout(loadBootSnapshot());
+  const diagPromise = withTimeout(Promise.resolve(window.edex?.getBootDiagnostics?.()).catch(() => null));
+
   bootScreen.className = "boot_terminal";
   bootScreen.innerHTML = `
-    <div class="boot-terminal-head">
-      <div class="boot-brand">
+    <button type="button" class="boot-skip" data-boot-skip>SKIP &gt;</button>
+    <div class="boot-shell">
+      <section class="boot-terminal-pane">
+        <div class="boot-pane-title">SYSTEM INITIALIZATION <span>LIVE CHANNEL</span></div>
+        <div class="boot-log" data-boot-log aria-live="polite"></div>
+      </section>
+      <aside class="boot-brand-pane">
         <img class="boot-logo" src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
-        <div><strong>BOCKIS-eDEX</strong><span>DESKTOP UI / TRON SYSTEM</span></div>
-      </div>
-      <button type="button" class="boot-skip" data-boot-skip>SKIP &gt;</button>
+        <pre class="boot-ascii">${BOOT_ASCII_LOGO}</pre>
+        <div class="boot-tagline">DESKTOP UI / TRON SYSTEM</div>
+        <div class="boot-foot">
+          <span data-boot-percent>BOOT 0%</span>
+          <div class="boot-track"><i data-boot-fill></i></div>
+          <span>${state.primary ? "PRIMARY" : "SECONDARY"} / DISPLAY ${state.displayIndex + 1}</span>
+        </div>
+      </aside>
     </div>
-    <div class="boot-terminal-title">SYSTEM INITIALIZATION <span>LIVE CHANNEL</span></div>
-    <div class="boot-log" data-boot-log aria-live="polite"></div>
-    <div class="boot-terminal-foot">
-      <span data-boot-percent>BOOT 0%</span>
-      <div class="boot-track"><i data-boot-fill></i></div>
-      <span data-boot-target>DISPLAY ${state.primary ? "PRIMARY" : "SECONDARY"}</span>
+    <div class="boot-final" data-boot-final>
+      <img src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
+      <h1>BOCKIS-eDEX</h1>
+      <div class="sub">SYSTEM ONLINE</div>
+      <div class="count" data-boot-count>starte Dashboard ...</div>
     </div>`;
 
   const log = bootScreen.querySelector("[data-boot-log]");
   const fill = bootScreen.querySelector("[data-boot-fill]");
   const percent = bootScreen.querySelector("[data-boot-percent]");
-  const totalSteps = 13;
-  const bootLine = (label, message, status = "OK") => {
-    const row = document.createElement("div");
-    const tone = status === "WARN" ? "warn" : status === "WAIT" ? "wait" : "ok";
-    row.className = `boot-row ${tone}`;
-    row.innerHTML = `<span class="boot-row-time">${new Date().toLocaleTimeString([], { hour12: false })}</span><b>${escapeHtml(label)}</b><span>${escapeHtml(message)}</span><strong>[${escapeHtml(status)}]</strong>`;
-    log?.appendChild(row);
-    if (log) log.scrollTop = log.scrollHeight;
+  const finalScreen = bootScreen.querySelector("[data-boot-final]");
+  const countdown = bootScreen.querySelector("[data-boot-count]");
+
+  const wait = (ms) => (fast ? Promise.resolve() : delay(ms));
+  const span = (cls, text) => `<span class="${cls}">${escapeHtml(text)}</span>`;
+  const stamp = () => `<span class="d">[${((performance.now() - started) / 1000).toFixed(6).padStart(11, " ")}]</span> `;
+  const setProgress = (value) => {
+    const clamped = Math.max(0, Math.min(100, value));
+    if (fill) fill.style.width = `${clamped}%`;
+    if (percent) percent.textContent = `BOOT ${Math.round(clamped)}%`;
   };
-  const step = async (label, message, status = "OK") => {
-    bootLine(label, message, status);
-    progress = Math.min(100, progress + 100 / totalSteps);
-    if (fill) fill.style.width = `${progress}%`;
-    if (percent) percent.textContent = `BOOT ${Math.round(progress)}%`;
-    await delay(105);
+  const tick = (count = 1) => {
+    done = Math.min(done + count, total);
+    setProgress((done / total) * 100);
+  };
+  const line = (html = "") => {
+    const row = document.createElement("div");
+    row.className = "boot-line";
+    row.innerHTML = html;
+    log?.appendChild(row);
+    while (log && log.scrollHeight > log.clientHeight + 4 && log.firstChild && log.firstChild !== row) {
+      log.removeChild(log.firstChild);
+    }
+    return row;
+  };
+  const typeCmd = async (command, speed = 20) => {
+    const row = line(`${span("ok", "root")}${span("d", "@bockis-edex")}:${span("w", "~")}# `);
+    const typed = document.createElement("span");
+    row.appendChild(typed);
+    for (const char of command) {
+      if (fast) {
+        typed.textContent = command;
+        return;
+      }
+      typed.textContent += char;
+      await delay(speed + Math.random() * 12);
+    }
   };
 
   bootScreen.querySelector("[data-boot-skip]")?.addEventListener("click", () => {
-    bootScreen.remove();
+    fast = true;
   });
 
   applyTheme(state.theme || state.bootstrap?.theme, state.settings.wallpaper || "grid");
   document.documentElement.dataset.ramGaugeMode = ramGaugeMode();
-  bootLine("BOOT", "Bockis eDEX kernel channel", "LOAD");
-  await delay(160);
-  await step("CORE", "Electron IPC bridge", window.edex ? "READY" : "WARN");
 
-  const snapshot = await snapshotPromise;
+  line(`${stamp()}Bockis-eDEX Boot-Loader  ${span("d", new Date().toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }))}`);
+  line(`${stamp()}Electron IPC-Bridge: ${window.edex ? span("ok", "online") : span("er", "nicht verfügbar")}`);
+  const size = state.physicalSize || {};
+  line(`${stamp()}Anzeige: ${span("b", `Monitor ${state.displayIndex + 1}`)} ${state.primary ? "(Hauptmonitor)" : "(Zusatzmonitor)"} ${span("d", `${size.width || "?"}x${size.height || "?"}`)}`);
+  const pending = line(`${stamp()}Sammle Systemdaten (live) ...`);
+  await wait(450);
+
+  const [snapshot, diag] = await Promise.all([snapshotPromise, diagPromise]);
+  pending.innerHTML = `${stamp()}Sammle Systemdaten (live) ... ${snapshot ? span("ok", "fertig") : span("w", "keine Daten")}`;
+
   const cpu = snapshot?.cpu || {};
   const mem = snapshot?.mem || {};
   const hardware = snapshot?.hardware || {};
-  const processes = snapshot?.processes || {};
+  const processes = Array.isArray(snapshot?.processes?.list) ? snapshot.processes.list : [];
   const network = snapshot?.network || {};
   const drives = Array.isArray(snapshot?.drives?.items) ? snapshot.drives.items : [];
-  const memoryPercent = mem.total ? Math.round((Number(mem.used || 0) / Number(mem.total)) * 100) : null;
-
-  await step("CPU", `${cpu.name || "CPU unavailable"} / ${cpu.cores || "?"} cores / ${Number(cpu.avg || 0).toFixed(1)}%`, cpu.name ? "READY" : "WARN");
-  await step("MEM", `${bootBytes(mem.used)} / ${bootBytes(mem.total)}${memoryPercent == null ? "" : ` / ${memoryPercent}%`}`, mem.total ? "READY" : "WARN");
-  await step("HOST", `${hardware.manufacturer || "UNKNOWN"} ${hardware.model || window.edex?.displayId || "DISPLAY"}`, hardware.model ? "READY" : "WARN");
-  await step("NET", `${network.state || "OFFLINE"}${network.iface ? ` / ${network.iface}` : ""}${network.ip4 ? ` / ${network.ip4}` : ""}`, network.offline ? "WARN" : "READY");
-  await step("DRIVE", `${drives.length} volume${drives.length === 1 ? "" : "s"} mounted`, drives.length ? "READY" : "WARN");
-  await step("PROC", `${processes.tasks || processes.list?.length || 0} processes indexed`, processes.list ? "READY" : "WARN");
-
+  const sys = diag?.system || {};
+  const versions = diag?.versions || {};
+  const deps = Array.isArray(diag?.deps) ? diag.deps : [];
+  const packages = Array.isArray(diag?.packages) ? diag.packages : [];
   const modules = [
     ["EFFECTS", Boolean(window.edexEffects)],
     ["I18N", Boolean(window.edexI18n)],
@@ -2183,16 +2221,173 @@ async function boot() {
     ["CPU RAIL", Boolean(window.cpuRailPanel)],
     ["DOCK", Boolean(window.dockPanel)]
   ];
-  for (const [name, loaded] of modules) {
-    await step("MODULE", `${name} ${loaded ? "loaded" : "deferred"}`, loaded ? "READY" : "WAIT");
+  const liveChecks = 3;
+
+  total = 8 + modules.length + 2 + 1 + Math.max(1, drives.length) + Math.min(5, processes.length)
+    + deps.length + liveChecks + packages.length + 2;
+  done = 0;
+
+  // Phase 1: Hardware
+  line(`${stamp()}Kernel: ${span("b", sys.kernel || "?")}  Host: ${span("b", sys.hostname || hardware.model || "?")}`); tick();
+  await wait(60);
+  line(`${stamp()}OS: ${span("b", sys.os || "Windows")}  Build ${span("d", sys.build || "?")}  ${sys.arch || ""}`); tick();
+  await wait(60);
+  line(`${stamp()}Board: ${span("b", `${hardware.manufacturer || "UNKNOWN"} ${hardware.model || ""}`.trim())}  ${span("d", hardware.chassis || "")}`); tick();
+  await wait(50);
+  if (sys.bios) line(`${stamp()}BIOS: ${escapeHtml(sys.bios)}`);
+  tick();
+  await wait(50);
+  const cpuSpeed = Number.isFinite(cpu.speedMax) ? ` ${cpu.speedMax.toFixed(1)} GHz` : "";
+  line(`${stamp()}CPU:  ${span("b", cpu.fullName || cpu.name || "unbekannt")}  ${cpu.cores || "?"} Threads${cpuSpeed}  ${span("d", `Last ${Number(cpu.avg || 0).toFixed(1)}%`)}`); tick();
+  await wait(70);
+  const memFilled = mem.total ? Math.round((Number(mem.used || 0) / Number(mem.total)) * 20) : 0;
+  const memBar = `${span("ok", "▓".repeat(memFilled))}${span("d", "░".repeat(20 - memFilled))}`;
+  line(`${stamp()}RAM:  [${memBar}]  ${span("b", `${bootBytes(mem.used)} / ${bootBytes(mem.total)}`)}  ${span("d", `${bootBytes(mem.free)} frei`)}`); tick();
+  await wait(60);
+  if (sys.gpu) {
+    line(`${stamp()}GPU:  ${span("b", sys.gpu)}${sys.vram > 0 ? `  ${bootBytes(sys.vram)} VRAM` : ""}${sys.gpuDriver ? `  ${span("d", `Treiber ${sys.gpuDriver}`)}` : ""}`);
   }
-  await step("THEME", `${String(state.themeName || "tron").toUpperCase()} renderer synchronized`, "READY");
-  await step("WORKSPACE", `${state.primary ? "PRIMARY" : "SECONDARY"} display ${state.displayIndex + 1}`, "READY");
-  if (fill) fill.style.width = "100%";
-  if (percent) percent.textContent = "BOOT 100%";
-  await delay(220);
+  tick();
+  await wait(60);
+  line(`${stamp()}Daten: ${snapshot ? span("ok", "echte Systemdaten via window.edex") : span("w", "keine Systemdaten verfügbar")}`); tick();
+  await wait(80);
+  line();
+
+  // Phase 2: Module und Dienste
+  const services = [
+    ["Loading HUD effects", modules[0]],
+    ["Loading i18n bridge", modules[1]],
+    ["Loading cockpit radar", modules[2]],
+    ["Loading CPU supply rail", modules[3]],
+    ["Loading task dock", modules[4]]
+  ];
+  for (const [label, [, loaded]] of services) {
+    line(`[${loaded ? span("ok", "  OK  ") : span("w", " WAIT ")}] ${span("d", label)}`);
+    tick();
+    await wait(70 + Math.random() * 90);
+  }
+  line(`[${span("ok", "  OK  ")}] ${span("d", `Theme ${String(state.themeName || "tron").toUpperCase()} synchronisiert`)}`); tick();
+  await wait(80);
+  line(`[${span("ok", "  OK  ")}] ${span("d", `Workspace Display ${state.displayIndex + 1} (${state.primary ? "primary" : "secondary"})`)}`); tick();
+  await wait(80);
+  line();
+
+  // Phase 3: Netzwerk
+  line(span("w", ":: Netzwerk-Schnittstelle"));
+  if (network.iface && network.ip4) {
+    const ping = Number.isFinite(network.ping) ? `  ${network.ping} ms` : "";
+    line(`   ${span("ok", "↑")}  ${escapeHtml(String(network.iface).padEnd(16, " "))} ${span("b", String(network.ip4).padEnd(16, " "))} ${span("d", `${network.mac ? `MAC ${network.mac}` : ""}${ping}  ${network.state || ""}`)}`);
+  } else {
+    line(`   ${span("w", "keine aktive Schnittstelle")}`);
+  }
+  tick();
+  await wait(120);
+  line();
+
+  // Phase 4: Laufwerke
+  line(span("w", ":: Dateisystem / Laufwerke"));
+  if (drives.length) {
+    for (const drive of drives) {
+      const usedPct = Math.max(0, Math.min(100, Number(drive.pct) || 0));
+      const filled = Math.round((usedPct / 100) * 22);
+      const tone = usedPct > 85 ? "er" : usedPct > 65 ? "w" : "ok";
+      line(`   ${span("b", String(drive.letter || "").padEnd(4, " "))}  [${span(tone, "▓".repeat(filled))}${span("d", "░".repeat(22 - filled))}] ${span(tone, `${String(usedPct).padStart(3, " ")}%`)}  ${span("d", `${drive.usedLabel || bootBytes(drive.used)} / ${drive.totalLabel || bootBytes(drive.total)}  ${drive.volumeName ? `(${drive.volumeName})` : ""}  ${drive.fs || ""}`)}`);
+      tick();
+      await wait(65);
+    }
+  } else {
+    line(`   ${span("w", "keine Laufwerke gefunden")}`);
+    tick();
+  }
+  line();
+  await wait(120);
+
+  // Phase 5: Prozesse
+  if (processes.length) {
+    line(span("w", `:: Top-Prozesse (RAM)  ${snapshot?.processes?.tasks || processes.length} aktiv`));
+    for (const proc of processes.slice(0, 5)) {
+      line(`   ${span("d", String(proc.pid ?? 0).padStart(6, " "))}  ${span("b", String(proc.name || "?").padEnd(20, " "))} MEM ${span("ok", `${Number(proc.mem || 0).toFixed(1).padStart(5, " ")}%`)}  ${span("d", `${proc.conn || 0} conn`)}`);
+      tick();
+      await wait(40);
+    }
+    line();
+  }
+
+  // Phase 6: Systemdiagnose
+  line(span("w", ":: Systemdiagnose"));
+  if (!deps.length) line(`   ${span("w", "Diagnose nicht verfügbar")}`);
+  for (const dep of deps) {
+    line(`   prüfe ${span("d", dep.label.padEnd(32, " "))} ${dep.ok ? span("ok", "bestanden") : span("er", "FEHLT")}`);
+    tick();
+    await wait(80 + Math.random() * 80);
+  }
+  const liveResults = [
+    ["Electron IPC-Bridge", Boolean(window.edex)],
+    ["Netzwerk-Interface", Boolean(network.iface)],
+    ["Dateisystem-Zugriff", drives.length > 0]
+  ];
+  for (const [label, ok] of liveResults) {
+    line(`   prüfe ${span("d", label.padEnd(32, " "))} ${ok ? span("ok", "bestanden") : span("w", "WARNUNG")}`);
+    tick();
+    await wait(80 + Math.random() * 80);
+  }
+  line();
+  await wait(180);
+
+  // Phase 7: Komponenten
+  await typeCmd("bockis-install --verify --source bundle", 20);
+  await wait(220);
+  line(span("d", "Reading component manifest... Done"));
+  line(span("d", `Resolving dependencies... Done${versions.electron ? `  (Electron ${versions.electron} / Chromium ${versions.chrome} / Node ${versions.node})` : ""}`));
+  await wait(180);
+
+  for (const pkg of packages) {
+    const row = line();
+    const label = pkg.name.padEnd(18, " ");
+    const detail = pkg.version ? `v${pkg.version}` : bootBytes(pkg.size);
+    for (let step = 0; step <= 20; step += 1) {
+      if (fast) step = 20;
+      else await delay(10 + Math.random() * 16);
+      row.innerHTML = `Verifiziere ${span("b", label)} [${span("ok", "#".repeat(step))}${span("d", ".".repeat(20 - step))}] ${String(step * 5).padStart(3, " ")}%  ${span("d", detail)}`;
+    }
+    row.innerHTML = pkg.ok
+      ? `Verifiziere ${span("b", label)} [${span("ok", "#".repeat(20))}] ${span("ok", "fertig")}  ${span("d", `${detail}  sha256:${pkg.sha}`)}`
+      : `Verifiziere ${span("b", label)} [${span("er", "!".repeat(20))}] ${span("er", "FEHLT")}`;
+    tick();
+    await wait(25);
+  }
+
+  const missing = packages.filter((pkg) => !pkg.ok).length;
+  const failedDeps = deps.filter((dep) => !dep.ok).length;
+  line();
+  line(missing || failedDeps
+    ? `${span("w", "Abhängigkeiten geprüft.")}  ${span("d", `${missing} Komponenten fehlen, ${failedDeps} Systemvoraussetzungen nicht erfüllt`)}`
+    : `${span("ok", "Abhängigkeiten installiert und verifiziert.")}  ${span("d", "0 Fehler  0 Warnungen")}`);
+  await wait(300);
+  await typeCmd("systemctl start bockis-edex", 22);
+  tick(2);
+  setProgress(100);
+  await wait(600);
+
+  // Abschluss
+  finalScreen?.classList.add("is-visible");
+  for (let seconds = 2; seconds > 0 && !fast; seconds -= 1) {
+    if (countdown) countdown.textContent = `starte Dashboard in ${seconds} ...`;
+    await delay(550);
+  }
+  if (countdown) countdown.textContent = "bereit.";
+  if (!fast) await delay(250);
   bootScreen.remove();
 }
+
+const BOOT_ASCII_LOGO = [
+  "██████╗  ██████╗  ██████╗██╗  ██╗██╗███████╗",
+  "██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██║██╔════╝",
+  "██████╔╝██║   ██║██║     █████╔╝ ██║███████╗",
+  "██╔══██╗██║   ██║██║     ██╔═██╗ ██║╚════██║",
+  "██████╔╝╚██████╔╝╚██████╗██║  ██╗██║███████║",
+  "╚═════╝  ╚═════╝  ╚═════╝╚═╝  ╚═╝╚═╝╚══════╝"
+].join("\n");
 
 let shutdownInProgress = false;
 
@@ -2205,12 +2400,19 @@ async function shutdown() {
   const shutdownScreen = document.createElement("section");
   shutdownScreen.id = "shutdown_screen";
   shutdownScreen.innerHTML = `
-    <div class="shutdown-terminal">
-      <div class="shutdown-terminal-head">
-        <span>BOCKIS-eDEX / SHUTDOWN CONSOLE</span>
-        <strong>POWER MANAGEMENT</strong>
+    <div class="shutdown-shell">
+      <div class="shutdown-terminal">
+        <div class="shutdown-terminal-head">
+          <span>BOCKIS-eDEX / SHUTDOWN CONSOLE</span>
+          <strong>POWER MANAGEMENT</strong>
+        </div>
+        <div class="shutdown-log" data-shutdown-log aria-live="polite"></div>
       </div>
-      <div class="shutdown-log" data-shutdown-log aria-live="polite"></div>
+      <aside class="shutdown-brand">
+        <img src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
+        <strong>BOCKIS-eDEX</strong>
+        <span>SYSTEM POWER DOWN</span>
+      </aside>
     </div>
     <div class="shutdown-final" data-shutdown-final>
       <img src="assets/misc/bockis-logo.png" alt="Bockis eDEX">

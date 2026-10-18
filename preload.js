@@ -132,6 +132,7 @@ contextBridge.exposeInMainWorld("edex", {
   getSysMetrics: () => ipcRenderer.invoke("get-sys-metrics"),
   getHardwareInfo: () => ipcRenderer.invoke("get-hardware-info"),
   getTopProcesses: () => ipcRenderer.invoke("get-top-processes"),
+  getBootDiagnostics: () => ipcRenderer.invoke("get-boot-diagnostics"),
   getWeather: (location) => ipcRenderer.invoke("get-weather", location),
   getGlobeGrid: () => ipcRenderer.invoke("get-globe-grid"),
   onDisplaysChanged: (fn) => {

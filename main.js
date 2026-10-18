@@ -3,6 +3,7 @@ const { execFile, spawn } = require("child_process");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
+const crypto = require("crypto");
 let nodePty = null;
 try {
   nodePty = require("node-pty");
@@ -1971,6 +1972,85 @@ ipcMain.handle("get-mem-metrics", () => getMemMetrics());
 ipcMain.handle("get-sys-metrics", () => getSysMetrics());
 ipcMain.handle("get-hardware-info", async () => getHardwareInfo());
 ipcMain.handle("get-top-processes", async () => getTopProcesses());
+
+const BOOT_COMPONENTS = [
+  ["bockis-core", "main.js"],
+  ["bockis-preload", "preload.js"],
+  ["hud-renderer", "src/renderer.js"],
+  ["edex-effects", "src/edex-effects.js"],
+  ["i18n-bridge", "src/i18n.js"],
+  ["cockpit-panel", "src/cockpit-panel.js"],
+  ["cpu-rail-panel", "src/cpu-rail-panel.js"],
+  ["dock-panel", "src/dock-panel.js"],
+  ["net-monitor", "lib/net-info.js"],
+  ["fs-organizer", "lib/organizer.js"],
+  ["theme-engine", "lib/themes.js"],
+  ["node-pty", "node_modules/node-pty/package.json", true],
+  ["xterm", "node_modules/@xterm/xterm/package.json", true],
+  ["xterm-addon-fit", "node_modules/@xterm/addon-fit/package.json", true]
+];
+
+async function describeBootComponent([name, relPath, readVersion]) {
+  try {
+    const data = await fs.promises.readFile(path.join(__dirname, relPath));
+    let version = "";
+    if (readVersion) {
+      try { version = String(JSON.parse(data.toString("utf8")).version || ""); } catch { /* version stays empty */ }
+    }
+    return { name, version, ok: true, size: data.length, sha: crypto.createHash("sha256").update(data).digest("hex").slice(0, 8) };
+  } catch {
+    return { name, version: "", ok: false, size: 0, sha: "" };
+  }
+}
+
+function queryBootSystem() {
+  const script = "$g=Get-CimInstance Win32_VideoController|Select-Object -First 1;$b=Get-CimInstance Win32_BIOS;$o=Get-CimInstance Win32_OperatingSystem;"
+    + "@{gpu=$g.Name;driver=$g.DriverVersion;vram=[int64]$g.AdapterRAM;bios=$b.Manufacturer;biosVersion=$b.SMBIOSBIOSVersion;os=$o.Caption;build=$o.BuildNumber}|ConvertTo-Json -Compress";
+  return new Promise((resolve) => {
+    execFile("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true, timeout: 4000 }, (error, stdout) => {
+      if (error) return resolve({});
+      try { resolve(JSON.parse(String(stdout).trim()) || {}); } catch { resolve({}); }
+    });
+  });
+}
+
+ipcMain.handle("get-boot-diagnostics", async (event) => {
+  requireTrustedWindow(event);
+  const system32 = path.join(process.env.SystemRoot || "C:\\Windows", "System32");
+  const build = Number(String(os.release()).split(".").pop()) || 0;
+  let userDataWritable = true;
+  try { fs.accessSync(app.getPath("userData"), fs.constants.W_OK); } catch { userDataWritable = false; }
+
+  const [system, packages] = await Promise.all([
+    queryBootSystem(),
+    Promise.all(BOOT_COMPONENTS.map(describeBootComponent))
+  ]);
+
+  return {
+    versions: { app: app.getVersion(), electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
+    system: {
+      hostname: os.hostname(),
+      arch: os.arch(),
+      kernel: os.release(),
+      build: system.build || String(build),
+      os: system.os || `Windows ${os.release()}`,
+      gpu: system.gpu || "",
+      gpuDriver: system.driver || "",
+      vram: Number(system.vram) || 0,
+      bios: system.bios ? `${system.bios} ${system.biosVersion || ""}`.trim() : "",
+      uptime: os.uptime()
+    },
+    deps: [
+      { id: "arch", label: "Windows x64", ok: process.arch === "x64" || os.arch() === "x64" },
+      { id: "conpty", label: `ConPTY build ${build}`, ok: build >= 17763 },
+      { id: "powershell", label: "Windows PowerShell", ok: fs.existsSync(path.join(system32, "WindowsPowerShell", "v1.0", "powershell.exe")) },
+      { id: "vcruntime", label: "Visual C++ runtime", ok: fs.existsSync(path.join(system32, "VCRUNTIME140.dll")) && fs.existsSync(path.join(system32, "VCRUNTIME140_1.dll")) },
+      { id: "node-pty", label: "node-pty native module", ok: Boolean(nodePty) },
+      { id: "userdata", label: "User data directory writable", ok: userDataWritable }
+    ],
+    packages
+  };
+});
 ipcMain.handle("get-weather", async (event, location) => {
   requireTrustedWindow(event);
   return getWeather(location);
