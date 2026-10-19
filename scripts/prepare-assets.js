@@ -54,6 +54,9 @@ const themesOut = path.join(root, "assets", "themes");
 const iconsOut = path.join(root, "assets", "icons");
 const miscOut = path.join(root, "assets", "misc");
 const rendererMiscOut = path.join(root, "src", "assets", "misc");
+const dockIconsOut = path.join(root, "src", "assets", "misc", "dock-icons");
+
+copyDir(path.join(root, "build", "icons_transparent"), dockIconsOut);
 
 const alreadyReady = fs.existsSync(path.join(cssOut, "boot_screen.css"))
   && fs.existsSync(path.join(vendorOut, "encom-globe.js"))

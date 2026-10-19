@@ -56,31 +56,34 @@ section#boot_screen.brand_boot .brand_status {
 
 section#boot_screen.boot_terminal {
     z-index: 1000;
+    box-sizing: border-box;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
     gap: 1.2vh;
-    padding: 3vh 4vw;
+    padding: 2vh 4vw;
     background:
         repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0 1px, transparent 1px 3px),
         radial-gradient(circle at 50% 35%, rgba(var(--color_r), var(--color_g), var(--color_b), 0.09), transparent 55%),
         rgb(2, 6, 10);
     color: rgb(var(--color_r), var(--color_g), var(--color_b));
     font-family: var(--font_mono), monospace;
-    font-size: max(11px, 1.45vh);
-    line-height: 1.5;
+    font-size: clamp(8px, 1.2vh, 12px);
+    line-height: 1.2;
     text-align: left;
     text-shadow: 0 0 0.6vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
 }
 
 .boot-shell {
     width: min(1440px, 100%);
+    height: 94%;
     min-height: 0;
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9fr);
-    gap: clamp(1.4rem, 4vw, 4.5rem);
+    grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr);
+    gap: clamp(1.4rem, 3vw, 3.5rem);
     align-items: stretch;
     margin: 0 auto;
 }
@@ -117,9 +120,9 @@ section#boot_screen.boot_terminal {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1.5vh;
+    gap: 1.8vh;
     border-left: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.24);
-    padding: 3vh clamp(1rem, 3vw, 3.5rem);
+    padding: 3vh clamp(1.5rem, 4vw, 4.5rem);
     text-align: center;
 }
 
@@ -141,8 +144,8 @@ section#boot_screen.boot_terminal::after {
 }
 
 .boot-logo {
-    width: clamp(96px, 14vh, 180px);
-    height: clamp(96px, 14vh, 180px);
+    width: clamp(160px, 25vh, 300px);
+    height: clamp(160px, 25vh, 300px);
     object-fit: contain;
     filter: drop-shadow(0 0 1.4vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.85));
 }
@@ -185,16 +188,22 @@ section#boot_screen.boot_terminal::after {
 
 .boot-log {
     width: min(1120px, 100%);
+    min-width: 0;
     margin: 0 auto;
     flex: 1 1 auto;
     min-height: 0;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    scrollbar-width: none;
     border-top: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
     padding-top: 1vh;
-    white-space: pre;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
-.boot-line { min-height: 1.5em; }
+.boot-log::-webkit-scrollbar { display: none; }
+
+.boot-line { min-height: 1.2em; }
 .boot-log .ok { color: #2cffb0; }
 .boot-log .w { color: #ffcc4d; }
 .boot-log .er { color: #ff3d6e; }
@@ -202,26 +211,28 @@ section#boot_screen.boot_terminal::after {
 .boot-log .b { font-weight: 700; }
 .boot-log .hi { color: #fff; text-shadow: 0 0 1vh #fff; }
 
-.boot-foot {
+.boot-progress-panel {
     width: 100%;
-    max-width: 390px;
+    max-width: 500px;
     position: relative;
     z-index: 1;
-    display: flex;
-    align-items: center;
-    gap: 1.2vw;
     flex: 0 0 auto;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.6);
+}
+
+.boot-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.65vh;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.72);
     font-size: 0.85em;
     letter-spacing: 0.1em;
 }
 
-.boot-foot > span:first-child { min-width: 9ch; }
-
 .boot-track {
-    flex: 1 1 auto;
-    height: 0.5vh;
-    min-height: 4px;
+    width: 100%;
+    height: 0.85vh;
+    min-height: 7px;
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.42);
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.04);
 }
@@ -287,8 +298,55 @@ section#boot_screen.boot_terminal::after {
     section#boot_screen.boot_terminal { padding: 2.5vh 4vw 2.4vh; }
     .boot-shell { grid-template-columns: 1fr; overflow: auto; }
     .boot-brand-pane { order: -1; border-left: 0; border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.24); padding: 1rem; }
-    .boot-logo { width: 8vh; height: 8vh; }
+    .boot-logo { width: 14vh; height: 14vh; }
     .boot-ascii { font-size: 1.1vh; }
+}
+
+@media (max-width: 1180px) {
+    .boot-shell {
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+        gap: 2vw;
+    }
+
+    .boot-brand-pane { padding-left: 2vw; padding-right: 2vw; }
+    .boot-logo { width: clamp(130px, 20vh, 220px); height: clamp(130px, 20vh, 220px); }
+}
+
+@media (max-width: 900px) {
+    section#boot_screen.boot_terminal { padding-left: 3vw; padding-right: 3vw; }
+    .boot-shell { grid-template-columns: 1fr; height: 96%; overflow: hidden; }
+    .boot-brand-pane {
+        order: -1;
+        min-height: 0;
+        border-left: 0;
+        border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.24);
+        padding: 1.5vh 1rem;
+    }
+    .boot-logo { width: clamp(110px, 18vh, 180px); height: clamp(110px, 18vh, 180px); }
+    .boot-terminal-pane { min-height: 0; }
+}
+
+@media (max-height: 700px) {
+    section#boot_screen.boot_terminal {
+        gap: 0.8vh;
+        padding-top: 1.2vh;
+        padding-bottom: 1.2vh;
+    }
+
+    .boot-terminal-pane { padding-top: 0.8vh; }
+    .boot-shell { height: 96%; }
+    .boot-brand-pane { gap: 1vh; padding-top: 1.5vh; padding-bottom: 1.5vh; }
+    .boot-logo { width: clamp(120px, 19vh, 210px); height: clamp(120px, 19vh, 210px); }
+    .boot-progress-meta { margin-bottom: 0.35vh; }
+    .boot-track { height: 0.65vh; min-height: 5px; }
+}
+
+@media (max-height: 540px) {
+    section#boot_screen.boot_terminal { font-size: max(10px, 1.35vh); }
+    .boot-brand-pane { gap: 0.6vh; }
+    .boot-logo { width: clamp(96px, 16vh, 160px); height: clamp(96px, 16vh, 160px); }
+    .boot-ascii { font-size: clamp(7px, 1vh, 10px); }
+    .boot-tagline { font-size: 0.85em; }
 }
 
 section#shutdown_screen {
@@ -371,6 +429,72 @@ section#shutdown_screen {
     letter-spacing: 0.2em;
 }
 
+.crt-beam,
+.crt-dot {
+    position: absolute;
+    z-index: 4;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.crt-beam {
+    left: 4vw;
+    right: 4vw;
+    top: 50%;
+    height: 2px;
+    background: #fff;
+    box-shadow: 0 0 0.45rem rgb(var(--color_r), var(--color_g), var(--color_b)), 0 0 1.2rem #fff;
+    transform: scaleX(0) scaleY(1);
+}
+
+.crt-dot {
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0.5rem #fff, 0 0 1.6rem rgb(var(--color_r), var(--color_g), var(--color_b));
+    transform: translate(-50%, -50%) scale(0);
+}
+
+section#shutdown_screen.is-crt-off .shutdown-shell {
+    animation: crtCollapse 1250ms cubic-bezier(0.55, 0, 0.9, 1) 1900ms forwards;
+}
+
+section#shutdown_screen.is-crt-off .shutdown-final {
+    animation: shutdownCrtLogo 1850ms cubic-bezier(0.22, 0.75, 0.3, 1) forwards;
+}
+
+section#shutdown_screen.is-crt-off .crt-beam {
+    animation: crtBeam 1250ms cubic-bezier(0.55, 0, 0.9, 1) 1900ms forwards;
+}
+
+section#shutdown_screen.is-crt-off .crt-dot {
+    animation: crtDot 1250ms cubic-bezier(0.55, 0, 0.9, 1) 1900ms forwards;
+}
+
+@keyframes crtCollapse {
+    0%, 34% { opacity: 1; transform: scale(1); }
+    48% { opacity: 1; transform: scale(1, 0.012); }
+    78% { opacity: 0.9; transform: scale(0.012, 0.012); }
+    100% { opacity: 0; transform: scale(0, 0); }
+}
+
+@keyframes crtBeam {
+    0%, 42% { opacity: 0; transform: scaleX(0) scaleY(1); }
+    50% { opacity: 1; transform: scaleX(1) scaleY(1); }
+    78% { opacity: 1; transform: scaleX(0.025) scaleY(1); }
+    91%, 100% { opacity: 0; transform: scaleX(0) scaleY(1); }
+}
+
+@keyframes crtDot {
+    0%, 76% { opacity: 0; transform: translate(-50%, -50%) scale(0); }
+    82% { opacity: 1; transform: translate(-50%, -50%) scale(2.4); }
+    91% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.1); }
+}
+
 .shutdown-row {
     display: grid;
     grid-template-columns: 8.5ch 9ch minmax(0, 1fr) auto;
@@ -398,8 +522,8 @@ section#shutdown_screen {
 }
 
 .shutdown-final img {
-    width: min(24vh, 24vw);
-    height: min(24vh, 24vw);
+    width: min(30vh, 30vw);
+    height: min(30vh, 30vw);
     object-fit: contain;
     filter: drop-shadow(0 0 1.8vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.85));
 }
@@ -430,6 +554,15 @@ section#shutdown_screen.is-final .shutdown-final {
     22% { opacity: 1; transform: scale(1); filter: blur(0); }
     72% { opacity: 1; transform: scale(0.96); filter: blur(0); }
     100% { opacity: 0; transform: scale(0.72); filter: blur(0.25rem); }
+}
+
+@keyframes shutdownCrtLogo {
+    0% { opacity: 0; transform: scale(1.28); filter: blur(0); }
+    12% { opacity: 1; transform: scale(1.18); filter: blur(0); }
+    38% { opacity: 1; transform: scale(1); filter: blur(0); }
+    62% { opacity: 0.92; transform: scale(0.94); filter: blur(0.03rem); }
+    82% { opacity: 0.48; transform: scale(0.78); filter: blur(0.14rem); }
+    100% { opacity: 0; transform: scale(0.58); filter: blur(0.3rem); }
 }
 
 @media (max-width: 700px) {

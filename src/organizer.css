@@ -470,19 +470,27 @@ body.desktop-shell #workspace {
 
 .tag-dots {
     display: flex;
-    gap: 1px;
+    gap: 0.14rem;
     justify-content: flex-end;
     align-items: flex-end;
-    margin: 0;
-    min-height: 0;
+    margin: 0.1rem;
+    padding: 0.14rem;
+    min-height: 0.7rem;
+    min-width: 0.7rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+    border-radius: 0.35rem;
+    background: rgba(5, 8, 13, 0.9);
+    box-shadow: 0 0 0.45rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.45);
     pointer-events: none;
+    z-index: 2;
 }
 
 .tag-dot {
-    width: 0.38rem;
-    height: 0.38rem;
+    width: 0.55rem;
+    height: 0.55rem;
     border-radius: 50%;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8), 0 0 0.25rem currentColor;
     flex: 0 0 auto;
 }
 
@@ -533,7 +541,10 @@ body.desktop-shell #workspace {
 
 .path-stage.view-list .tag-dots,
 #desktop-stage.view-list .tag-dots {
-    margin: 0;
+    margin: 0 0 0 0.25rem;
+    padding: 0.1rem;
+    min-height: 0.55rem;
+    min-width: 0.55rem;
 }
 
 .icon-rename {
@@ -1309,6 +1320,20 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.12);
 }
 
+.desk-icon.selected,
+.fs-row.selected {
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    box-shadow:
+        inset 0 0 0 1px rgba(var(--color_r), var(--color_g), var(--color_b), 0.48),
+        0 0 0.8rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+}
+
+.desk-icon.selected .desk-icon-face,
+.fs-row.selected .fs-row-icon {
+    filter: drop-shadow(0 0 0.45rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.8));
+}
+
 .bar-row {
     display: grid;
     grid-template-columns: 18% 62% 20%;
@@ -1707,8 +1732,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 
 #fab-bar {
     position: fixed;
-    top: 0;
-    right: 0;
+    top: var(--grid-size);
+    right: var(--grid-size);
     z-index: 40;
     display: flex;
     flex-direction: row;

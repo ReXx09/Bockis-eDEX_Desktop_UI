@@ -60,7 +60,7 @@ const PANEL_META = {
   autostart: { title: "Autostart", icon: "processes", box: { x: 20, y: 28, w: 42, h: 36 } },
   log: { title: "Log", box: { x: 52, y: 42, w: 29, h: 38 } },
   dock: { title: "Dock", box: { x: 25, y: 94, w: 50, h: 6 } },
-  taskdock: { title: "Task-Dock", box: { x: 25, y: 86, w: 50, h: 7 } }
+  taskdock: { title: "Task-Panel", box: { x: 25, y: 86, w: 50, h: 7 } }
 };
 
 const MACOS_TAGS = [
@@ -116,6 +116,8 @@ const state = {
   displayId: null,
   displayIndex: 0,
   primary: true,
+  displayDockEnabled: null,
+  displayDockSettings: null,
   bounds: null,
   scaleFactor: 1,
   physicalSize: null,
@@ -447,10 +449,14 @@ function panelBody(id) {
     case "dock":
       return window.dockPanel?.bodyHtml?.() || `<div class="path-empty">Dock-Modul nicht geladen</div>`;
     case "taskdock":
-      return `<div id="task-dock-panel" class="task-dock-panel"><div class="task-dock-shell"></div><div class="dock-items task-dock-items" data-task-dock-items aria-label="Windows-Taskleistenverknüpfungen"></div></div>`;
+      return `<div id="task-dock-panel" class="task-dock-panel"><div class="dock-items task-dock-items" data-task-dock-items aria-label="Windows-Taskleistenverknüpfungen"></div></div>`;
     default:
       return "";
   }
+}
+
+function panelDisplayTitle(id) {
+  return state.layout[id]?.title || PANEL_META[id]?.title || id;
 }
 
 function cardToolsHtml({ allowMinimize = true } = {}) {
@@ -1100,19 +1106,20 @@ function separateLayoutRects() {
   const ws = workspaceRect();
   const entries = [];
   Object.keys(state.layout).forEach((id) => {
-    if (!state.layout[id] || id === "status") return;
+    if (!state.layout[id] || id === "status" || state.layout[id].minimized) return;
     entries.push({
       px: pxFromBox(state.layout[id]),
       apply: (px) => applyBoxPx(state.layout[id], px.x, px.y, px.w, px.h)
     });
   });
-  if (state.desktopEnabled !== false && state.desktopStage) {
+  if (state.desktopEnabled !== false && state.desktopStage && !state.desktopStage.minimized) {
     entries.push({
       px: pxFromBox(state.desktopStage),
       apply: (px) => applyBoxPx(state.desktopStage, px.x, px.y, px.w, px.h)
     });
   }
   state.pathCards.forEach((card) => {
+    if (card.minimized) return;
     entries.push({
       px: pxFromBox(card),
       apply: (px) => applyBoxPx(card, px.x, px.y, px.w, px.h)
@@ -1150,13 +1157,15 @@ function occupiedLayoutRects(exclude = {}) {
   const rects = [];
   Object.keys(state.layout).forEach((id) => {
     if (id === "status" || !state.layout[id]) return;
+    if (state.layout[id].minimized) return;
     if (exclude.panelId === id) return;
     rects.push(pxFromBox(state.layout[id]));
   });
-  if (state.desktopEnabled !== false && state.desktopStage && !exclude.desktop) {
+  if (state.desktopEnabled !== false && state.desktopStage && !state.desktopStage.minimized && !exclude.desktop) {
     rects.push(pxFromBox(state.desktopStage));
   }
   (state.pathCards || []).forEach((card) => {
+    if (card.minimized) return;
     if (exclude.pathId === card.id) return;
     rects.push(pxFromBox(card));
   });
@@ -1267,18 +1276,67 @@ function constrainPanelPosition(el, x, y, w, h) {
   )[0] || { x: 0, y: 0 };
 }
 
+function findPanelZonePosition(el) {
+  const id = el?.dataset?.panelId;
+  if (!id || !state.layout[id]) return null;
+  const current = pxFromBox(state.layout[id]);
+  const ws = workspaceRect();
+  const central = centralZoneRect();
+  const regions = panelZoneMode(el) === "edge"
+    ? [
+      { x: 0, y: 0, width: central.x, height: ws.height },
+      { x: central.x + central.width, y: 0, width: ws.width - central.x - central.width, height: ws.height },
+      { x: 0, y: 0, width: ws.width, height: central.y },
+      { x: 0, y: central.y + central.height, width: ws.width, height: ws.height - central.y }
+    ]
+    : [central];
+  const others = occupiedLayoutRects({ panelId: id });
+  const g = gridSize();
+  const fitsZone = (x, y) => regions.some((region) => (
+    x >= region.x && y >= region.y
+    && x + current.w <= region.x + region.width + g
+    && y + current.h <= region.y + region.height + g
+  ));
+  const currentPosition = constrainPanelPosition(el, current.x, current.y, current.w, current.h);
+  if (fitsZone(current.x, current.y) && !overlapsAny(current, others)) return current;
+
+  let best = null;
+  let bestDistance = Infinity;
+  for (const region of regions) {
+    if (region.width < current.w || region.height < current.h) continue;
+    const maxX = Math.max(region.x, region.x + region.width - current.w);
+    const maxY = Math.max(region.y, region.y + region.height - current.h);
+    for (let y = alignGrid(region.y); y <= maxY; y += g) {
+      for (let x = alignGrid(region.x); x <= maxX; x += g) {
+        const candidate = { x, y, w: current.w, h: current.h };
+        if (overlapsAny(candidate, others)) continue;
+        const distance = (x - currentPosition.x) ** 2 + (y - currentPosition.y) ** 2;
+        if (distance < bestDistance) {
+          best = candidate;
+          bestDistance = distance;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function repositionPanelInZone(el) {
+  const id = el?.dataset?.panelId;
+  if (!id || !state.layout[id]) return false;
+  const current = pxFromBox(state.layout[id]);
+  const next = findPanelZonePosition(el);
+  if (!next) return false;
+  el.style.left = `${next.x}px`;
+  el.style.top = `${next.y}px`;
+  applyBoxPx(state.layout[id], next.x, next.y, next.w, next.h);
+  return next.x !== current.x || next.y !== current.y;
+}
+
 function clampPanelToZone(el) {
   const id = el?.dataset?.panelId;
   if (!id || !state.layout[id]) return false;
-  const box = boxToPx(state.layout[id]);
-  const position = constrainPanelPosition(el, box.x, box.y, box.w, box.h);
-  const x = alignGrid(position.x);
-  const y = alignGrid(position.y);
-  if (x === box.x && y === box.y) return false;
-  el.style.left = `${x}px`;
-  el.style.top = `${y}px`;
-  applyBoxPx(state.layout[id], x, y, box.w, box.h);
-  return true;
+  return repositionPanelInZone(el);
 }
 
 function vw(px) {
@@ -1602,6 +1660,11 @@ function itemLabel(item) {
 function currentDisplayLayout() {
   return {
     displayIndex: state.displayIndex,
+    dockEnabled: dockEnabled(),
+    dockPosition: state.displayDockSettings?.position || state.settings?.dockPosition || "bottom",
+    dockWidth: state.displayDockSettings?.width || state.settings?.dockWidth || 720,
+    dockHeight: state.displayDockSettings?.height || state.settings?.dockHeight || 72,
+    dockFrameStyle: state.displayDockSettings?.frameStyle || state.settings?.dockFrameStyle || "rounded",
     layout: state.layout,
     desktopStage: state.desktopStage,
     desktopEnabled: state.desktopEnabled !== false,
@@ -2131,10 +2194,12 @@ async function boot() {
         <img class="boot-logo" src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
         <pre class="boot-ascii">${BOOT_ASCII_LOGO}</pre>
         <div class="boot-tagline">DESKTOP UI / TRON SYSTEM</div>
-        <div class="boot-foot">
-          <span data-boot-percent>BOOT 0%</span>
-          <div class="boot-track"><i data-boot-fill></i></div>
-          <span>${state.primary ? "PRIMARY" : "SECONDARY"} / DISPLAY ${state.displayIndex + 1}</span>
+        <div class="boot-progress-panel">
+          <div class="boot-progress-meta">
+            <span data-boot-percent>BOOT 0%</span>
+            <span>${state.primary ? "PRIMARY" : "SECONDARY"} / DISPLAY ${state.displayIndex + 1}</span>
+          </div>
+          <div class="boot-track" role="progressbar" aria-label="Boot-Fortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i data-boot-fill></i></div>
         </div>
       </aside>
     </div>
@@ -2414,6 +2479,8 @@ async function shutdown() {
         <span>SYSTEM POWER DOWN</span>
       </aside>
     </div>
+    <div class="crt-beam" aria-hidden="true"></div>
+    <div class="crt-dot" aria-hidden="true"></div>
     <div class="shutdown-final" data-shutdown-final>
       <img src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
       <strong>BOCKIS-eDEX</strong>
@@ -2444,8 +2511,26 @@ async function shutdown() {
   await step("PANELS", "Workspace panels released");
   await step("IPC", "Electron shutdown request queued", "WAIT");
   await delay(180);
-  shutdownScreen.classList.add("is-final");
-  await delay(1050);
+  shutdownScreen.classList.add("is-crt-off");
+  window.setTimeout(() => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const audio = new AudioContext();
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(1280, audio.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(420, audio.currentTime + 0.07);
+      gain.gain.setValueAtTime(0.035, audio.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.09);
+      oscillator.connect(gain).connect(audio.destination);
+      oscillator.start();
+      oscillator.stop(audio.currentTime + 0.1);
+      oscillator.addEventListener("ended", () => audio.close().catch(() => {}), { once: true });
+    } catch { /* audio is optional */ }
+  }, 2720);
+  await delay(3300);
   window.edex.quitApp();
 }
 
@@ -2464,7 +2549,7 @@ function panelHtml(id) {
   return `
     <section class="hud-card${extra}${forceLocked ? " locked" : ""}" id="card_${id}" data-panel-id="${id}" style="${styleFromBox(state.layout[id])}">
       <h3 class="card-title">
-        <span class="card-title-text">${PANEL_META[id].title}</span>
+        <span class="card-title-text">${escapeHtml(panelDisplayTitle(id))}</span>
         ${cardToolsHtml({ allowMinimize: id !== "dock" })}
       </h3>
       <div class="card-body">${panelBody(id)}</div>
@@ -2473,6 +2558,7 @@ function panelHtml(id) {
 }
 
 const PANEL_ICON_CHOICES = [
+  { id: "desktop", label: "Desktop" },
   { id: "calendar", label: "Kalender" },
   { id: "calculator", label: "Rechner" },
   { id: "clock", label: "Uhr" },
@@ -2481,11 +2567,13 @@ const PANEL_ICON_CHOICES = [
   { id: "network", label: "Netzwerk" },
   { id: "world", label: "Welt" },
   { id: "drive", label: "Laufwerk" },
+  { id: "directories", label: "Verzeichnisse" },
   { id: "folders", label: "Ordner" },
   { id: "search", label: "Suche" },
   { id: "browser", label: "Browser" },
   { id: "cloud", label: "Cloud" },
   { id: "terminal", label: "Terminal" },
+  { id: "log", label: "Log" },
   { id: "weather", label: "Wetter" },
   { id: "processes", label: "Prozesse" }
 ];
@@ -2501,8 +2589,9 @@ function setPanelIcon(id, icon) {
 function dockIcon(kind, id) {
   if (kind === "desktop" || kind === "path") return "folders";
   const icons = {
+    desktop: "desktop",
     clock: "clock", cpu: "cpu", ram: "ram", toplist: "processes", globe: "world", conninfo: "network",
-    calendar: "clock", drives: "drive", filesearch: "search", terminal: "terminal", weather: "weather",
+    calendar: "clock", drives: "drive", filesearch: "search", terminal: "terminal", weather: "weather", log: "log",
     cockpit: "world", cassette: "drive", ddj: "cpu", cpuRail: "cpu", calculator: "terminal"
     , autostart: "processes"
   };
@@ -2519,7 +2608,7 @@ function renderDockItems() {
   const items = [];
   Object.keys(PANEL_META).forEach((id) => {
     if (id !== "dock" && state.layout[id]?.minimized) {
-      items.push({ kind: "panel", id, label: PANEL_META[id].title });
+      items.push({ kind: "panel", id, label: panelDisplayTitle(id) });
     }
   });
   if (state.desktopEnabled !== false && state.desktopStage?.minimized) {
@@ -3023,14 +3112,32 @@ function openPanelSetup(el) {
     ? "Systemdesktop"
     : id === "path"
       ? "Ordner-Panel"
-      : PANEL_META[id]?.title || id;
+      : panelDisplayTitle(id);
   const currentPanelBg = id !== "desktop" && id !== "path" ? colorToFill(state.layout[id]?.bg) : "";
   const bgChoices = [...themeColorSwatches(), { label: "Standard", color: "" }];
   const bgOptions = bgChoices.map((item) => {
     const color = colorToFill(item.color);
     return `<option value="${escapeHtml(item.color || "__default__")}" ${color === currentPanelBg ? "selected" : ""}>${escapeHtml(item.label)}</option>`;
   }).join("");
-  const body = id === "clock"
+  const nameSetup = PANEL_META[id] && id !== "desktop"
+    ? `<tr><td>Panel-Name</td><td><input id="panel-name" type="text" maxlength="48" spellcheck="false"></td></tr>`
+    : "";
+  const body = id === "desktop"
+    ? `<tr><td>Ansicht</td><td><select id="panel-desktop-view"><option value="grid">Raster</option><option value="list">Liste</option></select></td></tr>
+      <tr><td>Filter</td><td><select id="panel-desktop-filter">
+        <option value="all">Alle</option>
+        <option value="folders">Ordner</option>
+        <option value="icons">Symbole</option>
+        <option value="documents">Dokumente</option>
+        <option value="images">Bilder</option>
+        <option value="videos">Videos</option>
+        <option value="audio">Audio</option>
+        <option value="archives">Archive</option>
+        <option value="apps">Anwendungen</option>
+        <option value="other">Sonstige</option>
+      </select></td></tr>
+      <tr><td>Gruppierung</td><td><input id="panel-desktop-grouped" type="checkbox"> Kategorien gruppieren</td></tr>`
+    : id === "clock"
     ? `
       <tr><td>Darstellung</td><td><select id="panel-clock-mode"><option value="digital">Digital</option><option value="analog">Analog</option></select></td></tr>
       <tr><td>Datum</td><td><input id="panel-clock-date" type="checkbox"></td></tr>
@@ -3072,7 +3179,7 @@ function openPanelSetup(el) {
   modal.className = "modal_popup info panel-setup-modal";
   modal.innerHTML = `
     <h1>${escapeHtml(title)} - Setup</h1>
-    <table><tr><th>Option</th><th>Wert</th></tr>${zoneSetup}${backgroundSetup}${iconSetup}${body}</table>
+    <table><tr><th>Option</th><th>Wert</th></tr>${nameSetup}${zoneSetup}${backgroundSetup}${iconSetup}${body}</table>
     <div class="settings-footer">
       <button type="button" id="panel-setup-save">Speichern</button>
       <button type="button" id="panel-setup-close">Schließen</button>
@@ -3097,19 +3204,71 @@ function openPanelSetup(el) {
   if (ramMode) ramMode.value = state.settings.ramGaugeMode || "used";
   const searchFont = modal.querySelector("#panel-search-font");
   if (searchFont) searchFont.value = String(state.settings.searchFontSize || 12);
+  const desktopView = modal.querySelector("#panel-desktop-view");
+  const desktopFilter = modal.querySelector("#panel-desktop-filter");
+  const desktopGrouped = modal.querySelector("#panel-desktop-grouped");
+  if (desktopView) desktopView.value = state.iconView === "list" ? "list" : "grid";
+  if (desktopFilter) desktopFilter.value = state.desktopFilter || "all";
+  if (desktopGrouped) desktopGrouped.checked = Boolean(state.desktopGrouped);
   const panelZoneInput = modal.querySelector("#panel-zone");
+  const panelNameInput = modal.querySelector("#panel-name");
   const panelIconSelect = modal.querySelector("#panel-icon-select");
   const panelBgSelect = modal.querySelector("#panel-bg-select");
   const panelBgCustom = modal.querySelector("#panel-bg-custom");
+  if (panelNameInput) panelNameInput.value = panelDisplayTitle(id);
   panelBgCustom?.addEventListener("input", () => {
     if (panelBgSelect) panelBgSelect.value = "__custom__";
   });
   modal.querySelector("#panel-setup-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#panel-setup-save")?.addEventListener("click", async () => {
     const patch = {};
-    const zoneChanged = Boolean(PANEL_META[id] && panelZoneInput && panelZoneInput.value !== (state.layout[id]?.zone === "edge" ? "edge" : "workspace"));
+    const panelName = panelNameInput?.value.trim().replace(/\s+/g, " ") || "";
+    const previousPanelName = panelDisplayTitle(id);
+    const defaultPanelName = PANEL_META[id]?.title || id;
+    const nextPanelName = panelName || defaultPanelName;
+    const panelNameChanged = Boolean(panelNameInput && nextPanelName !== previousPanelName);
+    if (panelNameChanged) {
+      state.layout[id] = { ...state.layout[id] };
+      if (nextPanelName === defaultPanelName) delete state.layout[id].title;
+      else state.layout[id].title = nextPanelName.slice(0, 48);
+    }
+    const previousZone = state.layout[id]?.zone === "edge" ? "edge" : "workspace";
+    const nextZone = panelZoneInput?.value === "edge" ? "edge" : "workspace";
+    const zoneChanged = Boolean(PANEL_META[id] && panelZoneInput && nextZone !== previousZone);
     if (zoneChanged) {
-      state.layout[id] = { ...state.layout[id], zone: panelZoneInput.value === "edge" ? "edge" : "workspace" };
+      state.layout[id] = { ...state.layout[id], zone: nextZone };
+      const zonePosition = findPanelZonePosition(el);
+      if (!zonePosition && nextZone === "edge") {
+        const movedPanelTitle = panelDisplayTitle(id);
+        const target = (state.displays || []).find((display) => display.id !== state.displayId);
+        const targetLabel = target?.label || "dem zweiten Monitor";
+        const moveToOtherDisplay = Boolean(target && window.confirm(
+          `In der Randzone ist kein ausreichender Platz für „${panelDisplayTitle(id)}“. Auf ${targetLabel} verschieben?`
+        ));
+        if (moveToOtherDisplay) {
+          const box = pxToGridFields(el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight);
+          const result = await window.edex.transferWidget(target.id, {
+            type: "panel",
+            id,
+            data: { ...state.layout[id] },
+            ...box
+          });
+          if (result?.ok) {
+            delete state.layout[id];
+            await persistLayout();
+            modal.remove();
+            rebuildWorkspace();
+            toast(`„${movedPanelTitle}“ zu ${targetLabel} verschoben`);
+            return;
+          }
+          toast(result?.message || "Verschieben auf den zweiten Monitor nicht möglich");
+        } else {
+          toast("Nicht genügend Platz in der Randzone");
+        }
+        state.layout[id] = { ...state.layout[id], zone: previousZone };
+        return;
+      }
+      repositionPanelInZone(el);
     }
     const previousPanelIcon = id !== "desktop" && id !== "path" ? dockIcon("panel", id) : "";
     const selectedPanelIcon = panelIconSelect?.value || previousPanelIcon;
@@ -3136,9 +3295,14 @@ function openPanelSetup(el) {
         : "used";
     } else if (id === "filesearch") {
       patch.searchFontSize = Math.max(8, Math.min(72, Math.round(Number(searchFont?.value) || 12)));
+    } else if (id === "desktop") {
+      state.iconView = desktopView?.value === "list" ? "list" : "grid";
+      state.desktopFilter = desktopFilter?.value || "all";
+      state.desktopGrouped = Boolean(desktopGrouped?.checked);
     }
     if (panelIconChanged) state.layout[id] = { ...state.layout[id], icon: selectedPanelIcon };
-    if (!Object.keys(patch).length && !zoneChanged && !backgroundChanged && !panelIconChanged) {
+    const desktopChanged = id === "desktop";
+    if (!Object.keys(patch).length && !zoneChanged && !backgroundChanged && !panelIconChanged && !panelNameChanged && !desktopChanged) {
       modal.remove();
       return;
     }
@@ -3148,7 +3312,8 @@ function openPanelSetup(el) {
         state.settings = result.settings || { ...state.settings, ...patch };
       }
       if (zoneChanged) persistLayout();
-      if (backgroundChanged || panelIconChanged) persistLayout();
+      if (backgroundChanged || panelIconChanged || panelNameChanged) persistLayout();
+      if (desktopChanged) persistLayout();
       if (id === "clock" && patch.clockDisplayMode === "analog" && state.layout.clock) {
         const minimum = analogClockMinimum().px;
         const box = pxFromBox(state.layout.clock);
@@ -3487,11 +3652,13 @@ function ensureDesktopCard() {
 }
 
 function dockEnabled() {
-  return state.primary && state.settings?.dockEnabled !== false;
+  return state.displayDockEnabled == null
+    ? state.settings?.dockEnabled !== false
+    : state.displayDockEnabled;
 }
 
 function syncDockLayout(enabled) {
-  if (!state.primary || !PANEL_META.dock) {
+  if (!PANEL_META.dock) {
     if (state.layout.dock) delete state.layout.dock;
     window.dockPanel?.unbind?.(state);
     return;
@@ -3511,15 +3678,12 @@ function syncDockLayout(enabled) {
 }
 
 async function setDockEnabled(on) {
-  if (!state.primary) {
-    toast("Das Dock ist nur auf dem Hauptbildschirm verfügbar");
-    return;
-  }
   const enabled = Boolean(on);
-  state.settings = { ...state.settings, dockEnabled: enabled };
+  state.displayDockEnabled = enabled;
+  if (state.primary) state.settings = { ...state.settings, dockEnabled: enabled };
   syncDockLayout(enabled);
   try {
-    await window.edex.saveSettings({ dockEnabled: enabled });
+    if (state.primary) await window.edex.saveSettings({ dockEnabled: enabled });
   } catch {
     // keep local
   }
@@ -3578,8 +3742,7 @@ function openAddPicker() {
     <h1>Container hinzufügen</h1>
     <h2>Plugin-Schalter</h2>
     <div class="action-row" style="align-items:center;gap:0.8rem;flex-wrap:wrap;">
-      ${state.primary
-        ? `<label style="display:inline-flex;align-items:center;gap:0.45rem;cursor:pointer;">
+      ${`<label style="display:inline-flex;align-items:center;gap:0.45rem;cursor:pointer;">
             <input type="checkbox" id="toggle-dock" ${dockOn ? "checked" : ""}>
             <span data-dock-label>${dockPosition === "top" ? "Oberes Dock (am oberen Bildschirmrand)" : "Unteres Dock (am unteren Bildschirmrand)"}</span>
           </label>
@@ -3607,8 +3770,7 @@ function openAddPicker() {
             <span>Höhe</span>
             <input id="dock-height" type="number" min="40" max="160" step="2" value="${dockH}" ${dockOn ? "" : "disabled"} style="width:4.5rem;">
             <span>px</span>
-          </label>`
-        : `<span style="opacity:.6">Dock nur auf dem Hauptbildschirm</span>`}
+          </label>`}
     </div>
     <h2>Windows-Fenstereinbettung</h2>
     <div class="action-row" style="align-items:center;gap:0.5rem;flex-wrap:wrap;">
@@ -3698,12 +3860,14 @@ function openAddPicker() {
   modal.querySelector("#dock-position")?.addEventListener("change", (event) => {
     const next = event.target.value === "top" ? "top" : "bottom";
     window.dockPanel?.setPosition?.(state, next);
+    persistLayout();
     const label = modal.querySelector("[data-dock-label]");
     if (label) label.textContent = next === "top" ? "Oberes Dock (am oberen Bildschirmrand)" : "Unteres Dock (am unteren Bildschirmrand)";
     toast(`Dock-Position: ${next === "top" ? "oben" : "unten"}`);
   });
   modal.querySelector("#dock-frame-style")?.addEventListener("change", (event) => {
     window.dockPanel?.setFrameStyle?.(state, event.target.value);
+    persistLayout();
     toast(`Dock 外框：${event.target.selectedOptions?.[0]?.text || event.target.value}`);
   });
   const applyDockSizeFromInputs = () => {
@@ -3713,6 +3877,7 @@ function openAddPicker() {
       width: Number(wEl?.value),
       height: Number(hEl?.value)
     });
+    persistLayout();
   };
   modal.querySelector("#dock-width")?.addEventListener("change", applyDockSizeFromInputs);
   modal.querySelector("#dock-height")?.addEventListener("change", applyDockSizeFromInputs);
@@ -4102,7 +4267,7 @@ function bindPluginPanels() {
   if (state.layout.ddj) window.ddjPanel?.bind?.(state);
   if (state.layout.cpuRail) window.cpuRailPanel?.bind?.(state);
   if (state.layout.calculator) window.calculatorPanel?.bind?.(state);
-  if (state.layout.dock && state.primary) window.dockPanel?.bind?.(state);
+  if (state.layout.dock) window.dockPanel?.bind?.(state);
   else window.dockPanel?.unbind?.(state);
   if (state.layout.weather) bindWeatherPanel();
   bindLogPanel();
@@ -4615,7 +4780,12 @@ async function fillDrivesStage() {
     `).join("");
     window.edexI18n?.translatePage?.(stage);
     stage.querySelectorAll("[data-path]").forEach((btn) => {
-      btn.addEventListener("click", () => window.edex.openPath(btn.dataset.path));
+      btn.addEventListener("click", () => {
+        const driveName = btn.querySelector(".drive-name")?.textContent?.trim() || btn.dataset.path;
+        addPathCardAt(btn.dataset.path, { name: driveName, promptName: false }).catch((err) => {
+          toast(err?.message || "Laufwerk-Panel konnte nicht geöffnet werden");
+        });
+      });
     });
     bindFileStage(stage, {
       destDir: "",
@@ -6478,13 +6648,13 @@ function openSettings(focusPanel = "") {
       <tr>
         <td>底部 Dock</td>
         <td>主螢幕底邊背景條；寬度跟隨任務欄圖示；不遮擋點擊</td>
-        <td><input id="set-dock" type="checkbox" ${!state.primary ? "disabled" : ""} ${dockEnabled() ? "checked" : ""}></td>
+        <td><input id="set-dock" type="checkbox" ${dockEnabled() ? "checked" : ""}></td>
       </tr>
       <tr>
         <td>Dock 外框</td>
         <td>圓角 / 梯形 / 直角；邊框帶電路發光點</td>
         <td>
-          <select id="set-dock-frame" ${!state.primary || !dockEnabled() ? "disabled" : ""}>
+          <select id="set-dock-frame" ${!dockEnabled() ? "disabled" : ""}>
             <option value="rounded" ${(state.settings?.dockFrameStyle || "rounded") === "rounded" ? "selected" : ""}>圓角</option>
             <option value="trapezoid" ${state.settings?.dockFrameStyle === "trapezoid" ? "selected" : ""}>梯形</option>
             <option value="rect" ${state.settings?.dockFrameStyle === "rect" ? "selected" : ""}>直角</option>
@@ -6495,7 +6665,7 @@ function openSettings(focusPanel = "") {
         <td>Dock-Icon-Set</td>
         <td>Transparente Icons mit Beschriftung oder nur als Symbol verwenden</td>
         <td>
-          <select id="set-dock-icon-set" ${!state.primary || !dockEnabled() ? "disabled" : ""}>
+          <select id="set-dock-icon-set" ${!dockEnabled() ? "disabled" : ""}>
             <option value="icon" ${(state.settings?.dockIconSet || "icon") === "icon" ? "selected" : ""}>Nur Icon</option>
             <option value="labelled" ${state.settings?.dockIconSet === "labelled" ? "selected" : ""}>Mit Beschriftung</option>
           </select>
@@ -6706,12 +6876,18 @@ function openSettings(focusPanel = "") {
     const name = await requestPresetName(modal);
     if (!name) return;
     await persistLayout();
+    const currentLayout = currentDisplayLayout();
+    const presetDisplayLayouts = {
+      ...(state.settings.displayLayouts || {}),
+      [String(state.displayId)]: currentLayout
+    };
     const presets = (state.settings.presets || []).filter((preset) => preset.name !== name);
     presets.push({
       name: name.slice(0, 80),
       createdAt: new Date().toISOString(),
       settings: presetSettingsSnapshot(),
-      layout: currentDisplayLayout()
+      layout: currentLayout,
+      displayLayouts: presetDisplayLayouts
     });
     const result = await window.edex.saveSettings({ presets: presets.slice(-20) });
     logUiAction("settings.save", "Einstellungen gespeichert", {
@@ -6732,7 +6908,11 @@ function openSettings(focusPanel = "") {
   modal.querySelector("#set-preset-load")?.addEventListener("click", async () => {
     const preset = (state.settings.presets || []).find((item) => item.name === presetSelect?.value);
     if (!preset) return;
-    await window.edex.saveSettings({ ...preset.settings, presets: state.settings.presets });
+    await window.edex.saveSettings({
+      ...preset.settings,
+      displayLayouts: preset.displayLayouts || state.settings.displayLayouts,
+      presets: state.settings.presets
+    });
     await window.edex.saveDisplayLayout(preset.layout);
     location.reload();
   });
@@ -6852,9 +7032,7 @@ function openSettings(focusPanel = "") {
     const searchFontValue = Number.isFinite(searchFontRaw)
       ? Math.max(8, Math.min(72, Math.round(searchFontRaw)))
       : 12;
-    const dockEnabledValue = state.primary
-      ? Boolean(modal.querySelector("#set-dock")?.checked)
-      : false;
+    const dockEnabledValue = Boolean(modal.querySelector("#set-dock")?.checked);
     const dockFrameValue = String(modal.querySelector("#set-dock-frame")?.value || state.settings?.dockFrameStyle || "rounded");
     const dockIconSetValue = modal.querySelector("#set-dock-icon-set")?.value === "labelled" ? "labelled" : "icon";
     const startWithWindows = Boolean(modal.querySelector("#set-start-with-windows")?.checked);
@@ -6885,9 +7063,10 @@ function openSettings(focusPanel = "") {
       windowZoneMargins,
       panelZones
     };
+    state.displayDockEnabled = dockEnabledValue;
     syncDockLayout(dockEnabledValue);
     window.dockPanel?.setFrameStyle?.(state, dockFrameValue);
-    const result = await window.edex.saveSettings({
+    const settingsPatch = {
       snapWidgets: modal.querySelector("#set-snap").checked,
       dockEnabled: dockEnabledValue,
       dockFrameStyle: dockFrameValue,
@@ -6911,7 +7090,9 @@ function openSettings(focusPanel = "") {
       windowZoneMargins,
       panelZones,
       locale: localeValue
-    });
+    };
+    if (!state.primary) delete settingsPatch.dockEnabled;
+    const result = await window.edex.saveSettings(settingsPatch);
     state.settings = result.settings;
     window.edexI18n?.setLocale?.(state.settings.locale);
     state.themeName = result.themeName;
@@ -6948,7 +7129,7 @@ function receiveWidget(widget) {
 
   if (widget.type === "panel" && widget.id && widget.id !== "status" && PANEL_META[widget.id]) {
     if (widget.id === "dock") {
-      setDockEnabled(state.primary);
+      setDockEnabled(true);
       return;
     }
     if (state.layout[widget.id]) {
@@ -7155,6 +7336,17 @@ window.addEventListener("keydown", (event) => {
   const defaults = defaultWidgets();
   state.layout = defaults;
   const savedLayout = saved?.layout || null;
+  state.displayDockEnabled = typeof saved?.dockEnabled === "boolean"
+    ? saved.dockEnabled
+    : state.settings?.dockEnabled !== false;
+  state.displayDockSettings = {
+    position: saved?.dockPosition === "top" ? "top" : String(saved?.dockPosition || state.settings?.dockPosition || "bottom"),
+    width: Number(saved?.dockWidth) || Number(state.settings?.dockWidth) || 720,
+    height: Number(saved?.dockHeight) || Number(state.settings?.dockHeight) || 72,
+    frameStyle: ["rounded", "trapezoid", "rect"].includes(saved?.dockFrameStyle)
+      ? saved.dockFrameStyle
+      : (state.settings?.dockFrameStyle || "rounded")
+  };
   const oldSecondaryMirror = !state.primary && savedLayout && Object.keys(savedLayout).length
     && Object.keys(savedLayout).every((k) => ["clock", "status"].includes(k));
 

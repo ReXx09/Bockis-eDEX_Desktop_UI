@@ -21,16 +21,16 @@
   }
 
   function frameStyle(state) {
-    const raw = String(state?.settings?.dockFrameStyle || "rounded").toLowerCase();
+    const raw = String(state?.displayDockSettings?.frameStyle || state?.settings?.dockFrameStyle || "rounded").toLowerCase();
     return FRAME_STYLES.includes(raw) ? raw : "rounded";
   }
 
   function dockPosition(state) {
-    return String(state?.settings?.dockPosition || "bottom").toLowerCase() === "top" ? "top" : "bottom";
+    return String(state?.displayDockSettings?.position || state?.settings?.dockPosition || "bottom").toLowerCase() === "top" ? "top" : "bottom";
   }
 
   function dockWidth(state) {
-    const raw = Number(state?.settings?.dockWidth);
+    const raw = Number(state?.displayDockSettings?.width ?? state?.settings?.dockWidth);
     if (!Number.isFinite(raw)) return DEFAULT_WIDTH;
     return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(raw)));
   }
@@ -48,7 +48,7 @@
   }
 
   function dockHeight(state) {
-    const raw = Number(state?.settings?.dockHeight);
+    const raw = Number(state?.displayDockSettings?.height ?? state?.settings?.dockHeight);
     if (!Number.isFinite(raw)) return DEFAULT_HEIGHT;
     return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(raw)));
   }
@@ -367,6 +367,7 @@
 
   function setFrameStyle(state, style) {
     const next = FRAME_STYLES.includes(style) ? style : "rounded";
+    state.displayDockSettings = { ...(state.displayDockSettings || {}), frameStyle: next };
     state.settings = { ...state.settings, dockFrameStyle: next };
     applyFrameClass(state);
     paintBorderFx(state, performance.now());
@@ -375,15 +376,19 @@
 
   function setSize(state, { width, height } = {}) {
     const patch = {};
+    const displayPatch = { ...(state.displayDockSettings || {}) };
     if (width !== undefined) {
       const w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(Number(width) || DEFAULT_WIDTH)));
       patch.dockWidth = w;
+      displayPatch.width = w;
     }
     if (height !== undefined) {
       const h = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(Number(height) || DEFAULT_HEIGHT)));
       patch.dockHeight = h;
+      displayPatch.height = h;
     }
     if (!Object.keys(patch).length) return;
+    state.displayDockSettings = displayPatch;
     state.settings = { ...state.settings, ...patch };
     applyGeometry(state);
     paintBorderFx(state, performance.now());
@@ -392,6 +397,7 @@
 
   function setPosition(state, position) {
     const next = String(position || "bottom").toLowerCase() === "top" ? "top" : "bottom";
+    state.displayDockSettings = { ...(state.displayDockSettings || {}), position: next };
     state.settings = { ...state.settings, dockPosition: next };
     applyFrameClass(state);
     applyGeometry(state);
