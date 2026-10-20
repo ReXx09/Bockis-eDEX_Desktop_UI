@@ -801,6 +801,23 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     flex: 0 0 auto;
     min-width: 1.8rem;
     padding: 0.15rem 0.35rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    border-radius: 0.15rem;
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.08);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font: inherit;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.path-browser-toolbar button:hover:not(:disabled) {
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+    color: var(--color_light_black);
+}
+
+.path-browser-toolbar button:disabled {
+    opacity: 0.35;
+    cursor: default;
 }
 
 .path-browser-toolbar input {
@@ -808,6 +825,21 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     width: 8rem;
     max-width: 30%;
     padding: 0.2rem 0.35rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    border-radius: 0.15rem;
+    background: rgba(0, 0, 0, 0.25);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font: inherit;
+    outline: none;
+}
+
+.path-browser-toolbar input::placeholder {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
+}
+
+.path-browser-toolbar input:focus {
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    box-shadow: 0 0 0 1px rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
 }
 
 .file-preview-modal {

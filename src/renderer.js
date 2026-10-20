@@ -6423,13 +6423,6 @@ function fillIconStage(stage, items, opts = {}) {
         if (card) navigatePathCard(card, item.path, item.name);
       });
     }
-    if (opts.pathCardId) {
-      node.draggable = true;
-      node.addEventListener("dragstart", (event) => {
-        event.dataTransfer.effectAllowed = "copy";
-        event.dataTransfer.setData("application/x-edex-file", JSON.stringify([item.path]));
-      });
-    }
     if (opts.draggable && !listMode) bindIconDrag(node, item, gap);
     stage.appendChild(node);
   });
