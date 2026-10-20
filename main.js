@@ -1724,10 +1724,7 @@ function parentHwndOf(event) {
 
 function resolveEmbedZone(payload = {}) {
   if (payload.zone === "edge" || payload.zone === "workspace") return payload.zone;
-  const kind = String(payload.kind || "");
-  return settings.windowZoneEnabled !== false && settings.panelZones?.[kind] !== "edge"
-    ? "workspace"
-    : "edge";
+  return settings.windowZoneEnabled !== false ? "workspace" : "edge";
 }
 
 /** Map renderer CSS host rect → physical screen pixels for docking. */

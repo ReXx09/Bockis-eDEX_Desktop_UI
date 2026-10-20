@@ -48,6 +48,12 @@ function copyDir(from, to) {
   return true;
 }
 
+function replaceDir(from, to) {
+  if (!fs.existsSync(from)) return false;
+  fs.rmSync(to, { recursive: true, force: true });
+  return copyDir(from, to);
+}
+
 const cssOut = path.join(root, "src", "assets", "css");
 const vendorOut = path.join(root, "src", "assets", "vendor");
 const themesOut = path.join(root, "assets", "themes");
@@ -56,7 +62,7 @@ const miscOut = path.join(root, "assets", "misc");
 const rendererMiscOut = path.join(root, "src", "assets", "misc");
 const dockIconsOut = path.join(root, "src", "assets", "misc", "dock-icons");
 
-copyDir(path.join(root, "build", "icons_transparent"), dockIconsOut);
+replaceDir(path.join(root, "build", "icons_transparent"), dockIconsOut);
 
 const alreadyReady = fs.existsSync(path.join(cssOut, "boot_screen.css"))
   && fs.existsSync(path.join(vendorOut, "encom-globe.js"))

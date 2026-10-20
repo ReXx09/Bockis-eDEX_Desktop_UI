@@ -179,7 +179,10 @@
     if (!root) return;
     const style = frameStyle(state);
     root.dataset.dockFrame = style;
-    root.dataset.dockIconSet = state?.settings?.dockIconSet === "labelled" ? "labelled" : "icon";
+    const labelColor = String(state?.settings?.dockLabelColor || "theme").trim();
+    if (labelColor === "theme") root.style.removeProperty("--dock-label-color");
+    else if (/^#[0-9a-f]{6}$/i.test(labelColor)) root.style.setProperty("--dock-label-color", labelColor);
+    else root.style.removeProperty("--dock-label-color");
     root.classList.toggle("is-trap", style === "trapezoid");
     root.classList.toggle("is-rect", style === "rect");
     root.classList.toggle("is-rounded", style === "rounded");

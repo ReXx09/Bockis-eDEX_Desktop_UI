@@ -3201,6 +3201,18 @@ function menuItemsForCard(kind, ctx) {
         action: () => runOrganize()
       },
       {
+        label: "Organisation konfigurieren",
+        action: () => openOrganizerSettings()
+      },
+      {
+        label: "Desktop-Layout speichern",
+        action: () => saveDesktopLayout()
+      },
+      {
+        label: "Desktop-Layout zurücksetzen",
+        action: () => resetDesktopLayout()
+      },
+      {
         label: "Letzte Organisation zurücksetzen",
         action: async () => {
           const result = await window.edex.undo();
@@ -3264,7 +3276,7 @@ function openPanelSetup(el) {
     return `<option value="${escapeHtml(item.color || "__default__")}" ${color === currentPanelBg ? "selected" : ""}>${escapeHtml(item.label)}</option>`;
   }).join("");
   const nameSetup = PANEL_META[id] && id !== "desktop"
-    ? `<tr><td>Panel-Name</td><td><input id="panel-name" type="text" maxlength="48" spellcheck="false"></td></tr>`
+    ? `<tr><td>Panel-Name / Dock-Beschriftung</td><td><input id="panel-name" type="text" maxlength="48" spellcheck="false" placeholder="${escapeHtml(PANEL_META[id].title)}"></td></tr>`
     : "";
   const body = id === "desktop"
     ? `<tr><td>Ansicht</td><td><select id="panel-desktop-view"><option value="grid">Raster</option><option value="list">Liste</option></select></td></tr>
@@ -3969,13 +3981,11 @@ function openAddPicker() {
     const windowsStart = rows.findIndex((row) => rowContains(row, "set-windows-colors"));
     const displayEnd = rows.findIndex((row) => rowContains(row, "set-grid"));
     const clockEnd = rows.findIndex((row) => rowContains(row, "set-search-font"));
-    const organizerEnd = rows.findIndex((row) => rowContains(row, "set-migrate"));
     const cuts = [
       ["Anzeige & Theme", 0, windowsStart < 0 ? displayEnd : windowsStart, true],
       ["Windows-Integration", windowsStart < 0 ? displayEnd : windowsStart, displayEnd < 0 ? rows.length : displayEnd, false],
       ["Uhr", displayEnd < 0 ? rows.length : displayEnd, clockEnd < 0 ? rows.length : clockEnd, false],
-      ["Interface & Code-Hintergrund", clockEnd < 0 ? rows.length : clockEnd, organizerEnd < 0 ? rows.length : organizerEnd, false],
-      ["Desktop UI", organizerEnd < 0 ? rows.length : organizerEnd, rows.length, false]
+      ["Interface & Code-Hintergrund", clockEnd < 0 ? rows.length : clockEnd, rows.length, false]
     ];
     const fragment = document.createDocumentFragment();
     for (const [title, start, end, open] of cuts) {
@@ -5960,6 +5970,10 @@ function fileMenuItems(stage, item, ctx) {
         label: "自動整理",
         action: () => runOrganize()
       },
+      {
+        label: "Organisation konfigurieren",
+        action: () => openOrganizerSettings()
+      },
       { sep: true }
     );
   }
@@ -6685,6 +6699,90 @@ function presetSettingsSnapshot() {
   return snapshot;
 }
 
+async function saveDesktopLayout() {
+  snapAllLayoutToGrid();
+  try {
+    await persistLayout();
+    toast("Desktop-Layout dieses Monitors gespeichert");
+    return true;
+  } catch (err) {
+    toast(err?.message || "Layout konnte nicht gespeichert werden");
+    return false;
+  }
+}
+
+async function resetDesktopLayout() {
+  state.layout = defaultWidgets();
+  state.desktopStage = defaultDesktop();
+  state.desktopEnabled = true;
+  state.pathCards = [];
+  state.desktopFolderTabs = [];
+  state.desktopTabId = "classify";
+  snapAllLayoutToGrid();
+  try {
+    await persistLayout();
+    rebuildWorkspace();
+    toast("Desktop-Layout zurückgesetzt");
+  } catch (err) {
+    toast(err?.message || "Layout konnte nicht zurückgesetzt werden");
+  }
+}
+
+function openOrganizerSettings() {
+  document.getElementById("organizerSettingsModal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "organizerSettingsModal";
+  modal.className = "modal_popup info central-settings-modal";
+  modal.innerHTML = `
+    <h1>Desktop organisieren</h1>
+    <p>Lege fest, ob die Desktop-Inhalte nur gruppiert angezeigt oder tatsächlich in Kategorie- und Endungsordner verschoben werden.</p>
+    <table>
+      <tr><th>Option</th><th>Wert</th></tr>
+      <tr>
+        <td>Dateien verschieben</td>
+        <td><label><input id="organizer-migrate" type="checkbox" ${state.settings?.migrateFiles ? "checked" : ""}> Dateien beim Organisieren verschieben</label></td>
+      </tr>
+      <tr>
+        <td>Ordner einbeziehen</td>
+        <td><label><input id="organizer-folders" type="checkbox" ${state.includeFolders ? "checked" : ""}> Ordner ebenfalls einbeziehen</label></td>
+      </tr>
+    </table>
+    <div class="settings-footer">
+      <button type="button" id="organizer-save">Speichern</button>
+      <button type="button" id="organizer-run">Speichern und ausführen</button>
+      <button type="button" id="organizer-close">Schließen</button>
+    </div>`;
+  document.body.appendChild(modal);
+  placeCentered(modal, { width: Math.min(620, window.innerWidth * 0.55), topRatio: 0.22 });
+
+  const save = async () => {
+    const migrateFiles = Boolean(modal.querySelector("#organizer-migrate")?.checked);
+    const includeFolders = Boolean(modal.querySelector("#organizer-folders")?.checked);
+    const result = await window.edex.saveSettings({ migrateFiles, includeFolders });
+    state.settings = result.settings || { ...state.settings, migrateFiles, includeFolders };
+    state.includeFolders = includeFolders;
+    toast("Organisations-Einstellungen gespeichert");
+  };
+  modal.querySelector("#organizer-save")?.addEventListener("click", async () => {
+    try {
+      await save();
+      modal.remove();
+    } catch (err) {
+      toast(err?.message || "Organisations-Einstellungen konnten nicht gespeichert werden");
+    }
+  });
+  modal.querySelector("#organizer-run")?.addEventListener("click", async () => {
+    try {
+      await save();
+      modal.remove();
+      await runOrganize();
+    } catch (err) {
+      toast(err?.message || "Organisation konnte nicht gestartet werden");
+    }
+  });
+  modal.querySelector("#organizer-close")?.addEventListener("click", () => modal.remove());
+}
+
 function openSettings(focusPanel = "") {
   if (document.getElementById("settingsEditor")) return;
   const modal = document.createElement("div");
@@ -6698,6 +6796,7 @@ function openSettings(focusPanel = "") {
   const presetOpts = (state.settings.presets || []).map((preset) =>
     `<option value="${escapeHtml(preset.name)}">${escapeHtml(preset.name)}</option>`
   ).join("");
+  const dockLabelColor = String(state.settings?.dockLabelColor || "theme");
   const currentLocale = state.settings.locale || "de";
   const zhLanguageLabel = currentLocale === "zh-Hant"
     ? "繁體中文"
@@ -6806,13 +6905,14 @@ function openSettings(focusPanel = "") {
         </td>
       </tr>
       <tr>
-        <td>Dock-Icon-Set</td>
-        <td>Transparente Icons mit Beschriftung oder nur als Symbol verwenden</td>
+        <td>Dock-Beschriftungsfarbe</td>
+        <td>Beschriftungen werden automatisch an die Theme-Farbe angepasst oder verwenden eine eigene Farbe</td>
         <td>
-          <select id="set-dock-icon-set" ${!dockEnabled() ? "disabled" : ""}>
-            <option value="icon" ${(state.settings?.dockIconSet || "icon") === "icon" ? "selected" : ""}>Nur Icon</option>
-            <option value="labelled" ${state.settings?.dockIconSet === "labelled" ? "selected" : ""}>Mit Beschriftung</option>
+          <select id="set-dock-label-color-mode" ${!dockEnabled() ? "disabled" : ""}>
+            <option value="theme" ${dockLabelColor === "theme" ? "selected" : ""}>Automatisch (Theme)</option>
+            <option value="custom" ${dockLabelColor !== "theme" ? "selected" : ""}>Benutzerdefiniert</option>
           </select>
+          <input id="set-dock-label-color" type="color" value="${escapeHtml(dockLabelColor === "theme" ? "#00eaff" : dockLabelColor)}" ${!dockEnabled() || dockLabelColor === "theme" ? "disabled" : ""} title="Dock-Beschriftungsfarbe">
         </td>
       </tr>
       <tr>
@@ -6830,36 +6930,6 @@ function openSettings(focusPanel = "") {
             <label>R <input id="set-zone-right" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.right ?? 18)}">%</label>
             <label>U <input id="set-zone-bottom" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.bottom ?? 8)}">%</label>
           </div>
-        </td>
-      </tr>
-      <tr>
-        <td>Terminal-Zone</td>
-        <td>Festlegen, ob das Terminal am Rand oder innerhalb der Skalierzone erscheint</td>
-        <td>
-          <select id="set-zone-terminal">
-            <option value="edge" ${state.settings.panelZones?.terminal === "edge" ? "selected" : ""}>Randzone</option>
-            <option value="workspace" ${state.settings.panelZones?.terminal !== "edge" ? "selected" : ""}>Skalierzone</option>
-          </select>
-        </td>
-      </tr>
-      <tr>
-        <td>PuTTY-Zone</td>
-        <td>Festlegen, ob PuTTY am Rand oder innerhalb der Skalierzone erscheint</td>
-        <td>
-          <select id="set-zone-putty">
-            <option value="edge" ${state.settings.panelZones?.putty === "edge" ? "selected" : ""}>Randzone</option>
-            <option value="workspace" ${state.settings.panelZones?.putty !== "edge" ? "selected" : ""}>Skalierzone</option>
-          </select>
-        </td>
-      </tr>
-      <tr>
-        <td>File-Browser-Zone</td>
-        <td>Festlegen, ob der File-Browser am Rand oder innerhalb der Skalierzone erscheint</td>
-        <td>
-          <select id="set-zone-file-browser">
-            <option value="edge" ${state.settings.panelZones?.fileBrowser === "edge" ? "selected" : ""}>Randzone</option>
-            <option value="workspace" ${state.settings.panelZones?.fileBrowser !== "edge" ? "selected" : ""}>Skalierzone</option>
-          </select>
         </td>
       </tr>
       <tr>
@@ -6902,31 +6972,12 @@ function openSettings(focusPanel = "") {
         <td>Für alle Monitore synchron, zusätzlich zur Layout-Auflösung</td>
         <td><input id="set-ui-scale" type="number" min="0.4" max="1.2" step="0.05" value="${displayUiScale()}"></td>
       </tr>
-      <tr>
-        <td>Dateien verschieben</td>
-        <td>Die automatische Sortierung verschiebt Dateien in Kategorie-/Endungsordner; deaktiviert werden sie nur gefiltert</td>
-        <td><input id="set-migrate" type="checkbox" ${state.settings?.migrateFiles ? "checked" : ""}></td>
-      </tr>
-      <tr>
-        <td>Ordner einbeziehen</td>
-        <td>Ordner beim Verschieben ebenfalls in den Ordnerbereich einsortieren</td>
-        <td><input id="set-dirs" type="checkbox" ${state.includeFolders ? "checked" : ""}></td>
-      </tr>
-      <tr>
-        <td>Desktop-Layout</td>
-        <td>Alle Container dieses Monitors speichern: Panels, Positionen, Systemdesktop und Ordnerkarten</td>
-        <td>
-          <button type="button" id="set-save-layout">Nur Layout speichern</button>
-        </td>
-      </tr>
     </table>
 
     <div class="settings-footer">
       <span id="settings-save-status" class="settings-save-status" aria-live="polite">Keine ungespeicherten Änderungen</span>
-      <button type="button" id="set-reset">Container zurücksetzen</button>
       <button type="button" id="set-quit">Programm beenden</button>
       <button type="button" id="set-cancel">Schließen</button>
-      <button type="button" id="set-save-layout-footer">Nur Layout speichern</button>
       <button type="button" id="set-save">Alles speichern</button>
     </div>
   `;
@@ -6944,8 +6995,7 @@ function openSettings(focusPanel = "") {
       ["Anzeige & Theme", 0, windowsStart, true],
       ["Windows-Integration", windowsStart, firstRow("set-grid"), false],
       ["Uhr", firstRow("set-grid"), firstRow("set-search-font"), false],
-      ["Interface & Code-Hintergrund", firstRow("set-search-font"), firstRow("set-migrate"), false],
-      ["Desktop UI", firstRow("set-migrate"), rows.length, false]
+      ["Interface & Code-Hintergrund", firstRow("set-search-font"), rows.length, false]
     ];
     const fragment = document.createDocumentFragment();
     cuts.forEach(([title, start, end, open], index) => {
@@ -7124,6 +7174,10 @@ function openSettings(focusPanel = "") {
   modal.querySelector("#set-dock-frame")?.addEventListener("change", (event) => {
     window.dockPanel?.setFrameStyle?.(state, event.target.value);
   });
+  modal.querySelector("#set-dock-label-color-mode")?.addEventListener("change", (event) => {
+    const colorInput = modal.querySelector("#set-dock-label-color");
+    if (colorInput) colorInput.disabled = event.target.value !== "custom";
+  });
   modal.querySelector("#set-cancel").onclick = () => {
     state.settings = { ...state.settings, layoutMode: prevLayoutMode, uiScale: prevUiScale };
     applyUiMetrics();
@@ -7132,36 +7186,7 @@ function openSettings(focusPanel = "") {
   modal.querySelector("#set-quit").onclick = () => {
     if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?")) window.edex.quitApp();
   };
-  const saveDesktopLayout = async () => {
-    snapAllLayoutToGrid();
-    try {
-      await persistLayout();
-      setSaveStatus("Layout gespeichert; andere Änderungen bleiben ungespeichert");
-      toast("Nur das Desktop-Layout dieses Monitors wurde gespeichert");
-      return true;
-    } catch (err) {
-      toast(err?.message || "佈局保存失敗");
-      return false;
-    }
-  };
-  modal.querySelector("#set-save-layout").onclick = () => saveDesktopLayout();
-  modal.querySelector("#set-save-layout-footer").onclick = () => saveDesktopLayout();
-  modal.querySelector("#set-reset").onclick = () => {
-    state.layout = defaultWidgets();
-    state.desktopStage = defaultDesktop();
-    state.desktopEnabled = true;
-    state.pathCards = [];
-    state.desktopFolderTabs = [];
-    state.desktopTabId = "classify";
-    snapAllLayoutToGrid();
-    persistLayout();
-    location.reload();
-  };
-
   modal.querySelector("#set-save").onclick = async () => {
-    state.includeFolders = modal.querySelector("#set-dirs").checked;
-    const migrateFiles = Boolean(modal.querySelector("#set-migrate")?.checked);
-    state.settings = { ...state.settings, migrateFiles };
     state.iconView = modal.querySelector("#set-icon-view").value === "list" ? "list" : "grid";
     const themeName = modal.querySelector("#set-theme").value;
     const windowsColorMode = ["off", "subtle", "strong"].includes(modal.querySelector("#set-windows-colors")?.value)
@@ -7191,7 +7216,11 @@ function openSettings(focusPanel = "") {
       : 12;
     const dockEnabledValue = Boolean(modal.querySelector("#set-dock")?.checked);
     const dockFrameValue = String(modal.querySelector("#set-dock-frame")?.value || state.settings?.dockFrameStyle || "rounded");
-    const dockIconSetValue = modal.querySelector("#set-dock-icon-set")?.value === "labelled" ? "labelled" : "icon";
+    const dockLabelColorMode = modal.querySelector("#set-dock-label-color-mode")?.value === "custom" ? "custom" : "theme";
+    const dockLabelColorInput = modal.querySelector("#set-dock-label-color")?.value || "#00eaff";
+    const dockLabelColorValue = dockLabelColorMode === "custom" && /^#[0-9a-f]{6}$/i.test(dockLabelColorInput)
+      ? dockLabelColorInput.toLowerCase()
+      : "theme";
     const startWithWindows = Boolean(modal.querySelector("#set-start-with-windows")?.checked);
     const zonePercent = (selector, fallback) => {
       const value = Number(modal.querySelector(selector)?.value);
@@ -7204,21 +7233,15 @@ function openSettings(focusPanel = "") {
       right: zonePercent("#set-zone-right", 18),
       bottom: zonePercent("#set-zone-bottom", 8)
     };
-    const panelZones = {
-      terminal: modal.querySelector("#set-zone-terminal")?.value === "edge" ? "edge" : "workspace",
-      putty: modal.querySelector("#set-zone-putty")?.value === "edge" ? "edge" : "workspace",
-      fileBrowser: modal.querySelector("#set-zone-file-browser")?.value === "edge" ? "edge" : "workspace"
-    };
     const localeValue = window.edexI18n?.normalize?.(modal.querySelector("#set-locale")?.value) || "zh-Hant";
     state.settings = {
       ...state.settings,
       dockEnabled: dockEnabledValue,
       dockFrameStyle: dockFrameValue,
-      dockIconSet: dockIconSetValue,
+      dockLabelColor: dockLabelColorValue,
       startWithWindows,
       windowZoneEnabled,
-      windowZoneMargins,
-      panelZones
+      windowZoneMargins
     };
     state.displayDockEnabled = dockEnabledValue;
     syncDockLayout(dockEnabledValue);
@@ -7227,6 +7250,7 @@ function openSettings(focusPanel = "") {
       snapWidgets: modal.querySelector("#set-snap").checked,
       dockEnabled: dockEnabledValue,
       dockFrameStyle: dockFrameValue,
+      dockLabelColor: dockLabelColorValue,
       gridSize: gridSizeValue,
       clockPanelFrame,
       rainFontSize: rainFontValue,
@@ -7241,11 +7265,8 @@ function openSettings(focusPanel = "") {
       startWithWindows,
       wallpaper,
       iconView: state.iconView,
-      includeFolders: state.includeFolders,
-      migrateFiles,
       windowZoneEnabled,
       windowZoneMargins,
-      panelZones,
       locale: localeValue
     };
     if (!state.primary) delete settingsPatch.dockEnabled;
