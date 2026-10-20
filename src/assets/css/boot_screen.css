@@ -204,17 +204,27 @@ section#boot_screen.boot_terminal::after {
     padding-top: 1vh;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    font-size: calc(1em + 1px);
+    line-height: 1.45;
 }
 
 .boot-log::-webkit-scrollbar { display: none; }
 
-.boot-line { min-height: 1.3em; }
+.boot-line { min-height: 1.45em; }
 .boot-log .ok { color: #2cffb0; }
 .boot-log .w { color: #ffcc4d; }
 .boot-log .er { color: #ff3d6e; }
 .boot-log .d { color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5); }
 .boot-log .b { font-weight: 700; }
 .boot-log .hi { color: #fff; text-shadow: 0 0 1vh #fff; }
+.boot-log .boot-bar {
+    display: inline-block;
+    font-size: 0.84em;
+    line-height: 1;
+    vertical-align: middle;
+    transform: scaleY(0.78);
+    transform-origin: center;
+}
 
 .boot-progress-panel {
     width: 100%;

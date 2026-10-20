@@ -2,12 +2,10 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: file:; connect-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: file:; connect-src 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bockis-eDEX Desktop UI</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono:wght@300;400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/fonts.css" />
   <link rel="stylesheet" href="assets/css/boot_screen.css" />
   <link rel="stylesheet" href="assets/css/modal.css" />
   <link rel="stylesheet" href="assets/css/mod_clock.css" />
@@ -44,6 +42,7 @@
   <script src="cpu-rail-panel.js"></script>
   <script src="calculator-panel.js"></script>
   <script src="dock-panel.js"></script>
+  <script src="renderer-panels.js"></script>
   <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
   <script src="renderer.js"></script>

@@ -152,7 +152,10 @@ function requireApprovedPath(target) {
 
 function approveLayoutRoots(layout) {
   const roots = [
-    ...(Array.isArray(layout?.pathCards) ? layout.pathCards.map((card) => card?.path) : []),
+    ...(Array.isArray(layout?.pathCards) ? layout.pathCards.flatMap((card) => [
+      card?.path,
+      ...(Array.isArray(card?.tabs) ? card.tabs.map((tab) => tab?.path) : [])
+    ]) : []),
     ...(Array.isArray(layout?.desktopFolderTabs) ? layout.desktopFolderTabs.map((tab) => tab?.path) : [])
   ];
   for (const root of roots) {

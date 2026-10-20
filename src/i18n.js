@@ -219,7 +219,7 @@
       "還原上次": "Undo last action", "啟用此路徑": "Enable this path", "開啟資料夾": "Open folder", "在 VS Code 開啟": "Open in VS Code", "更換路徑": "Change path", "關閉容器": "Close container",
       "系統桌面": "System desktop", "讀取中…": "Loading…", "此資料夾沒有可顯示的項目": "This folder has no items to display", "新增事項": "Add event", "編輯": "Edit", "刪除": "Delete",
       "紅色": "Red", "橙色": "Orange", "黃色": "Yellow", "綠色": "Green", "藍色": "Blue", "紫色": "Purple", "灰色": "Gray", "白": "White", "紅": "Red", "黃": "Yellow", "青": "Cyan",
-      "預設": "Default", "自訂": "Custom", "容器背景": "Container background", "桌面整理": "Bockis-eDEX Desktop UI", "最小化到 Dock": "Minimize to Dock", "原版網格": "Original grid", "純色背景": "Solid background", "掃描線": "Scanlines",
+      "預設": "Default", "自訂": "Custom", "容器背景": "Container background", "桌面整理": "Bockis-eDEX Desktop UI", "最小化到 Dock": "Minimize to Dock", "原版網格": "Original grid", "純色背景": "Solid background", "掃描線": "Scanlines", "輻射光暈": "Radial glow", "六角場域": "Hexagonal field",
       "解鎖": "Unlock", "鎖定": "Lock", "隱藏日期": "Hide date", "背景顏色": "Background color", "添加容器": "Add container"
     },
     "zh-Hant": {
