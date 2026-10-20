@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld("edex", {
   organize: (scan, options) => ipcRenderer.invoke("organize", scan, options),
   undo: () => ipcRenderer.invoke("undo"),
   importFiles: (dest, files) => ipcRenderer.invoke("import-files", dest, files),
+  readFilePreview: (target) => ipcRenderer.invoke("read-file-preview", target),
   pathForFile: (file) => {
     try {
       return webUtils.getPathForFile(file);

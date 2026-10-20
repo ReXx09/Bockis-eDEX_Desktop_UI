@@ -1242,6 +1242,33 @@ ipcMain.handle("import-files", async (event, destDir, sources) => {
   return importFiles(destDir, sources || []);
 });
 
+ipcMain.handle("read-file-preview", async (event, target) => {
+  requireTrustedWindow(event);
+  requireApprovedPath(target);
+  const stat = await fs.promises.stat(target);
+  if (stat.isDirectory()) throw new Error("Ordner haben keine Dateivorschau");
+  if (stat.size > 2 * 1024 * 1024) throw new Error("Die Datei ist für eine Vorschau zu groß");
+  const ext = path.extname(target).toLowerCase();
+  const imageTypes = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp"
+  };
+  if (imageTypes[ext]) {
+    const data = await fs.promises.readFile(target);
+    return { kind: "image", mime: imageTypes[ext], data: data.toString("base64") };
+  }
+  const textTypes = new Set([
+    ".txt", ".md", ".json", ".js", ".ts", ".tsx", ".jsx", ".css", ".html", ".htm",
+    ".xml", ".yml", ".yaml", ".csv", ".ini", ".log", ".bat", ".cmd", ".ps1"
+  ]);
+  if (!textTypes.has(ext)) throw new Error("Für diesen Dateityp ist keine Vorschau verfügbar");
+  return { kind: "text", text: await fs.promises.readFile(target, "utf8") };
+});
+
 ipcMain.handle("get-calendar-notes", (event) => {
   requireTrustedWindow(event);
   return loadNotes(app.getPath("userData"));

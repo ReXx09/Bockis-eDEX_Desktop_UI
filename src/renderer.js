@@ -133,6 +133,7 @@ const state = {
   busy: false,
   pathCards: [],
   activePathId: null,
+  fileClipboard: { paths: [], cut: false },
   layout: { ...DEFAULT_WIDGETS_PRIMARY },
   desktopStage: { ...DEFAULT_DESKTOP_PRIMARY },
   desktopEnabled: true,
@@ -643,6 +644,13 @@ function setupDesktopClickThrough() {
   document.addEventListener("pointerdown", (event) => {
     applyAt(event.clientX, event.clientY);
   }, true);
+  if (opts.pathCardId) {
+    node.draggable = true;
+    node.addEventListener("dragstart", (event) => {
+      event.dataTransfer.effectAllowed = "copy";
+      event.dataTransfer.setData("application/x-edex-file", JSON.stringify([item.path]));
+    });
+  }
   window.addEventListener("dragover", (event) => {
     if (![...event.dataTransfer.types].includes("Files")) return;
     if (pointHitsHud(event.clientX, event.clientY)) forceCapture();
@@ -672,7 +680,15 @@ function bindDesktopIconClicks() {
   const runActivate = (icon, ctrl) => {
     if (!icon) return;
     holdOverlayHits(500);
-    activateDesktopItem(itemFromDeskNode(icon), { ctrl });
+    const pathStage = icon.closest(".path-stage");
+    const cardId = pathStage?.dataset.pathStage;
+    const card = cardId ? state.pathCards.find((item) => item.id === cardId) : null;
+    const item = itemFromDeskNode(icon);
+    if (card && item?.isDirectory && !ctrl) {
+      navigatePathCard(card, item.path, item.name);
+      return;
+    }
+    activateDesktopItem(item, { ctrl });
   };
   // Prefer native detail===2; also accept a timed second click (some overlay builds drop detail).
   document.addEventListener("click", (event) => {
@@ -4596,13 +4612,69 @@ function listingItems(listing) {
   return [...(listing.destFolders || []), ...(listing.items || [])];
 }
 
+function navigatePathCard(card, targetPath, name = "") {
+  const tab = ensurePathTabs(card).find((item) => item.id === card.activeTabId) || ensurePathTabs(card)[0];
+  if (!tab) return;
+  if (tab.path && tab.path !== targetPath) {
+    tab.backStack = [...(tab.backStack || []), { path: tab.path, name: tab.name }].slice(-50);
+    tab.forwardStack = [];
+  }
+  tab.path = targetPath;
+  tab.name = name || folderTabTitle(targetPath);
+  tab.listing = null;
+  tab.scan = null;
+  tab.listingError = "";
+  card.path = tab.path;
+  card.name = tab.name;
+  card.listing = null;
+  card.scan = null;
+  card.listingError = "";
+  syncPathTab(card);
+  renderPathCards();
+  scanCard(card);
+}
+
+function navigatePathCardHistory(card, direction) {
+  const tab = ensurePathTabs(card).find((item) => item.id === card.activeTabId);
+  if (!tab) return;
+  const source = direction === "back" ? tab.backStack : tab.forwardStack;
+  const target = source?.pop();
+  if (!target) return;
+  const current = { path: tab.path, name: tab.name };
+  const other = direction === "back" ? tab.forwardStack : tab.backStack;
+  other.push(current);
+  tab.path = target.path;
+  tab.name = target.name;
+  tab.listing = null;
+  tab.scan = null;
+  tab.listingError = "";
+  card.path = tab.path;
+  card.name = tab.name;
+  card.listing = null;
+  card.scan = null;
+  card.listingError = "";
+  syncPathTab(card);
+  renderPathCards();
+  scanCard(card);
+}
+
+function navigatePathCardUp(card) {
+  const current = String(card?.path || "").replace(/[\\/]+$/, "");
+  const parent = current.replace(/[\\/][^\\/]+$/, "");
+  if (!parent || parent === current) return;
+  navigatePathCard(card, parent, folderTabTitle(parent));
+}
+
 function fillPathStage(card) {
   const stage = document.querySelector(`[data-path-stage="${card.id}"]`);
   if (!stage) return;
-  const items = listingItems(card.listing || card.scan);
+  const query = String(card.fileSearch || "").trim().toLocaleLowerCase();
+  const items = listingItems(card.listing || card.scan)
+    .filter((item) => !query || String(item.displayName || item.name || "").toLocaleLowerCase().includes(query));
   const view = card.iconView === "list" ? "list" : "grid";
   const fileOpts = {
     destDir: card.path,
+    pathCardId: card.id,
     onRefresh: () => scanCard(card)
   };
   stage.classList.toggle("view-list", view === "list");
@@ -4680,7 +4752,14 @@ function renderPathCards() {
       </h3>
       <div class="path-tab-bar">${ensurePathTabs(card).map((tab) => `<button type="button" class="path-tab${tab.id === card.activeTabId ? " active" : ""}" data-path-tab="${escapeHtml(tab.id)}" title="${escapeHtml(tab.path || "")}">${escapeHtml(tab.name || pathTitle(tab, 0))}</button>`).join("")}</div>
       <div class="card-body">
-        <p class="path-text" title="${escapeHtml(card.path)}">${escapeHtml(card.path)}</p>
+        <div class="path-browser-toolbar">
+          <button type="button" data-path-back title="Zurück" ${ensurePathTabs(card).find((tab) => tab.id === card.activeTabId)?.backStack?.length ? "" : "disabled"}>←</button>
+          <button type="button" data-path-forward title="Vorwärts" ${ensurePathTabs(card).find((tab) => tab.id === card.activeTabId)?.forwardStack?.length ? "" : "disabled"}>→</button>
+          <button type="button" data-path-up title="Übergeordneten Ordner öffnen">↑</button>
+          <button type="button" data-path-refresh title="Ordner aktualisieren">↻</button>
+          <input type="search" data-path-search placeholder="Dateien suchen …" value="${escapeHtml(card.fileSearch || "")}" aria-label="Dateien in diesem Ordner suchen">
+          <span class="path-text" title="${escapeHtml(card.path)}">${escapeHtml(card.path)}</span>
+        </div>
         <div class="path-stage view-${card.iconView === "list" ? "list" : "grid"}" data-path-stage="${card.id}"></div>
       </div>
       <div class="resize-handle"></div>
@@ -4692,6 +4771,26 @@ function renderPathCards() {
         event.stopPropagation();
         activatePathTab(card, button.dataset.pathTab);
       });
+    });
+    el.querySelector("[data-path-up]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      navigatePathCardUp(card);
+    });
+    el.querySelector("[data-path-back]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      navigatePathCardHistory(card, "back");
+    });
+    el.querySelector("[data-path-forward]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      navigatePathCardHistory(card, "forward");
+    });
+    el.querySelector("[data-path-refresh]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      scanCard(card);
+    });
+    el.querySelector("[data-path-search]")?.addEventListener("input", (event) => {
+      card.fileSearch = String(event.target.value || "");
+      fillPathStage(card);
     });
     bindCardTools(el, () => menuItemsForCard("path", {
       el,
@@ -5930,6 +6029,36 @@ function bindFileStage(stage, opts) {
     if (!menuItems.length) return;
     openCardMenu(node || stage, menuItems, { x: event.clientX, y: event.clientY });
   });
+  stage.addEventListener("dragover", (event) => {
+    const ctx = fileStageCtx.get(stage) || {};
+    if (ctx.destDir && (event.dataTransfer?.types?.includes("application/x-edex-file") || event.dataTransfer?.types?.includes("Files"))) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      stage.classList.add("drop-target");
+    }
+  });
+  stage.addEventListener("dragleave", (event) => {
+    if (!stage.contains(event.relatedTarget)) stage.classList.remove("drop-target");
+  });
+  stage.addEventListener("drop", async (event) => {
+    const ctx = fileStageCtx.get(stage) || {};
+    stage.classList.remove("drop-target");
+    const encoded = event.dataTransfer?.getData("application/x-edex-file") || "";
+    let sources = [];
+    try { sources = encoded ? JSON.parse(encoded) : []; } catch { sources = []; }
+    if (!sources.length && event.dataTransfer?.files?.length) {
+      sources = [...event.dataTransfer.files].map((file) => window.edex.pathForFile(file)).filter(Boolean);
+    }
+    if (!ctx.destDir || !sources.length) return;
+    event.preventDefault();
+    try {
+      const result = await window.edex.importFiles(ctx.destDir, sources);
+      toast(`${result.count || 0} Element(e) eingefügt`);
+      await ctx.onRefresh?.();
+    } catch (err) {
+      toast(err.message || "Dateien konnten nicht eingefügt werden");
+    }
+  });
 }
 
 function itemFromIcon(node) {
@@ -6005,10 +6134,59 @@ function fileMenuItems(stage, item, ctx) {
         }
       }
     });
+    if (state.fileClipboard.paths.length) {
+      items.push({
+        label: state.fileClipboard.cut ? "Einfügen und Verschieben" : "Einfügen und Kopieren",
+        action: async () => {
+          try {
+            const result = await window.edex.importFiles(destDir, state.fileClipboard.paths);
+            if (state.fileClipboard.cut) {
+              for (const source of state.fileClipboard.paths) {
+                await window.edex.trashItem(source);
+              }
+            }
+            state.fileClipboard = { paths: [], cut: false };
+            toast(`${result.count || 0} Element(e) eingefügt`);
+            await ctx.onRefresh?.();
+          } catch (err) {
+            toast(err.message || "Einfügen fehlgeschlagen");
+          }
+        }
+      });
+    }
   }
   const canEdit = item && !isVirtualPath(item.path) && item.kind !== "drive" && !isDriveRoot(item.path);
   if (canEdit) {
     items.push(
+      {
+        label: "Vorschau",
+        action: () => showFilePreview(item)
+      },
+      {
+        label: "Kopieren",
+        action: () => {
+          state.fileClipboard = { paths: [item.path], cut: false };
+          window.edex.clipboardWriteFiles?.([item.path]).catch?.(() => {});
+          toast("Element zum Kopieren vorgemerkt");
+        }
+      },
+      {
+        label: "Ausschneiden",
+        action: () => {
+          state.fileClipboard = { paths: [item.path], cut: true };
+          window.edex.clipboardWriteFiles?.([item.path]).catch?.(() => {});
+          toast("Element zum Verschieben vorgemerkt");
+        }
+      },
+      {
+        label: "Eigenschaften",
+        action: () => {
+          const modified = Number(item.mtime) > 0 ? new Date(item.mtime).toLocaleString() : "Nicht verfügbar";
+          const size = item.isDirectory ? "Ordner" : (item.sizeLabel || "Nicht verfügbar");
+          window.alert(`Name: ${item.name || ""}\nPfad: ${item.path || ""}\nTyp: ${item.isDirectory ? "Ordner" : "Datei"}\nGröße: ${size}\nGeändert: ${modified}`);
+        }
+      },
+      { sep: true },
       {
         label: "刪除",
         action: async () => {
@@ -6127,6 +6305,32 @@ function promptRename(item, onRefresh) {
   });
 }
 
+async function showFilePreview(item) {
+  if (!item || item.isDirectory) return;
+  try {
+    const preview = await window.edex.readFilePreview(item.path);
+    const modal = document.createElement("div");
+    modal.className = "modal_popup info file-preview-modal";
+    const body = preview.kind === "image"
+      ? `<img class="file-preview-image" src="data:${preview.mime};base64,${preview.data}" alt="${escapeHtml(item.name || "Vorschau")}">`
+      : `<pre class="file-preview-text">${escapeHtml(preview.text || "")}</pre>`;
+    modal.innerHTML = `
+      <h2>Vorschau: ${escapeHtml(item.name || "")}</h2>
+      <div class="file-preview-content">${body}</div>
+      <div class="modal-actions"><button type="button" data-preview-close>Schließen</button></div>`;
+    document.body.appendChild(modal);
+    placeCentered(modal, { width: Math.min(900, window.innerWidth * 0.8) });
+    modal.querySelector("[data-preview-close]")?.addEventListener("click", () => modal.remove());
+    modal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") modal.remove();
+    });
+    modal.tabIndex = 0;
+    modal.focus();
+  } catch (err) {
+    toast(err.message || "Vorschau nicht möglich");
+  }
+}
+
 function startRename(node, item, onRefresh) {
   const title = node.querySelector("h3");
   if (!title) {
@@ -6201,6 +6405,9 @@ function fillIconStage(stage, items, opts = {}) {
         targetIsDirectory: Boolean(item.targetIsDirectory),
         kind: item.kind || "",
         category: item.category || "",
+        size: Number(item.size) || 0,
+        sizeLabel: item.sizeLabel || "",
+        mtime: Number(item.mtime) || 0,
         tags: item.tags || []
       });
     } catch {
