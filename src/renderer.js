@@ -644,13 +644,6 @@ function setupDesktopClickThrough() {
   document.addEventListener("pointerdown", (event) => {
     applyAt(event.clientX, event.clientY);
   }, true);
-  if (opts.pathCardId) {
-    node.draggable = true;
-    node.addEventListener("dragstart", (event) => {
-      event.dataTransfer.effectAllowed = "copy";
-      event.dataTransfer.setData("application/x-edex-file", JSON.stringify([item.path]));
-    });
-  }
   window.addEventListener("dragover", (event) => {
     if (![...event.dataTransfer.types].includes("Files")) return;
     if (pointHitsHud(event.clientX, event.clientY)) forceCapture();
@@ -6421,6 +6414,22 @@ function fillIconStage(stage, items, opts = {}) {
     }, true);
     // OS file drag — only after a real drag; do not steal double-clicks.
     bindNativeFileDrag(node, item, dragRoot);
+    if (opts.pathCardId && item.isDirectory) {
+      node.addEventListener("dblclick", (event) => {
+        if (event.ctrlKey || event.metaKey) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const card = state.pathCards.find((entry) => entry.id === opts.pathCardId);
+        if (card) navigatePathCard(card, item.path, item.name);
+      });
+    }
+    if (opts.pathCardId) {
+      node.draggable = true;
+      node.addEventListener("dragstart", (event) => {
+        event.dataTransfer.effectAllowed = "copy";
+        event.dataTransfer.setData("application/x-edex-file", JSON.stringify([item.path]));
+      });
+    }
     if (opts.draggable && !listMode) bindIconDrag(node, item, gap);
     stage.appendChild(node);
   });
