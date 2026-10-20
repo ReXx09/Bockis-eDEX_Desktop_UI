@@ -22,6 +22,20 @@ internal static class TronBootstrap
         try { Console.Beep(frequency, duration); } catch { }
     }
 
+    private static string FormatSize(long bytes)
+    {
+        if (bytes >= 1024L * 1024L) return (bytes / 1024d / 1024d).ToString("0.0") + " MB";
+        if (bytes >= 1024L) return (bytes / 1024d).ToString("0.0") + " KB";
+        return bytes + " B";
+    }
+
+    private static void WriteSection(string title)
+    {
+        string label = " :: " + title.ToUpperInvariant() + " ";
+        int width = Math.Max(8, 58 - label.Length);
+        WriteLine("  " + label + new string('-', width), ConsoleColor.Yellow);
+    }
+
     private static bool Confirm(string prompt, bool defaultValue)
     {
         Console.ForegroundColor = ConsoleColor.DarkCyan;
@@ -55,12 +69,15 @@ internal static class TronBootstrap
         WriteLine("============================================================", ConsoleColor.Cyan);
         Console.WriteLine();
 
+        WriteSection("System initialization");
         Beep(440, 80);
         WriteLine("  [BOOT] Installation console online", ConsoleColor.DarkCyan);
         Beep(660, 80);
         WriteLine("  [CORE] Electron payload detected", ConsoleColor.DarkCyan);
         Beep(880, 110);
         WriteLine("  [LINK] NSIS installation channel ready", ConsoleColor.DarkCyan);
+        WriteLine("  [INFO] Architecture: " + (Environment.Is64BitOperatingSystem ? "x64" : "x86"), ConsoleColor.DarkGray);
+        WriteLine("  [INFO] PowerShell: " + Environment.Version, ConsoleColor.DarkGray);
 
         string defaultPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -70,8 +87,7 @@ internal static class TronBootstrap
         bool installRainmeter = false;
         if (!silent)
         {
-            Console.WriteLine();
-            WriteLine("  [CONF] Installation settings", ConsoleColor.Cyan);
+            WriteSection("Installation settings");
             Console.ForegroundColor = ConsoleColor.DarkCyan;
             Console.Write("  [PATH] Install directory [" + defaultPath + "]: ");
             Console.ResetColor();
@@ -83,9 +99,13 @@ internal static class TronBootstrap
         {
             WriteLine("  [AUTO] Silent winget mode: default path, optional HUD skipped", ConsoleColor.DarkGray);
         }
+        WriteSection("Configuration accepted");
         WriteLine("  [ OK ] Overlay notice accepted", ConsoleColor.DarkCyan);
         WriteLine("  [ OK ] Install path: " + installPath, ConsoleColor.DarkCyan);
         WriteLine("  [ OK ] Rainmeter: " + (installRainmeter ? "enabled" : "disabled"), ConsoleColor.DarkCyan);
+        WriteLine("  [INFO] Bootstrap: " + Process.GetCurrentProcess().ProcessName + ".exe", ConsoleColor.DarkGray);
+
+        WriteSection("Runtime diagnostics");
         RunDependencyScan();
 
         string payloadPath = Path.Combine(Path.GetTempPath(), "Bockis-eDEX-Setup-Payload-" + Guid.NewGuid().ToString("N") + ".exe");
@@ -98,6 +118,7 @@ internal static class TronBootstrap
                 using (FileStream target = File.Create(payloadPath)) source.CopyTo(target);
             }
 
+            WriteSection("Installation channel");
             WriteLine("  [LOAD] Installer payload extracted", ConsoleColor.Cyan);
             WriteLine("  [PROC] Phase 1/4: Installation channel prepared", ConsoleColor.Cyan);
             WriteLine("  [PROC] Phase 2/4: Electron application files are being installed", ConsoleColor.Cyan);
@@ -139,7 +160,13 @@ internal static class TronBootstrap
                         nextStatus = DateTime.UtcNow.AddSeconds(1);
                     }
                 }
+                if (phase < 2)
+                {
+                    phase = 2;
+                    WriteLine("  [PROC] " + phases[phase], ConsoleColor.Cyan);
+                }
                 logOffset = ShowNewLogLines(logPath, logOffset);
+                WriteSection("Installation verification");
                 WriteLine("  [PROC] Installation process finished", ConsoleColor.Cyan);
                 string installedExe = Path.Combine(installPath, "Bockis-eDEX Desktop UI.exe");
                 if (installer.ExitCode != 0 || !File.Exists(installedExe))
@@ -151,8 +178,11 @@ internal static class TronBootstrap
                     WaitForClose();
                     return installer.ExitCode;
                 }
+                WriteLine("  [ OK ] Application verified: " + Path.GetFileName(installedExe), ConsoleColor.DarkCyan);
+                WriteLine("  [ OK ] Payload size: " + FormatSize(new FileInfo(installedExe).Length), ConsoleColor.DarkCyan);
             }
 
+            WriteSection("System ready");
             Beep(660, 80);
             WriteLine("  [DONE] Bockis-eDEX installation complete", ConsoleColor.Cyan);
             WriteLine("  [LOG ] Installer log: " + logPath, ConsoleColor.DarkGray);

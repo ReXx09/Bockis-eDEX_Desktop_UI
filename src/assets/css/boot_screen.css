@@ -13,7 +13,7 @@ section#boot_screen {
     text-align: left;
     display: flex;
     align-items: flex-end;
-    justify-content: flex-start;
+    justify-content: center;
 }
 
 section#boot_screen.center {
@@ -63,29 +63,34 @@ section#boot_screen.boot_terminal {
     align-items: stretch;
     justify-content: flex-start;
     gap: 1.2vh;
-    padding: 2vh 4vw;
+    padding: 15vh 4vw;
     background:
         repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0 1px, transparent 1px 3px),
         radial-gradient(circle at 50% 35%, rgba(var(--color_r), var(--color_g), var(--color_b), 0.09), transparent 55%),
         rgb(2, 6, 10);
     color: rgb(var(--color_r), var(--color_g), var(--color_b));
     font-family: var(--font_mono), monospace;
-    font-size: clamp(8px, 1.2vh, 12px);
-    line-height: 1.2;
+    font-size: clamp(10px, 1.5vh, 15px);
+    line-height: 1.3;
     text-align: left;
     text-shadow: 0 0 0.6vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
 }
 
 .boot-shell {
     width: min(1440px, 100%);
-    height: 94%;
+    height: 70%;
     min-height: 0;
-    flex: 1 1 auto;
+    flex: 0 1 70%;
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr);
     gap: clamp(1.4rem, 3vw, 3.5rem);
     align-items: stretch;
     margin: 0 auto;
+    padding: 2vh 2vw;
+    box-sizing: border-box;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.24);
+    background: rgba(2, 12, 18, 0.72);
+    box-shadow: 0 0 3vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.08), inset 0 0 2vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.04);
 }
 
 .boot-terminal-pane,
@@ -203,7 +208,7 @@ section#boot_screen.boot_terminal::after {
 
 .boot-log::-webkit-scrollbar { display: none; }
 
-.boot-line { min-height: 1.2em; }
+.boot-line { min-height: 1.3em; }
 .boot-log .ok { color: #2cffb0; }
 .boot-log .w { color: #ffcc4d; }
 .boot-log .er { color: #ff3d6e; }
@@ -342,10 +347,10 @@ section#boot_screen.boot_terminal::after {
 }
 
 @media (max-height: 540px) {
-    section#boot_screen.boot_terminal { font-size: max(10px, 1.35vh); }
+    section#boot_screen.boot_terminal { font-size: max(11px, 1.45vh); }
     .boot-brand-pane { gap: 0.6vh; }
     .boot-logo { width: clamp(96px, 16vh, 160px); height: clamp(96px, 16vh, 160px); }
-    .boot-ascii { font-size: clamp(7px, 1vh, 10px); }
+    .boot-ascii { font-size: clamp(8px, 1.05vh, 11px); }
     .boot-tagline { font-size: 0.85em; }
 }
 

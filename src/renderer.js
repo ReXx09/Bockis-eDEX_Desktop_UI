@@ -2217,6 +2217,126 @@ async function boot() {
   const countdown = bootScreen.querySelector("[data-boot-count]");
 
   const wait = (ms) => (fast ? Promise.resolve() : delay(ms));
+  let bootAudioContext = null;
+  let bootAudioOut = null;
+  let bootNoise = null;
+  let bootVoices = 0;
+  const bootLast = {};
+  const bootAudio = () => {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return null;
+    if (!bootAudioContext) {
+      const ctx = new AudioContextCtor();
+      const master = ctx.createGain();
+      master.gain.value = 0.55;
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.value = 4800;
+      // Compressor catches overlapping voices so peaks cannot clip.
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -22;
+      compressor.knee.value = 24;
+      compressor.ratio.value = 8;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.15;
+      master.connect(lowpass).connect(compressor).connect(ctx.destination);
+      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.4), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+      bootNoise = buffer;
+      bootAudioOut = master;
+      bootAudioContext = ctx;
+    }
+    if (bootAudioContext.state === "suspended") bootAudioContext.resume().catch(() => {});
+    return bootAudioContext;
+  };
+  // Linear attack avoids the click of an instant start; exponential decay avoids a hard cut-off.
+  const bootEnvelope = (ctx, node, peak, start, attack, duration) => {
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(peak, start + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    node.connect(gain).connect(bootAudioOut);
+  };
+  const bootTone = (freq, duration, { type = "sine", peak = 0.12, attack = 0.006, to = freq, delay: offset = 0 } = {}) => {
+    const ctx = fast ? null : bootAudio();
+    if (!ctx || bootVoices > 14) return;
+    const start = ctx.currentTime + offset;
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    if (to !== freq) osc.frequency.exponentialRampToValueAtTime(to, start + duration);
+    bootEnvelope(ctx, osc, peak, start, attack, duration);
+    bootVoices += 1;
+    osc.onended = () => { bootVoices -= 1; };
+    osc.start(start);
+    osc.stop(start + duration + 0.02);
+  };
+  const bootNoiseBurst = (duration, freq, q, peak, offset = 0, attack = 0.002) => {
+    const ctx = fast ? null : bootAudio();
+    if (!ctx || bootVoices > 14) return;
+    const start = ctx.currentTime + offset;
+    const source = ctx.createBufferSource();
+    source.buffer = bootNoise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = freq;
+    filter.Q.value = q;
+    source.connect(filter);
+    bootEnvelope(ctx, filter, peak, start, attack, duration);
+    bootVoices += 1;
+    source.onended = () => { bootVoices -= 1; };
+    source.start(start, Math.random() * 0.15, duration + 0.02);
+  };
+  const bootThrottle = (name, gap) => {
+    const now = performance.now();
+    if (now - (bootLast[name] || 0) < gap) return false;
+    bootLast[name] = now;
+    return true;
+  };
+  const bootSfx = {
+    key() {
+      if (!bootThrottle("key", 38)) return;
+      bootNoiseBurst(0.022, 2400 + Math.random() * 900, 1.4, 0.16);
+      bootTone(150 + Math.random() * 30, 0.03, { peak: 0.07, to: 100 });
+    },
+    seek() {
+      if (!bootThrottle("seek", 90)) return;
+      const clicks = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < clicks; i += 1) {
+        const at = i * (0.035 + Math.random() * 0.03);
+        bootNoiseBurst(0.04, 700 + Math.random() * 500, 2.5, 0.2, at);
+        bootTone(95, 0.05, { peak: 0.1, to: 60, delay: at });
+      }
+    },
+    ok() { bootTone(1175, 0.09, { peak: 0.07 }); },
+    warn() {
+      bootTone(554, 0.12, { type: "triangle", peak: 0.1, to: 494 });
+      bootTone(466, 0.14, { type: "triangle", peak: 0.1, to: 415, delay: 0.14 });
+    },
+    error() {
+      for (let i = 0; i < 3; i += 1) bootTone(220, 0.14, { type: "triangle", peak: 0.14, to: 196, delay: i * 0.2 });
+    },
+    section() {
+      bootTone(659.25, 0.1, { peak: 0.08 });
+      bootTone(880, 0.16, { peak: 0.08, delay: 0.09 });
+      bootSfx.seek();
+    },
+    power() {
+      bootTone(55, 1.1, { peak: 0.2, attack: 0.25, to: 110 });
+      bootTone(110.5, 1.1, { peak: 0.08, attack: 0.3, to: 220 });
+      bootNoiseBurst(0.9, 260, 0.8, 0.08, 0, 0.3);
+    },
+    online() {
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, index) => {
+        bootTone(freq, 0.9, { peak: 0.1, attack: 0.02, delay: index * 0.12 });
+        bootTone(freq / 2, 0.9, { type: "triangle", peak: 0.04, attack: 0.03, delay: index * 0.12 });
+      });
+    }
+  };
+  const bootSound = (name) => {
+    try { bootSfx[name]?.(); } catch { /* boot audio is optional */ }
+  };
   const span = (cls, text) => `<span class="${cls}">${escapeHtml(text)}</span>`;
   const stamp = () => `<span class="d">[${((performance.now() - started) / 1000).toFixed(6).padStart(11, " ")}]</span> `;
   const setProgress = (value) => {
@@ -2248,6 +2368,7 @@ async function boot() {
         return;
       }
       typed.textContent += char;
+      if (char.trim()) bootSound("key");
       await delay(speed + Math.random() * 12);
     }
   };
@@ -2256,6 +2377,7 @@ async function boot() {
     fast = true;
   });
 
+  bootSound("power");
   applyTheme(state.theme || state.bootstrap?.theme, state.settings.wallpaper || "grid");
   document.documentElement.dataset.ramGaugeMode = ramGaugeMode();
 
@@ -2293,6 +2415,7 @@ async function boot() {
   done = 0;
 
   // Phase 1: Hardware
+  bootSound("section");
   line(`${stamp()}Kernel: ${span("b", sys.kernel || "?")}  Host: ${span("b", sys.hostname || hardware.model || "?")}`); tick();
   await wait(60);
   line(`${stamp()}OS: ${span("b", sys.os || "Windows")}  Build ${span("d", sys.build || "?")}  ${sys.arch || ""}`); tick();
@@ -2314,11 +2437,13 @@ async function boot() {
   }
   tick();
   await wait(60);
+  bootSound(snapshot ? "ok" : "warn");
   line(`${stamp()}Daten: ${snapshot ? span("ok", "echte Systemdaten via window.edex") : span("w", "keine Systemdaten verfügbar")}`); tick();
   await wait(80);
   line();
 
   // Phase 2: Module und Dienste
+  bootSound("section");
   const services = [
     ["Loading HUD effects", modules[0]],
     ["Loading i18n bridge", modules[1]],
@@ -2327,18 +2452,23 @@ async function boot() {
     ["Loading task dock", modules[4]]
   ];
   for (const [label, [, loaded]] of services) {
+    bootSound(loaded ? "ok" : "warn");
     line(`[${loaded ? span("ok", "  OK  ") : span("w", " WAIT ")}] ${span("d", label)}`);
     tick();
     await wait(70 + Math.random() * 90);
   }
+  bootSound("ok");
   line(`[${span("ok", "  OK  ")}] ${span("d", `Theme ${String(state.themeName || "tron").toUpperCase()} synchronisiert`)}`); tick();
   await wait(80);
+  bootSound("ok");
   line(`[${span("ok", "  OK  ")}] ${span("d", `Workspace Display ${state.displayIndex + 1} (${state.primary ? "primary" : "secondary"})`)}`); tick();
   await wait(80);
   line();
 
   // Phase 3: Netzwerk
+  bootSound("section");
   line(span("w", ":: Netzwerk-Schnittstelle"));
+  bootSound(network.iface && network.ip4 ? "ok" : "warn");
   if (network.iface && network.ip4) {
     const ping = Number.isFinite(network.ping) ? `  ${network.ping} ms` : "";
     line(`   ${span("ok", "↑")}  ${escapeHtml(String(network.iface).padEnd(16, " "))} ${span("b", String(network.ip4).padEnd(16, " "))} ${span("d", `${network.mac ? `MAC ${network.mac}` : ""}${ping}  ${network.state || ""}`)}`);
@@ -2350,6 +2480,7 @@ async function boot() {
   line();
 
   // Phase 4: Laufwerke
+  bootSound("section");
   line(span("w", ":: Dateisystem / Laufwerke"));
   if (drives.length) {
     for (const drive of drives) {
@@ -2357,10 +2488,12 @@ async function boot() {
       const filled = Math.round((usedPct / 100) * 22);
       const tone = usedPct > 85 ? "er" : usedPct > 65 ? "w" : "ok";
       line(`   ${span("b", String(drive.letter || "").padEnd(4, " "))}  [${span(tone, "▓".repeat(filled))}${span("d", "░".repeat(22 - filled))}] ${span(tone, `${String(usedPct).padStart(3, " ")}%`)}  ${span("d", `${drive.usedLabel || bootBytes(drive.used)} / ${drive.totalLabel || bootBytes(drive.total)}  ${drive.volumeName ? `(${drive.volumeName})` : ""}  ${drive.fs || ""}`)}`);
+      bootSound("seek");
       tick();
       await wait(65);
     }
   } else {
+    bootSound("warn");
     line(`   ${span("w", "keine Laufwerke gefunden")}`);
     tick();
   }
@@ -2369,8 +2502,10 @@ async function boot() {
 
   // Phase 5: Prozesse
   if (processes.length) {
+    bootSound("section");
     line(span("w", `:: Top-Prozesse (RAM)  ${snapshot?.processes?.tasks || processes.length} aktiv`));
     for (const proc of processes.slice(0, 5)) {
+      bootSound("key");
       line(`   ${span("d", String(proc.pid ?? 0).padStart(6, " "))}  ${span("b", String(proc.name || "?").padEnd(20, " "))} MEM ${span("ok", `${Number(proc.mem || 0).toFixed(1).padStart(5, " ")}%`)}  ${span("d", `${proc.conn || 0} conn`)}`);
       tick();
       await wait(40);
@@ -2379,9 +2514,11 @@ async function boot() {
   }
 
   // Phase 6: Systemdiagnose
+  bootSound("section");
   line(span("w", ":: Systemdiagnose"));
   if (!deps.length) line(`   ${span("w", "Diagnose nicht verfügbar")}`);
   for (const dep of deps) {
+    bootSound(dep.ok ? "ok" : "error");
     line(`   prüfe ${span("d", dep.label.padEnd(32, " "))} ${dep.ok ? span("ok", "bestanden") : span("er", "FEHLT")}`);
     tick();
     await wait(80 + Math.random() * 80);
@@ -2392,6 +2529,7 @@ async function boot() {
     ["Dateisystem-Zugriff", drives.length > 0]
   ];
   for (const [label, ok] of liveResults) {
+    bootSound(ok ? "ok" : "warn");
     line(`   prüfe ${span("d", label.padEnd(32, " "))} ${ok ? span("ok", "bestanden") : span("w", "WARNUNG")}`);
     tick();
     await wait(80 + Math.random() * 80);
@@ -2400,6 +2538,7 @@ async function boot() {
   await wait(180);
 
   // Phase 7: Komponenten
+  bootSound("section");
   await typeCmd("bockis-install --verify --source bundle", 20);
   await wait(220);
   line(span("d", "Reading component manifest... Done"));
@@ -2407,6 +2546,7 @@ async function boot() {
   await wait(180);
 
   for (const pkg of packages) {
+    bootSound("seek");
     const row = line();
     const label = pkg.name.padEnd(18, " ");
     const detail = pkg.version ? `v${pkg.version}` : bootBytes(pkg.size);
@@ -2418,6 +2558,7 @@ async function boot() {
     row.innerHTML = pkg.ok
       ? `Verifiziere ${span("b", label)} [${span("ok", "#".repeat(20))}] ${span("ok", "fertig")}  ${span("d", `${detail}  sha256:${pkg.sha}`)}`
       : `Verifiziere ${span("b", label)} [${span("er", "!".repeat(20))}] ${span("er", "FEHLT")}`;
+    bootSound(pkg.ok ? "ok" : "error");
     tick();
     await wait(25);
   }
@@ -2425,6 +2566,7 @@ async function boot() {
   const missing = packages.filter((pkg) => !pkg.ok).length;
   const failedDeps = deps.filter((dep) => !dep.ok).length;
   line();
+  bootSound(missing || failedDeps ? "warn" : "ok");
   line(missing || failedDeps
     ? `${span("w", "Abhängigkeiten geprüft.")}  ${span("d", `${missing} Komponenten fehlen, ${failedDeps} Systemvoraussetzungen nicht erfüllt`)}`
     : `${span("ok", "Abhängigkeiten installiert und verifiziert.")}  ${span("d", "0 Fehler  0 Warnungen")}`);
@@ -2435,6 +2577,7 @@ async function boot() {
   await wait(600);
 
   // Abschluss
+  bootSound("online");
   finalScreen?.classList.add("is-visible");
   for (let seconds = 2; seconds > 0 && !fast; seconds -= 1) {
     if (countdown) countdown.textContent = `starte Dashboard in ${seconds} ...`;
@@ -2442,6 +2585,7 @@ async function boot() {
   }
   if (countdown) countdown.textContent = "bereit.";
   if (!fast) await delay(250);
+  try { await bootAudioContext?.close?.(); } catch { /* optional audio cleanup */ }
   bootScreen.remove();
 }
 
@@ -6577,7 +6721,7 @@ function openSettings(focusPanel = "") {
         <option value="">Preset auswählen …</option>
         ${presetOpts}
       </select>
-      <button type="button" id="set-preset-save">Aktuelle Ansicht speichern</button>
+      <button type="button" id="set-preset-save">Als Preset speichern</button>
       <button type="button" id="set-preset-load" ${presetOpts ? "" : "disabled"}>Preset laden</button>
       <button type="button" id="set-preset-delete" ${presetOpts ? "" : "disabled"}>Preset löschen</button>
     </div>
@@ -6772,17 +6916,18 @@ function openSettings(focusPanel = "") {
         <td>Desktop-Layout</td>
         <td>Alle Container dieses Monitors speichern: Panels, Positionen, Systemdesktop und Ordnerkarten</td>
         <td>
-          <button type="button" id="set-save-layout">Layout speichern</button>
+          <button type="button" id="set-save-layout">Nur Layout speichern</button>
         </td>
       </tr>
     </table>
 
     <div class="settings-footer">
+      <span id="settings-save-status" class="settings-save-status" aria-live="polite">Keine ungespeicherten Änderungen</span>
       <button type="button" id="set-reset">Container zurücksetzen</button>
       <button type="button" id="set-quit">Programm beenden</button>
       <button type="button" id="set-cancel">Schließen</button>
-      <button type="button" id="set-save-layout-footer">Layout speichern</button>
-      <button type="button" id="set-save">Einstellungen und Layout speichern</button>
+      <button type="button" id="set-save-layout-footer">Nur Layout speichern</button>
+      <button type="button" id="set-save">Alles speichern</button>
     </div>
   `;
   const settingsTable = modal.querySelector("#settingsEditor");
@@ -6823,6 +6968,17 @@ function openSettings(focusPanel = "") {
     settingsTable.replaceWith(fragment);
   }
   document.body.appendChild(modal);
+  const saveStatus = modal.querySelector("#settings-save-status");
+  const setSaveStatus = (message, dirty = false) => {
+    if (!saveStatus) return;
+    saveStatus.textContent = message;
+    saveStatus.dataset.state = dirty ? "dirty" : "saved";
+  };
+  modal.querySelectorAll(".settings-section input, .settings-section select, .settings-section textarea")
+    .forEach((control) => {
+      control.addEventListener("input", () => setSaveStatus("Ungespeicherte Änderungen", true));
+      control.addEventListener("change", () => setSaveStatus("Ungespeicherte Änderungen", true));
+    });
   window.edexI18n?.translatePage?.(modal);
   placeCentered(modal);
   window.edex?.getStartWithWindows?.().then((enabled) => {
@@ -6980,7 +7136,8 @@ function openSettings(focusPanel = "") {
     snapAllLayoutToGrid();
     try {
       await persistLayout();
-      toast("Desktop-Layout dieses Monitors gespeichert (einschließlich aller Panels)");
+      setSaveStatus("Layout gespeichert; andere Änderungen bleiben ungespeichert");
+      toast("Nur das Desktop-Layout dieses Monitors wurde gespeichert");
       return true;
     } catch (err) {
       toast(err?.message || "佈局保存失敗");
@@ -7092,7 +7249,11 @@ function openSettings(focusPanel = "") {
       locale: localeValue
     };
     if (!state.primary) delete settingsPatch.dockEnabled;
-    const result = await window.edex.saveSettings(settingsPatch);
+    snapAllLayoutToGrid();
+    const result = await window.edex.saveSettings({
+      ...settingsPatch,
+      displayLayout: currentDisplayLayout()
+    });
     state.settings = result.settings;
     window.edexI18n?.setLocale?.(state.settings.locale);
     state.themeName = result.themeName;
@@ -7100,8 +7261,6 @@ function openSettings(focusPanel = "") {
     applyTheme(result.theme, wallpaper);
     applyClockMetrics();
     applyRainMetrics();
-    snapAllLayoutToGrid();
-    await persistLayout();
     closeSettings();
     toast("Einstellungen und Desktop-Layout gespeichert");
     rebuildWorkspace();
@@ -7514,5 +7673,7 @@ window.addEventListener("keydown", (event) => {
     updateDisplayChip();
   });
 
+  await loadDesktopListing();
+  await arrangeDesktop();
   await doScan();
 })();

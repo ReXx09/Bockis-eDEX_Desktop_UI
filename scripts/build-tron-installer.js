@@ -3,7 +3,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
-const dist = path.join(root, 'dist');
+const dist = path.resolve(process.env.TRON_DIST_DIR || path.join(root, 'dist'));
 const version = require(path.join(root, 'package.json')).version;
 const installer = path.join(dist, `Bockis-eDEX-Desktop-UI-Setup-${version}.exe`);
 const payload = `${installer}.payload.exe`;

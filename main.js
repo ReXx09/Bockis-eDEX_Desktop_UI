@@ -117,6 +117,18 @@ let settings;
 let syncing = false;
 let syncTimer = null;
 let quitting = false;
+let exitDesktopRestore = null;
+
+function restoreDesktopStateOnExit() {
+  if (!exitDesktopRestore) {
+    const userData = app.getPath("userData");
+    exitDesktopRestore = Promise.all([
+      restoreDesktopIcons(userData),
+      restoreWallpaper(userData)
+    ]);
+  }
+  return exitDesktopRestore;
+}
 let tray = null;
 const terminalSessions = new Map();
 const terminalSessionShells = new Map();
@@ -425,6 +437,14 @@ function createWindowForDisplay(display, index) {
     }
   });
 
+  if (process.platform === "win32") {
+    win.on("session-end", () => {
+      restoreDesktopStateOnExit().catch((err) => {
+        console.error("restore desktop on session-end", err);
+      });
+    });
+  }
+
   win.on("closed", () => {
     if (windows.get(display.id) === win) windows.delete(display.id);
   });
@@ -636,8 +656,7 @@ if (!gotLock) {
       try { await rainmeter.stopRainmeter(); } catch { /* ignore */ }
       appLog.close();
       try {
-        await restoreDesktopIcons(app.getPath("userData"));
-        await restoreWallpaper(app.getPath("userData"));
+        await restoreDesktopStateOnExit();
       } catch (err) {
         console.error("restore desktop", err);
       }

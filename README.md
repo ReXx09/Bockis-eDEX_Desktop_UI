@@ -27,13 +27,13 @@ Dieses Projekt ist kein Terminal-Emulator wie das originale eDEX, sondern:
 
 Überwachungs-Panels auf beiden Seiten, der zentrale Systemdesktop-Container sowie Laufwerke, Code-Regen und Taschenrechner vor einem Raster-Hintergrund.
 
-![Gesamter Hacker-Desktop](docs/screenshots/01-overview.png)
+![Gesamter Hacker-Desktop]()
 
 ### Cockpit-Radar, CPU-Versorgungspfad und Kalender
 
 Überlagerbare Plugin-Container: Radar-Cockpit, Darstellung des CPU-Kernpfads sowie Kalender mit Feiertagen und Terminvorschau.
 
-![Cockpit, CPU-Pfad und Kalender](docs/screenshots/02-plugins-radar-cpu-calendar.png)
+![Cockpit, CPU-Pfad und Kalender]()
 
 ### Systemdesktop-Container
 

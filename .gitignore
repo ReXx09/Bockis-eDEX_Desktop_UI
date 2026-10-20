@@ -1,10 +1,33 @@
+# Dependencies and local npm cache
 node_modules/
+.npm/
+
+# Build output and downloaded installers (keep build sources and icons)
 dist/
 dist-rainmeter/
 build/*.exe
+build/*.exe.download
+
+# Local manual-test installers and screen recordings (keep test sources)
+/test/*.exe
+/test/*.mp4
+
+# Test coverage and runtime diagnostics
+coverage/
+.nyc_output/
 *.log
+*.log.*
+
+# OS metadata and temporary editor files
 .DS_Store
+Thumbs.db
+Desktop.ini
 *.bak
+*.tmp
+*.swp
+*.swo
+
+# Local helper-script scratch files
 scripts/_t*.txt
 scripts/_extract-*.js
 scripts/_find-*.js
