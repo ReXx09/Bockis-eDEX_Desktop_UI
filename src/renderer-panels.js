@@ -4,7 +4,7 @@ function panelBody(id) {
     case "clock":
       return `
         <div id="mod_clock">
-          <div id="mod_clock_led" class="led-matrix" aria-label="é»žé™£æ™‚é˜"></div>
+          <div id="mod_clock_led" class="led-matrix" aria-label="點陣時鐘"></div>
           <div id="mod_clock_analog" class="analog-clock" aria-label="Analoge Uhr" hidden>
             <span class="analog-clock-number number-12">12</span>
             <span class="analog-clock-number number-3">3</span>
@@ -31,10 +31,10 @@ function panelBody(id) {
       return `
         <div class="weather-root">
           <div class="weather-toolbar">
-            <input type="search" data-weather-location value="Berlin" placeholder="Ort suchen â€¦" spellcheck="false" />
-            <button type="button" data-weather-refresh title="Wetter aktualisieren">â†»</button>
+            <input type="search" data-weather-location value="Berlin" placeholder="Ort suchen …" spellcheck="false" />
+            <button type="button" data-weather-refresh title="Wetter aktualisieren">↻</button>
           </div>
-          <div class="weather-status" data-weather-status>Wetter wird geladen â€¦</div>
+          <div class="weather-status" data-weather-status>Wetter wird geladen …</div>
           <div class="weather-current" data-weather-current></div>
           <div class="weather-days" data-weather-days></div>
         </div>`;
@@ -42,8 +42,8 @@ function panelBody(id) {
       return `
         <div id="mod_sysinfo">
           <div data-edex-sys>
-            <h1 id="sys_year">â€”</h1>
-            <h2 id="sys_month">â€”</h2>
+            <h1 id="sys_year">—</h1>
+            <h2 id="sys_month">—</h2>
           </div>
           <div data-edex-sys>
             <h1>UPTIME</h1>
@@ -51,7 +51,7 @@ function panelBody(id) {
           </div>
           <div data-edex-sys>
             <h1>TYPE</h1>
-            <h2 id="sys_type">â€”</h2>
+            <h2 id="sys_type">—</h2>
           </div>
           <div data-edex-sys>
             <h1>POWER</h1>
@@ -105,11 +105,11 @@ function panelBody(id) {
                   <i id="mod_ramwatcher_free_seg" class="ram-seg free"></i>
                 </div>
                 <div class="ram-stack-legend">
-                  <span><em class="used"></em>USED <b id="mod_ramwatcher_used_pct">â€”</b></span>
-                  <span><em class="avail"></em>AVAIL <b id="mod_ramwatcher_avail_pct">â€”</b></span>
-                  <span><em class="free"></em>FREE <b id="mod_ramwatcher_free_pct">â€”</b></span>
-                  <span><em class="cached"></em>CACHED <b id="mod_ramwatcher_cached_pct">â€”</b></span>
-                  <span><em class="total"></em>TOTAL <b id="mod_ramwatcher_total_value">â€”</b></span>
+                  <span><em class="used"></em>USED <b id="mod_ramwatcher_used_pct">—</b></span>
+                  <span><em class="avail"></em>AVAIL <b id="mod_ramwatcher_avail_pct">—</b></span>
+                  <span><em class="free"></em>FREE <b id="mod_ramwatcher_free_pct">—</b></span>
+                  <span><em class="cached"></em>CACHED <b id="mod_ramwatcher_cached_pct">—</b></span>
+                  <span><em class="total"></em>TOTAL <b id="mod_ramwatcher_total_value">—</b></span>
                 </div>
               </div>
             </div>
@@ -125,17 +125,17 @@ function panelBody(id) {
       return `
         <div id="mod_cpuinfo">
           <div id="mod_cpuinfo_innercontainer">
-            <div class="cpuinfo-meta"><i id="mod_cpuinfo_name">â€”</i></div>
+            <div class="cpuinfo-meta"><i id="mod_cpuinfo_name">—</i></div>
             <div class="cpu-total-row">
               <div class="cpu-total-load" data-cpu-level="ok">
                 <span class="cpu-total-label">TOTAL LOAD</span>
-                <strong id="mod_cpuinfo_total">â€”%</strong>
+                <strong id="mod_cpuinfo_total">—%</strong>
               </div>
               <div id="mod_cpuinfo_pointmap" class="edex-pointmap" data-cols="48" data-rows="12" aria-hidden="true"></div>
             </div>
             <div class="cpu-meta-row">
               <div>
-                <h1>CORES<br><i id="mod_cpuinfo_temp">â€”</i></h1>
+                <h1>CORES<br><i id="mod_cpuinfo_temp">—</i></h1>
               </div>
               <div>
                 <h1>SPD<br><i id="mod_cpuinfo_speed_min">--GHz</i></h1>
@@ -144,7 +144,7 @@ function panelBody(id) {
                 <h1>MAX<br><i id="mod_cpuinfo_speed_max">--GHz</i></h1>
               </div>
               <div>
-                <h1>TASKS<br><i id="mod_cpuinfo_tasks">â€”</i></h1>
+                <h1>TASKS<br><i id="mod_cpuinfo_tasks">—</i></h1>
               </div>
             </div>
           </div>
@@ -153,7 +153,7 @@ function panelBody(id) {
       return `
         <div id="mod_netstat">
           <div id="mod_netstat_inner">
-            <h1>NETWORK STATUS<i id="mod_netstat_iname">Interface: â€”</i></h1>
+            <h1>NETWORK STATUS<i id="mod_netstat_iname">Interface: —</i></h1>
             <div id="mod_netstat_innercontainer">
               <div><h1>STATE</h1><h2 id="mod_netstat_state">UNKNOWN</h2></div>
               <div><h1>IPv4</h1><h2 id="mod_netstat_ip">--.--.--.--</h2></div>
@@ -193,20 +193,20 @@ function panelBody(id) {
             </div>
             <div class="conninfo-meta">AKTUELL</div>
             <div class="conninfo-current">
-              <div><span>UP</span><strong id="mod_conninfo_up">â€”/S</strong></div>
-              <div><span>DOWN</span><strong id="mod_conninfo_down">â€”/S</strong></div>
+              <div><span>UP</span><strong id="mod_conninfo_up">—/S</strong></div>
+              <div><span>DOWN</span><strong id="mod_conninfo_down">—/S</strong></div>
             </div>
             <div class="conninfo-total-label">GESAMT</div>
             <div class="conninfo-totals">
-              <div class="conninfo-total out"><span>TOTAL OUT</span><strong id="mod_conninfo_total_out">â€”</strong></div>
-              <div class="conninfo-total in"><span>TOTAL IN</span><strong id="mod_conninfo_total_in">â€”</strong></div>
+              <div class="conninfo-total out"><span>TOTAL OUT</span><strong id="mod_conninfo_total_out">—</strong></div>
+              <div class="conninfo-total in"><span>TOTAL IN</span><strong id="mod_conninfo_total_in">—</strong></div>
             </div>
             <div class="conn-pointmap-block up">
-              <div class="conn-pointmap-label"><span>UP</span><strong id="mod_conninfo_up_chart_rate">â€”/S</strong></div>
+              <div class="conn-pointmap-label"><span>UP</span><strong id="mod_conninfo_up_chart_rate">—/S</strong></div>
               <div id="mod_conninfo_pointmap_up" class="edex-pointmap edex-pointmap-up" data-cols="48" data-rows="10" aria-hidden="true"></div>
             </div>
             <div class="conn-pointmap-block down">
-              <div class="conn-pointmap-label"><span>DOWN</span><strong id="mod_conninfo_down_chart_rate">â€”/S</strong></div>
+              <div class="conn-pointmap-label"><span>DOWN</span><strong id="mod_conninfo_down_chart_rate">—/S</strong></div>
               <div id="mod_conninfo_pointmap_down" class="edex-pointmap edex-pointmap-down" data-cols="48" data-rows="10" aria-hidden="true"></div>
             </div>
             <h3>OFFLINE</h3>
@@ -216,9 +216,9 @@ function panelBody(id) {
       return `
         <div class="cal-root">
           <div class="cal-toolbar">
-            <button type="button" id="cal_prev">â€¹</button>
-            <h1 id="cal_title">â€”</h1>
-            <button type="button" id="cal_next">â€º</button>
+            <button type="button" id="cal_prev">‹</button>
+            <h1 id="cal_title">—</h1>
+            <button type="button" id="cal_next">›</button>
           </div>
           <div class="cal-weekdays"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span class="sun">So</span></div>
           <div id="cal_grid" class="cal-grid"></div>
@@ -229,7 +229,7 @@ function panelBody(id) {
       return `
         <div class="fs-root">
           <div class="fs-toolbar">
-            <input id="fs_query" type="search" spellcheck="false" placeholder="Lokale/LAN-Dateien suchen â€¦" />
+            <input id="fs_query" type="search" spellcheck="false" placeholder="Lokale/LAN-Dateien suchen …" />
             <button type="button" id="fs_go">Suchen</button>
           </div>
           <div class="fs-status" id="fs_status">Suchbegriff eingeben</div>
@@ -245,27 +245,27 @@ function panelBody(id) {
           <div class="terminal-grid" data-terminal-grid></div>
         </div>`;
     case "cockpit":
-      return window.cockpitPanel?.bodyHtml?.() || `<div class="path-empty">é§•é§›å®¤æ¨¡çµ„æœªè¼‰å…¥</div>`;
+      return window.cockpitPanel?.bodyHtml?.() || `<div class="path-empty">駕駛室模組未載入</div>`;
     case "cassette":
-      return window.cassettePanel?.bodyHtml?.() || `<div class="path-empty">ç£å¸¶æ¨¡çµ„æœªè¼‰å…¥</div>`;
+      return window.cassettePanel?.bodyHtml?.() || `<div class="path-empty">磁帶模組未載入</div>`;
     case "ddj":
-      return window.ddjPanel?.bodyHtml?.() || `<div class="path-empty">DDJ æ¨¡çµ„æœªè¼‰å…¥</div>`;
+      return window.ddjPanel?.bodyHtml?.() || `<div class="path-empty">DDJ 模組未載入</div>`;
     case "cpuRail":
-      return window.cpuRailPanel?.bodyHtml?.() || `<div class="path-empty">CPU ä¾›é›»è·¯å¾‘æ¨¡çµ„æœªè¼‰å…¥</div>`;
+      return window.cpuRailPanel?.bodyHtml?.() || `<div class="path-empty">CPU 供電路徑模組未載入</div>`;
     case "calculator":
-      return window.calculatorPanel?.bodyHtml?.() || `<div class="path-empty">è¨ˆç®—å™¨æ¨¡çµ„æœªè¼‰å…¥</div>`;
+      return window.calculatorPanel?.bodyHtml?.() || `<div class="path-empty">計算器模組未載入</div>`;
     case "log":
       return `
         <div id="mod_log" class="log-panel">
           <div class="log-toolbar">
-            <span data-log-file>Log wird geladen â€¦</span>
+            <span data-log-file>Log wird geladen …</span>
             <select data-log-level aria-label="Log-Level">
               <option value="all">ALLE</option>
               <option value="error">ERROR</option>
               <option value="warn">WARN</option>
               <option value="info">INFO</option>
             </select>
-            <button type="button" data-log-refresh title="Log aktualisieren">â†»</button>
+            <button type="button" data-log-refresh title="Log aktualisieren">↻</button>
           </div>
           <div class="log-list" data-log-list></div>
         </div>`;
@@ -273,15 +273,15 @@ function panelBody(id) {
       return `
         <div id="mod_autostart" class="autostart-panel">
           <div class="autostart-toolbar">
-            <span data-autostart-count>Autostart-EintrÃ¤ge werden geladen â€¦</span>
-            <button type="button" data-autostart-refresh title="Autostart aktualisieren">â†»</button>
+            <span data-autostart-count>Autostart-Einträge werden geladen …</span>
+            <button type="button" data-autostart-refresh title="Autostart aktualisieren">↻</button>
           </div>
           <div class="autostart-list" data-autostart-list></div>
         </div>`;
     case "dock":
       return window.dockPanel?.bodyHtml?.() || `<div class="path-empty">Dock-Modul nicht geladen</div>`;
     case "taskdock":
-      return `<div id="task-dock-panel" class="task-dock-panel"><div class="dock-items task-dock-items" data-task-dock-items aria-label="Windows-TaskleistenverknÃ¼pfungen"></div></div>`;
+      return `<div id="task-dock-panel" class="task-dock-panel"><div class="dock-items task-dock-items" data-task-dock-items aria-label="Windows-Taskleistenverknüpfungen"></div></div>`;
     default:
       return "";
   }
@@ -294,10 +294,10 @@ function panelDisplayTitle(id) {
 function cardToolsHtml({ allowMinimize = true } = {}) {
   return `
     <span class="card-tools">
-      ${allowMinimize ? '<button type="button" class="card-tool minimize-btn" data-card-act="minimize" title="In den Dock minimieren">âˆ’</button>' : ""}
-      <button type="button" class="card-tool snap-btn" data-card-act="snap" title="1/4-Snap-Grid Ã¶ffnen" aria-label="1/4-Snap-Grid Ã¶ffnen">â–¦</button>
-      <button type="button" class="card-tool settings-btn" data-card-act="settings" title="Panel-Setup Ã¶ffnen" aria-label="Panel-Setup Ã¶ffnen">âš™</button>
-      <button type="button" class="card-tool more-btn" data-card-act="more" title="Weitere Aktionen" aria-label="Weitere Aktionen">â‹¯</button>
+      ${allowMinimize ? '<button type="button" class="card-tool minimize-btn" data-card-act="minimize" title="In den Dock minimieren">−</button>' : ""}
+      <button type="button" class="card-tool snap-btn" data-card-act="snap" title="1/4-Snap-Grid öffnen" aria-label="1/4-Snap-Grid öffnen">▦</button>
+      <button type="button" class="card-tool settings-btn" data-card-act="settings" title="Panel-Setup öffnen" aria-label="Panel-Setup öffnen">⚙</button>
+      <button type="button" class="card-tool more-btn" data-card-act="more" title="Weitere Aktionen" aria-label="Weitere Aktionen">⋯</button>
     </span>`;
 }
 
@@ -318,7 +318,7 @@ function openCardMenu(anchorBtn, items, pos) {
       `).join("");
       return `<div class="macos-tags" data-tags-idx="${i}">
         <div class="macos-tags-label">Markierung</div>
-        <div class="macos-tags-row">${dots}<button type="button" class="macos-tag none" data-tag="" title="Keine">Ã—</button></div>
+        <div class="macos-tags-row">${dots}<button type="button" class="macos-tag none" data-tag="" title="Keine">×</button></div>
       </div>`;
     }
     return `<button type="button" data-menu-idx="${i}">${escapeHtml(item.label)}</button>`;
@@ -458,8 +458,8 @@ function setupDesktopClickThrough() {
     ignoring = nextIgnore;
     window.edex.setMouseIgnore(nextIgnore);
   };
-  // Poll OS cursor even while click-through â€” forwarded mousemove alone is unreliable
-  // for the first click on desktop icons (ignore still true â†’ click falls to wallpaper).
+  // Poll OS cursor even while click-through — forwarded mousemove alone is unreliable
+  // for the first click on desktop icons (ignore still true → click falls to wallpaper).
   const poll = () => {
     if (document.visibilityState === "hidden") return;
     if (fileDragBlocksHitPoll()) return;
@@ -496,5 +496,15 @@ function itemFromDeskNode(icon) {
   return itemFromIcon(icon);
 }
 
-  return { panelBody };
+  return {
+    panelBody,
+    cardToolsHtml,
+    closeCardMenus,
+    openCardMenu,
+    pointHitsHud,
+    deskIconAt,
+    setupDesktopClickThrough,
+    fileDragBlocksHitPoll,
+    itemFromDeskNode
+  };
 })();

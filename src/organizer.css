@@ -275,7 +275,9 @@ body.desktop-shell #workspace {
 }
 
 .path-tab {
-    flex: 0 0 auto;
+    flex: 0 0 12rem;
+    width: 12rem;
+    min-width: 12rem;
     max-width: 12rem;
     overflow: hidden;
     padding: 0.18rem 0.45rem;
@@ -829,12 +831,16 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 .path-browser-body {
     flex-direction: row !important;
     gap: 0.55rem;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .path-card-header {
     display: flex;
     align-items: center;
     gap: 0.55rem;
+    width: 100%;
+    box-sizing: border-box;
     min-height: 2.25rem;
     padding-bottom: 0.22rem;
     border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
@@ -843,6 +849,11 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 
 .path-card-header .card-title-text {
     flex: 0 1 auto;
+    color: #8bdff2;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.78em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     text-shadow: 0 0 0.45rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.48);
 }
 
@@ -851,67 +862,104 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     min-width: 0;
     align-self: stretch;
     align-items: flex-end;
+    gap: 1px;
     padding: 0;
     overflow-x: auto;
     border-bottom: 0;
-    background: transparent;
+    background: #081820;
+    border: 1px solid #081820;
+    border-bottom: none;
+    scrollbar-width: none;
+}
+
+.path-card-header .path-tab-bar::-webkit-scrollbar {
+    display: none;
 }
 
 .path-card-header .path-tab {
     position: relative;
+    flex: 0 0 12rem;
+    width: 12rem;
+    min-width: 12rem;
+    max-width: 12rem;
     min-height: 1.75rem;
-    padding: 0.25rem 0.7rem 0.22rem 0.55rem;
-    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.38);
-    border-bottom-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.72);
-    background:
-        linear-gradient(135deg, transparent 0.42rem, rgba(var(--color_r), var(--color_g), var(--color_b), 0.05) 0.43rem),
-        rgba(0, 0, 0, 0.2);
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
-    letter-spacing: 0.025em;
-    text-shadow: 0 0 0.25rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+    justify-content: center;
+    padding: 0.25rem 0.7rem 0.22rem;
+    border: 1px solid #29404a;
+    border-bottom-color: #29404a;
+    border-radius: 0.65rem 0.65rem 0 0;
+    background: #02060a;
+    color: #6aabbc;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.78em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-shadow: none;
     transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .path-card-header .path-tab::before {
-    content: "◈";
+    content: "▸";
     display: inline-block;
     margin-right: 0.32rem;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.62);
+    color: #39778b;
     font-size: 0.78em;
 }
 
 .path-card-header .path-tab:hover {
-    border-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.82);
-    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.14);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    border-color: #39778b;
+    background: #030c14;
+    color: #8bdff2;
 }
 
 .path-card-header .path-tab.active {
-    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
-    border-bottom-color: transparent;
-    background:
-        linear-gradient(135deg, transparent 0.42rem, rgba(var(--color_r), var(--color_g), var(--color_b), 0.2) 0.43rem),
-        rgba(var(--color_r), var(--color_g), var(--color_b), 0.14);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
-    box-shadow:
-        0 0 0.55rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.28),
-        inset 0 0.12rem 0 rgb(var(--color_r), var(--color_g), var(--color_b));
-    text-shadow: 0 0 0.45rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
+    border-color: #39778b;
+    border-bottom-color: #29404a;
+    background: #041018;
+    color: #d7f8ff;
+    box-shadow: inset 0 0.14rem 0 #7fe8ff;
 }
 
 .path-card-header .path-tab.active::before {
     content: "▣";
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: #7fe8ff;
+}
+
+.path-card-header .path-tab-label {
+    text-align: center;
+}
+
+.path-card-header .path-tab-close {
+    color: #39778b;
+}
+
+.path-card-header .path-tab-close:hover,
+.path-card-header .path-tab-close:focus-visible {
+    border-color: #7fe8ff;
+    color: #d7f8ff;
+    background: rgba(127, 232, 255, 0.16);
+}
+
+.path-card {
+    background: #050b10;
+    border-color: #203b47;
+    box-shadow: inset 0 0 0 1px rgba(127, 232, 255, 0.04);
+}
+
+.path-card .card-body {
+    background: #02060a;
 }
 
 .path-tree {
     flex: 0 0 var(--path-tree-width, 12rem);
+    flex-shrink: 0;
     min-width: 9rem;
     max-width: 35%;
     overflow: auto;
-    padding: 0.25rem;
-    border-right: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
-    background: rgba(0, 0, 0, 0.14);
+    padding: 0.35rem 0.25rem;
+    border-right: 1px solid #132b36;
+    background: #02060a;
+    scrollbar-color: #244b5a #02060a;
 }
 
 .path-tree-resizer {
@@ -937,12 +985,14 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     align-items: center;
     width: 100%;
     gap: 0.3rem;
-    padding: 0.28rem 0.35rem;
+    padding: 0.3rem 0.35rem;
     border: 0;
     border-left: 2px solid transparent;
     background: transparent;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.82);
-    font: inherit;
+    color: #39778b;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.78em;
+    letter-spacing: 0.025em;
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
@@ -952,9 +1002,9 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 
 .path-tree-node:hover,
 .path-tree-node.current {
-    border-left-color: rgb(var(--color_r), var(--color_g), var(--color_b));
-    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.16);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    border-left-color: #7fe8ff;
+    background: #07151d;
+    color: #8bdff2;
 }
 
 .path-tree-node.root {
@@ -964,8 +1014,16 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 .path-tree-chevron,
 .path-tree-icon {
     flex: 0 0 1rem;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: #39778b;
     text-align: center;
+}
+
+.path-tree-icon .file-browser-tree-icon {
+    width: 1rem;
+    height: 1rem;
+    display: block;
+    object-fit: contain;
+    margin: 0 auto;
 }
 
 .path-tree-children {
@@ -983,27 +1041,31 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 .path-browser-toolbar {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.25rem;
     min-width: 0;
-    margin: 0 0 0.5rem;
+    margin: 0 0 0.35rem;
+    padding: 0.2rem 0.25rem;
+    border-bottom: 1px solid #132b36;
+    background: #050b10;
 }
 
 .path-browser-toolbar button {
     flex: 0 0 auto;
-    min-width: 1.8rem;
+    min-width: 1.75rem;
     padding: 0.15rem 0.35rem;
-    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
-    border-radius: 0.15rem;
-    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.08);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
-    font: inherit;
+    border: 1px solid #29404a;
+    border-radius: 0.2rem;
+    background: #02060a;
+    color: #6aabbc;
+    font-family: "Share Tech Mono", "Courier New", monospace;
     line-height: 1.2;
     cursor: pointer;
 }
 
 .path-browser-toolbar button:hover:not(:disabled) {
-    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
-    color: var(--color_light_black);
+    border-color: #7fe8ff;
+    background: #07151d;
+    color: #d7f8ff;
 }
 
 .path-browser-toolbar button:disabled {
@@ -1015,22 +1077,23 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     min-width: 5rem;
     width: 8rem;
     max-width: 30%;
-    padding: 0.2rem 0.35rem;
-    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
-    border-radius: 0.15rem;
-    background: rgba(0, 0, 0, 0.25);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
-    font: inherit;
+    flex: 1 1 12rem;
+    padding: 0.22rem 0.45rem;
+    border: 1px solid #29404a;
+    border-radius: 0.2rem;
+    background: #02060a;
+    color: #8bdff2;
+    font-family: "Share Tech Mono", "Courier New", monospace;
     outline: none;
 }
 
 .path-browser-toolbar input::placeholder {
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
+    color: #39778b;
 }
 
 .path-browser-toolbar input:focus {
-    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
-    box-shadow: 0 0 0 1px rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
+    border-color: #7fe8ff;
+    box-shadow: 0 0 0 1px rgba(127, 232, 255, 0.22);
 }
 
 .file-preview-modal {
@@ -1064,7 +1127,10 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     font-size: var(--fs);
     word-break: break-all;
     margin: 0;
-    opacity: 0.9;
+    color: #39778b;
+    opacity: 1;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.78em;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1318,6 +1384,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     flex: 1;
     min-height: 8rem;
     overflow: auto;
+    background: #02060a;
+    scrollbar-color: #244b5a #02060a;
 }
 
 .path-stage.view-grid,
@@ -1337,10 +1405,13 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     left: auto !important;
     top: auto !important;
     width: 100%;
-    max-width: 8rem;
-    min-height: 7rem;
+    max-width: 9rem;
+    min-height: 6.8rem;
     text-align: center;
     flex-direction: column;
+    border: 1px solid transparent;
+    background: #030a10;
+    transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .path-stage.view-list,
@@ -1365,7 +1436,9 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     justify-content: flex-start;
     text-align: left;
     gap: 0.7rem;
-    padding: 0.2rem 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid transparent;
+    background: #030a10;
 }
 
 .path-stage.view-list .desk-icon-face svg,
@@ -1396,7 +1469,9 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 
 .path-empty {
     margin: 1rem;
-    opacity: 0.6;
+    color: #39778b;
+    opacity: 1;
+    font-family: "Share Tech Mono", "Courier New", monospace;
     font-size: var(--fs);
 }
 
@@ -1580,7 +1655,10 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 
 .desk-icon h3 {
     margin: 0;
-    font-size: 0.95rem;
+    color: #6aabbc;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.025em;
     font-weight: normal;
     max-width: 100%;
     white-space: nowrap;
@@ -1591,13 +1669,13 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 .desk-icon:hover,
 .desk-icon.selected,
 .fs-row.selected {
-    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.12);
+    background: #07151d;
 }
 
 .desk-icon.selected,
 .fs-row.selected {
-    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
-    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: #071c27;
+    border-color: #7fe8ff;
     box-shadow:
         inset 0 0 0 1px rgba(var(--color_r), var(--color_g), var(--color_b), 0.48),
         0 0 0.8rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
