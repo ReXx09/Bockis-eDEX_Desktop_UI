@@ -89,6 +89,7 @@ const terminalBuffers = new Map();
 const terminalStarted = new Set();
 const terminalNativePanes = new Map();
 const terminalInstances = new Map();
+const terminalResizeObservers = new Map();
 const terminalCwds = new Map();
 const terminalShells = new Map();
 const terminalBrowserState = new Map();
@@ -988,6 +989,10 @@ function applyTheme(theme, wallpaperId) {
   document.documentElement.style.setProperty("--color_grey", mixThemeColor(c.grey || "#262828", rawAccent, blend * 0.35));
   document.documentElement.style.setProperty("--color_red", c.red || "#ff3c3c");
   document.documentElement.style.setProperty("--color_yellow", c.yellow || "#ffd23c");
+  document.documentElement.style.setProperty("--panel-bg", c.black || "#000000");
+  document.documentElement.style.setProperty("--panel-surface", c.light_black || "#05080d");
+  document.documentElement.style.setProperty("--panel-border", `rgba(${r}, ${g}, ${b}, 0.28)`);
+  document.documentElement.style.setProperty("--panel-border-strong", `rgba(${r}, ${g}, ${b}, 0.55)`);
   document.documentElement.style.setProperty("--snap-gap", `${snapGap()}px`);
   applyUiMetrics();
   window.__edexTheme = theme;
@@ -1303,6 +1308,8 @@ function currentDisplayLayout() {
       minimized: Boolean(card.minimized),
       fixedDisplayId: Number.isFinite(Number(card.fixedDisplayId)) ? Number(card.fixedDisplayId) : null,
       iconView: card.iconView === "list" ? "list" : "grid",
+      fileIconScale: Math.max(0.6, Math.min(2, Number(card.fileIconScale) || Number(state.settings.pathIconScale) || 1)),
+      fileFontScale: Math.max(0.7, Math.min(1.8, Number(card.fileFontScale) || Number(state.settings.pathFontScale) || 1)),
       bg: card.bg || "",
       activeTabId: card.activeTabId || `${card.id}:root`,
       tabs: ensurePathTabs(card).map((tab) => ({
@@ -2377,12 +2384,22 @@ function renderDockItems() {
     items.push({ kind: "desktop", id: "desktop", label: "系統桌面" });
   }
   state.pathCards.forEach((card, index) => {
-    if (card.minimized) items.push({ kind: "path", id: card.id, label: pathTitle(card, index) });
+    if (card.minimized) {
+      const tabs = Array.isArray(card.tabs) ? card.tabs : [];
+      const tabNames = tabs.map((tab) => tab.name || folderTabTitle(tab.path)).filter(Boolean);
+      items.push({
+        kind: "path",
+        id: card.id,
+        label: pathTitle(card, index),
+        tabs: tabNames
+      });
+    }
   });
   host.innerHTML = items.map((item) => `
-    <button type="button" class="dock-item" data-dock-kind="${item.kind}" data-dock-restore="${escapeHtml(item.id)}"${item.path ? ` data-dock-taskbar-path="${escapeHtml(item.path)}"` : ""} title="${escapeHtml(item.label)}">
+    <button type="button" class="dock-item${item.tabs?.length > 1 ? ` has-tab-group dock-tab-count-${Math.min(9, item.tabs.length)}` : ""}" data-dock-kind="${item.kind}" data-dock-restore="${escapeHtml(item.id)}"${item.path ? ` data-dock-taskbar-path="${escapeHtml(item.path)}"` : ""}${item.tabs?.length > 1 ? ` data-dock-tabs="${escapeHtml(item.tabs.join(" • "))}" aria-label="${escapeHtml(`${item.label}: ${item.tabs.join(", ")}`)}"` : ""} title="${escapeHtml(item.label)}">
       ${item.iconDataUrl ? `<img class="dock-item-icon dock-item-icon-image" src="${escapeHtml(item.iconDataUrl)}" alt="" draggable="false">` : `<span class="dock-item-icon dock-item-icon-${dockIcon(item.kind, item.id)}" aria-hidden="true"></span>`}
       <span class="dock-item-label">${escapeHtml(item.label)}</span>
+      ${item.tabs?.length > 1 ? `<span class="dock-tab-count" aria-hidden="true">${item.tabs.length}</span>` : ""}
     </button>`).join("");
   window.edexI18n?.translatePage?.(host);
   window.dockPanel?.refresh?.(state);
@@ -2681,12 +2698,81 @@ function snapCardToQuarter(kind, ctx, slot) {
     box,
     bounds.x + bounds.width * (slot.x / 100),
     bounds.y + bounds.height * (slot.y / 100),
-    bounds.width / 2,
-    bounds.height / 2
+    bounds.width * ((slot.w ?? 50) / 100),
+    bounds.height * ((slot.h ?? 50) / 100)
   );
   ctx.el.style.cssText = styleFromBox(box);
   persistLayout();
   toast(`${slot.label} angewendet`);
+}
+
+function snapSlotForLayout(layout) {
+  if (layout === "half-left") return { x: 0, y: 0, w: 50, h: 100 };
+  if (layout === "half-right") return { x: 50, y: 0, w: 50, h: 100 };
+  if (layout === "quarter-tl") return { x: 0, y: 0, w: 50, h: 50 };
+  if (layout === "quarter-tr") return { x: 50, y: 0, w: 50, h: 50 };
+  if (layout === "quarter-bl") return { x: 0, y: 50, w: 50, h: 50 };
+  if (layout === "quarter-br") return { x: 50, y: 50, w: 50, h: 50 };
+  return null;
+}
+
+function snapRectsOverlap(first, second) {
+  return first.left < second.right
+    && first.right > second.left
+    && first.top < second.bottom
+    && first.bottom > second.top;
+}
+
+function occupiedSnapLayouts(ctx, items) {
+  const zone = panelZoneRect(ctx.el);
+  const otherPanels = [...document.querySelectorAll(".hud-card, .path-card, .program-card, .desktop-card")]
+    .filter((el) => el !== ctx.el && !el.classList.contains("minimized"));
+  return items.map((item) => {
+    const slot = snapSlotForLayout(item.layout);
+    if (!slot) return item;
+    const target = {
+      left: zone.x + zone.width * slot.x / 100,
+      top: zone.y + zone.height * slot.y / 100,
+      right: zone.x + zone.width * (slot.x + slot.w) / 100,
+      bottom: zone.y + zone.height * (slot.y + slot.h) / 100
+    };
+    const occupied = otherPanels.some((panel) => snapRectsOverlap(target, panel.getBoundingClientRect()));
+    return { ...item, occupied };
+  });
+}
+
+function openSnapLayoutPicker(anchor, items, ctx) {
+  closeCardMenus();
+  const markedItems = occupiedSnapLayouts(ctx, items);
+  const picker = document.createElement("div");
+  picker.className = "snap-layout-picker";
+  picker.setAttribute("role", "menu");
+  picker.innerHTML = markedItems.map((item, index) => `
+    <button type="button" class="snap-layout-option${item.occupied ? " occupied" : ""}" data-snap-option="${index}" role="menuitem" aria-label="${escapeHtml(item.label)}${item.occupied ? " (bereits belegt)" : ""}">
+      <span class="snap-layout-preview ${escapeHtml(item.layout || "quarter")}" >
+        <i></i><i></i><i></i><i></i>
+      </span>
+    </button>
+  `).join("");
+  document.body.appendChild(picker);
+  const rect = anchor.getBoundingClientRect();
+  const pickerRect = picker.getBoundingClientRect();
+  picker.style.left = `${Math.max(4, Math.min(window.innerWidth - pickerRect.width - 4, rect.right - pickerRect.width))}px`;
+  picker.style.top = `${Math.max(4, rect.bottom + 6)}px`;
+  picker.querySelectorAll("[data-snap-option]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      markedItems[Number(button.dataset.snapOption)]?.action?.();
+      closeCardMenus();
+    });
+  });
+  const dismiss = (event) => {
+    if (picker.contains(event.target) || event.target === anchor) return;
+    closeCardMenus();
+    window.removeEventListener("pointerdown", dismiss, true);
+  };
+  setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
 }
 
 function menuItemsForCard(kind, ctx) {
@@ -2715,11 +2801,12 @@ function menuItemsForCard(kind, ctx) {
   if (kind === "panel" || kind === "desktop" || kind === "path") {
     items.push(
       { sep: true },
-      { label: "1/4 links oben", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 0, label: "Links oben" }) },
-      { label: "1/4 rechts oben", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 0, label: "Rechts oben" }) },
-      { label: "1/4 links unten", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 50, label: "Links unten" }) },
-      { label: "1/4 rechts unten", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 50, label: "Rechts unten" })
-      }
+      { label: "1/2 links", layout: "half-left", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 0, w: 50, h: 100, label: "Halb links" }) },
+      { label: "1/2 rechts", layout: "half-right", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 0, w: 50, h: 100, label: "Halb rechts" }) },
+      { label: "1/4 links oben", layout: "quarter-tl", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 0, label: "Links oben" }) },
+      { label: "1/4 rechts oben", layout: "quarter-tr", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 0, label: "Rechts oben" }) },
+      { label: "1/4 links unten", layout: "quarter-bl", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 50, label: "Links unten" }) },
+      { label: "1/4 rechts unten", layout: "quarter-br", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 50, label: "Rechts unten" }) }
     );
   }
   if ((kind === "panel" && ctx.widgetId !== "dock") || kind === "desktop" || kind === "path") {
@@ -2920,6 +3007,9 @@ function panelSetupId(el) {
 function openPanelSetup(el) {
   closeCardMenus();
   const id = panelSetupId(el);
+  const pathCard = id === "path"
+    ? state.pathCards.find((card) => card.id === el?.id?.slice(5))
+    : null;
   const title = id === "desktop"
     ? "Systemdesktop"
     : id === "path"
@@ -2972,6 +3062,9 @@ function openPanelSetup(el) {
       <tr><td>Mindestgröße analog</td><td>${analogClockMinimum().cells} × ${analogClockMinimum().cells} Rasterfelder (${analogClockMinimum().px} × ${analogClockMinimum().px} px)</td></tr>`
     : id === "ram"
       ? `<tr><td>Anzeige</td><td><select id="panel-ram-mode"><option value="used">USED</option><option value="free">FREE</option><option value="cached">CACHED</option><option value="available">AVAILABLE</option><option value="total">TOTAL</option></select></td></tr>`
+      : id === "path"
+        ? `<tr><td>Icongröße</td><td><input id="panel-path-icon-scale" type="number" min="0.6" max="2" step="0.1"></td></tr>
+      <tr><td>Schriftgröße</td><td><input id="panel-path-font-scale" type="number" min="0.7" max="1.8" step="0.1"></td></tr>`
       : id === "filesearch"
         ? `<tr><td>Schriftgröße</td><td><input id="panel-search-font" type="number" min="8" max="72" step="1"></td></tr>`
         : `<tr><td>Panel-Einstellungen</td><td>Für dieses Panel sind derzeit keine individuellen Optionen vorhanden.</td></tr>`;
@@ -3016,6 +3109,10 @@ function openPanelSetup(el) {
   if (ramMode) ramMode.value = state.settings.ramGaugeMode || "used";
   const searchFont = modal.querySelector("#panel-search-font");
   if (searchFont) searchFont.value = String(state.settings.searchFontSize || 12);
+  const pathIconScale = modal.querySelector("#panel-path-icon-scale");
+  const pathFontScale = modal.querySelector("#panel-path-font-scale");
+  if (pathIconScale) pathIconScale.value = String(pathCard?.fileIconScale || state.settings.pathIconScale || 1);
+  if (pathFontScale) pathFontScale.value = String(pathCard?.fileFontScale || state.settings.pathFontScale || 1);
   const desktopView = modal.querySelector("#panel-desktop-view");
   const desktopFilter = modal.querySelector("#panel-desktop-filter");
   const desktopGrouped = modal.querySelector("#panel-desktop-grouped");
@@ -3085,6 +3182,17 @@ function openPanelSetup(el) {
     const previousPanelIcon = id !== "desktop" && id !== "path" ? dockIcon("panel", id) : "";
     const selectedPanelIcon = panelIconSelect?.value || previousPanelIcon;
     const panelIconChanged = selectedPanelIcon && selectedPanelIcon !== previousPanelIcon;
+    let pathAppearanceChanged = false;
+    let nextIconScale = null;
+    let nextFontScale = null;
+    if (pathCard && pathIconScale && pathFontScale) {
+      nextIconScale = Math.max(0.6, Math.min(2, Number(pathIconScale.value) || 1));
+      nextFontScale = Math.max(0.7, Math.min(1.8, Number(pathFontScale.value) || 1));
+      pathAppearanceChanged = nextIconScale !== (Number(pathCard.fileIconScale) || 1)
+        || nextFontScale !== (Number(pathCard.fileFontScale) || 1);
+      pathCard.fileIconScale = nextIconScale;
+      pathCard.fileFontScale = nextFontScale;
+    }
     const selectedBg = panelBgSelect?.value === "__custom__"
       ? (panelBgCustom?.value || "")
       : panelBgSelect?.value === "__default__" ? "" : (panelBgSelect?.value || "");
@@ -3113,8 +3221,12 @@ function openPanelSetup(el) {
       state.desktopGrouped = Boolean(desktopGrouped?.checked);
     }
     if (panelIconChanged) state.layout[id] = { ...state.layout[id], icon: selectedPanelIcon };
+    if (pathCard && pathAppearanceChanged) {
+      patch.pathIconScale = nextIconScale;
+      patch.pathFontScale = nextFontScale;
+    }
     const desktopChanged = id === "desktop";
-    if (!Object.keys(patch).length && !zoneChanged && !backgroundChanged && !panelIconChanged && !panelNameChanged && !desktopChanged) {
+    if (!Object.keys(patch).length && !zoneChanged && !backgroundChanged && !panelIconChanged && !panelNameChanged && !pathAppearanceChanged && !desktopChanged) {
       modal.remove();
       return;
     }
@@ -3125,6 +3237,7 @@ function openPanelSetup(el) {
       }
       if (zoneChanged) persistLayout();
       if (backgroundChanged || panelIconChanged || panelNameChanged) persistLayout();
+      if (pathAppearanceChanged) persistLayout();
       if (desktopChanged) persistLayout();
       if (id === "clock" && patch.clockDisplayMode === "analog" && state.layout.clock) {
         const minimum = analogClockMinimum().px;
@@ -3155,14 +3268,14 @@ function bindCardTools(el, getItems) {
         minimizeContainer("panel", cardId.slice(5));
       }
     });
-    el.querySelectorAll('[data-card-act="snap"]').forEach((btn) => {
-      btn.addEventListener("pointerdown", (event) => event.stopPropagation());
-      btn.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const snapItems = getItems().filter((item) => item.label && /^1\/4 /.test(item.label));
-        openCardMenu(btn, snapItems, { x: event.clientX, y: event.clientY });
-      });
+  });
+  el.querySelectorAll('[data-card-act="snap"]').forEach((btn) => {
+    btn.addEventListener("pointerdown", (event) => event.stopPropagation());
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const snapItems = getItems().filter((item) => item.label && /^(1\/2|1\/3|1\/4) /.test(item.label));
+      openSnapLayoutPicker(btn, snapItems, { el });
     });
   });
   el.querySelectorAll('[data-card-act="settings"]').forEach((btn) => {
@@ -4372,11 +4485,28 @@ function fillPathStage(card) {
   const query = String(card.fileSearch || "").trim().toLocaleLowerCase();
   const items = listingItems(card.listing || card.scan)
     .filter((item) => !query || String(item.displayName || item.name || "").toLocaleLowerCase().includes(query));
+  const updateInfo = () => {
+    const info = document.querySelector(`[data-path-info="${card.id}"]`);
+    if (!info) return;
+    const selected = selectedPathsInStage(stage).length;
+    info.querySelector("[data-path-info-total]").textContent = `${items.length} Element${items.length === 1 ? "" : "e"}`;
+    info.querySelector("[data-path-info-selected]").textContent = `${selected} ausgewählt`;
+  };
   const view = card.iconView === "list" ? "list" : "grid";
+  const iconScale = Math.max(0.6, Math.min(2, Number(card.fileIconScale) || Number(state.settings.pathIconScale) || 1));
+  const fontScale = Math.max(0.7, Math.min(1.8, Number(card.fileFontScale) || Number(state.settings.pathFontScale) || 1));
+  const browserBody = stage.closest(".path-browser-body");
+  browserBody?.style.setProperty("--path-font-size", `${fontScale}em`);
+  stage.style.setProperty("--path-icon-size", `${3.2 * iconScale}rem`);
+  stage.style.setProperty("--path-list-icon-size", `${2 * iconScale}rem`);
+  stage.style.setProperty("--path-grid-min", `${6.6 * iconScale}rem`);
+  stage.style.setProperty("--path-font-size", `${fontScale}em`);
+  stage.style.setProperty("--path-label-size", `${0.78 * fontScale}rem`);
   const fileOpts = {
     destDir: card.path,
     pathCardId: card.id,
-    onRefresh: () => scanCard(card)
+    onRefresh: () => scanCard(card),
+    onSelectionChange: updateInfo
   };
   stage.classList.toggle("view-list", view === "list");
   stage.classList.toggle("view-grid", view === "grid");
@@ -4386,10 +4516,12 @@ function fillPathStage(card) {
       : `<p class="path-empty">${card.scanning ? "讀取中…" : "此資料夾沒有可顯示的項目"}</p>`;
     window.edexI18n?.translatePage?.(stage);
     bindFileStage(stage, fileOpts);
+    updateInfo();
     return;
   }
   fillIconStage(stage, items, { draggable: false, view, ...fileOpts });
   window.edexI18n?.translatePage?.(stage);
+  updateInfo();
 }
 
 async function scanCard(card) {
@@ -4403,7 +4535,8 @@ async function scanCard(card) {
   fillPathStage(card);
     try {
     card.listing = await window.edex.listFolder(card.path);
-    syncPathTab(card);
+      if (card.listing?.readError) throw new Error(card.listing.readError);
+      syncPathTab(card);
     fillPathStage(card);
     if (card.id === state.activePathId) {
       try {
@@ -4448,24 +4581,30 @@ function renderPathCards() {
     el.style.cssText = styleFromBox(card);
     el.innerHTML = `
       <h3 class="card-title path-card-header">
+        <button type="button" class="path-tab-scroll" data-path-tab-scroll="-1" aria-label="Tabs nach links scrollen" title="Tabs nach links scrollen">‹</button>
         <div class="path-tab-bar" role="tablist">${ensurePathTabs(card).map((tab) => `<div class="path-tab${tab.id === card.activeTabId ? " active" : ""}" data-path-tab="${escapeHtml(tab.id)}" role="tab" aria-selected="${tab.id === card.activeTabId ? "true" : "false"}" title="${escapeHtml(tab.path || "")}"><span class="path-tab-label">${escapeHtml(tab.name || pathTitle(tab, 0))}</span><button type="button" class="path-tab-close" data-close-path-tab="${escapeHtml(tab.id)}" aria-label="Tab schließen" title="Tab schließen">×</button></div>`).join("")}</div>
+        <button type="button" class="path-tab-scroll" data-path-tab-scroll="1" aria-label="Tabs nach rechts scrollen" title="Tabs nach rechts scrollen">›</button>
         ${cardToolsHtml()}
       </h3>
+      <div class="path-browser-toolbar">
+        <button type="button" data-path-back title="Zurück" ${ensurePathTabs(card).find((tab) => tab.id === card.activeTabId)?.backStack?.length ? "" : "disabled"}>←</button>
+        <button type="button" data-path-forward title="Vorwärts" ${ensurePathTabs(card).find((tab) => tab.id === card.activeTabId)?.forwardStack?.length ? "" : "disabled"}>→</button>
+        <button type="button" data-path-up title="Übergeordneten Ordner öffnen">↑</button>
+        <button type="button" data-path-refresh title="Ordner aktualisieren">↻</button>
+        <input type="search" data-path-search placeholder="Dateien suchen …" value="${escapeHtml(card.fileSearch || "")}" aria-label="Dateien in diesem Ordner suchen">
+        <span class="path-text" title="${escapeHtml(card.path)}">${escapeHtml(card.path)}</span>
+      </div>
       <div class="card-body path-browser-body">
         <aside class="path-tree" data-path-tree="${card.id}" aria-label="Arbeitsbaum" style="--path-tree-width:${Number.isFinite(Number(card.treeWidth)) ? Number(card.treeWidth) : 192}px"></aside>
         <div class="path-tree-resizer" data-path-tree-resizer="${card.id}" role="separator" aria-orientation="vertical" aria-label="Breite des Arbeitsbaums ändern" tabindex="0"></div>
         <div class="path-browser-main">
-          <div class="path-browser-toolbar">
-            <button type="button" data-path-back title="Zurück" ${ensurePathTabs(card).find((tab) => tab.id === card.activeTabId)?.backStack?.length ? "" : "disabled"}>←</button>
-            <button type="button" data-path-forward title="Vorwärts" ${ensurePathTabs(card).find((tab) => tab.id === card.activeTabId)?.forwardStack?.length ? "" : "disabled"}>→</button>
-            <button type="button" data-path-up title="Übergeordneten Ordner öffnen">↑</button>
-            <button type="button" data-path-refresh title="Ordner aktualisieren">↻</button>
-            <input type="search" data-path-search placeholder="Dateien suchen …" value="${escapeHtml(card.fileSearch || "")}" aria-label="Dateien in diesem Ordner suchen">
-            <span class="path-text" title="${escapeHtml(card.path)}">${escapeHtml(card.path)}</span>
-          </div>
           <div class="path-stage view-${card.iconView === "list" ? "list" : "grid"}" data-path-stage="${card.id}"></div>
         </div>
       </div>
+      <footer class="path-info-bar" data-path-info="${card.id}">
+        <span data-path-info-total>0 Elemente</span>
+        <span data-path-info-selected>0 ausgewählt</span>
+      </footer>
       <div class="resize-handle"></div>
     `;
     el.addEventListener("dblclick", () => setActivePath(card.id));
@@ -4504,6 +4643,27 @@ function renderPathCards() {
         activatePathTab(card, button.dataset.pathTab);
       });
     });
+    const tabBar = el.querySelector(".path-tab-bar");
+    const updateTabScrollButtons = () => {
+      if (!tabBar) return;
+      const maxScroll = Math.max(0, tabBar.scrollWidth - tabBar.clientWidth);
+      el.querySelectorAll("[data-path-tab-scroll]").forEach((button) => {
+        const direction = Number(button.dataset.pathTabScroll);
+        button.disabled = direction < 0 ? tabBar.scrollLeft <= 1 : tabBar.scrollLeft >= maxScroll - 1;
+      });
+    };
+    tabBar?.addEventListener("scroll", updateTabScrollButtons, { passive: true });
+    el.querySelectorAll("[data-path-tab-scroll]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!tabBar) return;
+        const direction = Number(button.dataset.pathTabScroll) || 1;
+        tabBar.scrollLeft += direction * Math.max(144, tabBar.clientWidth * 0.7);
+        updateTabScrollButtons();
+      });
+    });
+    requestAnimationFrame(updateTabScrollButtons);
     el.querySelectorAll("[data-close-path-tab]").forEach((button) => {
       button.addEventListener("click", (event) => {
         event.preventDefault();
@@ -4677,7 +4837,9 @@ async function addPathCardAt(folderPath, options = {}) {
     y: 16,
     w: 46,
     h: 52,
-    iconView: "grid"
+    iconView: "grid",
+    fileIconScale: Math.max(0.6, Math.min(2, Number(state.settings.pathIconScale) || 1)),
+    fileFontScale: Math.max(0.7, Math.min(1.8, Number(state.settings.pathFontScale) || 1))
   }, { pathId: id });
   const occupied = occupiedLayoutRects({ pathId: id });
   if (overlapsAny(pxFromBox(placed), occupied)) {
@@ -4865,7 +5027,14 @@ function bindTerminal() {
     window.edex.onTerminalData(({ paneId, data }) => {
       const next = `${terminalBuffers.get(paneId) || ""}${data}`.slice(-100000);
       terminalBuffers.set(paneId, next);
-      terminalInstances.get(paneId)?.write(data);
+      const terminal = terminalInstances.get(paneId);
+      if (!terminal) return;
+      const activeBuffer = terminal.buffer?.active;
+      const wasAtBottom = !activeBuffer
+        || activeBuffer.viewportY >= activeBuffer.baseY;
+      terminal.write(data, () => {
+        if (wasAtBottom) terminal.scrollToBottom?.();
+      });
     });
     window.edex.onTerminalCwd(({ paneId, cwd }) => {
       if (!paneId || !cwd) return;
@@ -4883,6 +5052,8 @@ function bindTerminal() {
   grid.style.setProperty("--terminal-columns", terminalGridMode === "1x1" ? "1" : "2");
   terminalInstances.forEach((terminal) => terminal.dispose());
   terminalInstances.clear();
+  terminalResizeObservers.forEach((observer) => observer.disconnect());
+  terminalResizeObservers.clear();
   terminalBrowserTimers.forEach((timer) => clearInterval(timer));
   terminalBrowserTimers.clear();
   grid.innerHTML = terminalPaneIds.map((id, index) => `
@@ -4916,9 +5087,18 @@ function bindTerminal() {
       terminal.open(output);
       terminal.loadAddon(new window.FitAddon.FitAddon());
       const bufferedOutput = terminalBuffers.get(id);
-      if (bufferedOutput) terminal.write(bufferedOutput);
+      if (bufferedOutput) {
+        terminal.write(bufferedOutput, () => terminal.scrollToBottom?.());
+      }
       terminal.onData((data) => window.edex.writeTerminal(id, data));
       terminal.onResize(({ cols, rows }) => window.edex.resizeTerminal(id, cols, rows));
+    }
+    if (!terminalResizeObservers.has(id) && window.ResizeObserver) {
+      const resizeObserver = new window.ResizeObserver(() => {
+        requestAnimationFrame(() => terminal.fit?.());
+      });
+      resizeObserver.observe(output);
+      terminalResizeObservers.set(id, resizeObserver);
     }
     const syncNativeBounds = () => {
       const embedded = terminalNativePanes.get(id);
@@ -4980,6 +5160,8 @@ function bindTerminal() {
       terminalStarted.delete(id);
       terminalPaneIds.splice(terminalPaneIds.indexOf(id), 1);
       terminalBuffers.delete(id);
+      terminalResizeObservers.get(id)?.disconnect();
+      terminalResizeObservers.delete(id);
       terminalInstances.get(id)?.dispose();
       terminalInstances.delete(id);
       if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
@@ -5533,6 +5715,7 @@ function stageFileNodes(stage) {
 
 function clearStageSelection(stage) {
   stageFileNodes(stage).forEach((el) => el.classList.remove("selected"));
+  fileStageCtx.get(stage)?.onSelectionChange?.();
 }
 
 function selectedPathsInStage(stage) {
@@ -5750,6 +5933,7 @@ function bindFileStage(stage, opts) {
     if (event.button !== 0) return;
     if (event.target.closest("input, textarea, .icon-rename")) return;
     selectFileNode(stage, node, event);
+    fileStageCtx.get(stage)?.onSelectionChange?.();
   });
   stage.addEventListener("contextmenu", (event) => {
     event.preventDefault();
@@ -6436,7 +6620,7 @@ async function loadFolderTabListing(tab) {
   try {
     const listing = await window.edex.listFolder(tab.path, { systemIcons: "fast" });
     tab.listing = listing;
-    tab.listingError = "";
+    tab.listingError = listing?.readError || "";
     return listing;
   } catch (err) {
     tab.listing = { items: [], total: 0 };

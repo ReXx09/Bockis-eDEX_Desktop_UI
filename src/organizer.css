@@ -449,6 +449,121 @@ body.desktop-shell #workspace {
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.25);
 }
 
+.snap-layout-picker {
+    position: fixed;
+    z-index: 120;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(7rem, 1fr));
+    gap: 0.45rem;
+    width: 16rem;
+    padding: 0.55rem;
+    background: rgba(22, 24, 30, 0.98);
+    border: 1px solid rgba(190, 198, 214, 0.42);
+    border-radius: 0.7rem;
+    box-shadow: 0 0.55rem 1.5rem rgba(0, 0, 0, 0.55);
+}
+
+.snap-layout-option {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.3rem;
+    min-width: 0;
+    padding: 0.35rem;
+    border: 1px solid rgba(190, 198, 214, 0.42);
+    border-radius: 0.35rem;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(225, 235, 245, 0.85);
+    cursor: pointer;
+}
+
+.snap-layout-option:hover,
+.snap-layout-option:focus-visible {
+    border-color: #7fe8ff;
+    background: rgba(127, 232, 255, 0.16);
+    color: #d7f8ff;
+    outline: none;
+}
+
+.snap-layout-option.occupied {
+    border-color: rgba(255, 210, 60, 0.72);
+    background: rgba(255, 210, 60, 0.1);
+}
+
+.snap-layout-option.occupied::after {
+    content: "belegt";
+    align-self: flex-end;
+    color: #ffd23c;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.snap-layout-preview {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 0.18rem;
+    height: 3.4rem;
+}
+
+.snap-layout-preview i {
+    display: block;
+    border: 1px solid rgba(210, 218, 230, 0.58);
+    border-radius: 0.12rem;
+    background: rgba(210, 218, 230, 0.13);
+}
+
+.snap-layout-preview.half-left i:nth-child(1),
+.snap-layout-preview.half-right i:nth-child(2) {
+    grid-row: 1 / 3;
+}
+
+.snap-layout-preview.half-left i:nth-child(1) {
+    grid-column: 1;
+    background: rgba(127, 232, 255, 0.62);
+    border-color: #d7f8ff;
+}
+
+.snap-layout-preview.half-right i:nth-child(2) {
+    grid-column: 2;
+    background: rgba(127, 232, 255, 0.62);
+    border-color: #d7f8ff;
+}
+
+.snap-layout-preview.third-left,
+.snap-layout-preview.third-right {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.snap-layout-preview.third-left i:first-child {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    background: rgba(127, 232, 255, 0.62);
+    border-color: #d7f8ff;
+}
+
+.snap-layout-preview.third-right i:last-child {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    background: rgba(127, 232, 255, 0.62);
+    border-color: #d7f8ff;
+}
+
+.snap-layout-option:hover .snap-layout-preview i,
+.snap-layout-option:focus-visible .snap-layout-preview i {
+    border-color: rgba(127, 232, 255, 0.7);
+}
+
+.snap-layout-preview.quarter-tl i:nth-child(1),
+.snap-layout-preview.quarter-tr i:nth-child(2),
+.snap-layout-preview.quarter-bl i:nth-child(3),
+.snap-layout-preview.quarter-br i:nth-child(4) {
+    background: rgba(127, 232, 255, 0.62);
+    border-color: #d7f8ff;
+}
+
 .macos-tags {
     padding: 0.35rem 0.8rem 0.55rem;
 }
@@ -532,8 +647,8 @@ body.desktop-shell #workspace {
 .desk-icon-face {
     position: relative;
     display: block;
-    width: 3.2rem;
-    height: 3.2rem;
+    width: var(--path-icon-size, 3.2rem);
+    height: var(--path-icon-size, 3.2rem);
     margin: 0.15rem auto 0.25rem;
     flex: 0 0 auto;
 }
@@ -569,8 +684,8 @@ body.desktop-shell #workspace {
 
 .path-stage.view-list .desk-icon-face,
 #desktop-stage.view-list .desk-icon-face {
-    width: 2rem;
-    height: 2rem;
+    width: var(--path-list-icon-size, 2rem);
+    height: var(--path-list-icon-size, 2rem);
     margin: 0 0.45rem 0 0;
 }
 
@@ -601,9 +716,9 @@ body.desktop-shell #workspace {
 .desktop-card {
     position: absolute;
     z-index: 8;
-    background: #05080d;
-    background-color: var(--card-bg, #05080d);
-    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+    background: var(--panel-surface, #05080d);
+    background-color: var(--card-bg, var(--panel-surface, #05080d));
+    border: 1px solid var(--panel-border, rgba(var(--color_r), var(--color_g), var(--color_b), 0.28));
     box-sizing: border-box;
     padding: calc(var(--grid-size) / 4);
     min-width: calc(var(--grid-size) * 4);
@@ -835,6 +950,14 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     overflow: hidden;
 }
 
+.path-card > .path-browser-toolbar {
+    flex: 0 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 0.35rem;
+    border-top: 1px solid var(--panel-border, #132b36);
+}
+
 .path-card-header {
     display: flex;
     align-items: center;
@@ -843,7 +966,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     box-sizing: border-box;
     min-height: 2.25rem;
     padding-bottom: 0.22rem;
-    border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
+    border-bottom: 1px solid var(--panel-border-strong, rgba(var(--color_r), var(--color_g), var(--color_b), 0.65));
     box-shadow: 0 0.25rem 0 rgba(var(--color_r), var(--color_g), var(--color_b), 0.08);
 }
 
@@ -866,10 +989,37 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     padding: 0;
     overflow-x: auto;
     border-bottom: 0;
-    background: #081820;
-    border: 1px solid #081820;
+    background: #000000;
+    border: 1px solid #000000;
     border-bottom: none;
     scrollbar-width: none;
+}
+
+.path-card-header .path-tab-scroll {
+    flex: 0 0 1.5rem;
+    width: 1.5rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 1px solid var(--panel-border, #29404a);
+    background: var(--panel-bg, #02060a);
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.72);
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 1.05em;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.path-card-header .path-tab-scroll:hover:not(:disabled),
+.path-card-header .path-tab-scroll:focus-visible {
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: var(--panel-surface, #07151d);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    outline: none;
+}
+
+.path-card-header .path-tab-scroll:disabled {
+    opacity: 0.28;
+    cursor: default;
 }
 
 .path-card-header .path-tab-bar::-webkit-scrollbar {
@@ -885,11 +1035,11 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     min-height: 1.75rem;
     justify-content: center;
     padding: 0.25rem 0.7rem 0.22rem;
-    border: 1px solid #29404a;
-    border-bottom-color: #29404a;
+    border: 1px solid var(--panel-border, #29404a);
+    border-bottom-color: var(--panel-border, #29404a);
     border-radius: 0.65rem 0.65rem 0 0;
-    background: #02060a;
-    color: #6aabbc;
+    background: var(--panel-bg, #02060a);
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.72);
     font-family: "Share Tech Mono", "Courier New", monospace;
     font-size: 0.78em;
     letter-spacing: 0.08em;
@@ -902,27 +1052,27 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     content: "▸";
     display: inline-block;
     margin-right: 0.32rem;
-    color: #39778b;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.55);
     font-size: 0.78em;
 }
 
 .path-card-header .path-tab:hover {
-    border-color: #39778b;
-    background: #030c14;
-    color: #8bdff2;
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: var(--panel-surface, #030c14);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
 }
 
 .path-card-header .path-tab.active {
-    border-color: #39778b;
-    border-bottom-color: #29404a;
-    background: #041018;
-    color: #d7f8ff;
-    box-shadow: inset 0 0.14rem 0 #7fe8ff;
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    border-bottom-color: var(--panel-border, #29404a);
+    background: var(--panel-surface, #041018);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    box-shadow: inset 0 0.14rem 0 rgb(var(--color_r), var(--color_g), var(--color_b));
 }
 
 .path-card-header .path-tab.active::before {
     content: "▣";
-    color: #7fe8ff;
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
 }
 
 .path-card-header .path-tab-label {
@@ -930,24 +1080,52 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 }
 
 .path-card-header .path-tab-close {
-    color: #39778b;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.55);
 }
 
 .path-card-header .path-tab-close:hover,
 .path-card-header .path-tab-close:focus-visible {
-    border-color: #7fe8ff;
-    color: #d7f8ff;
-    background: rgba(127, 232, 255, 0.16);
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.16);
 }
 
 .path-card {
-    background: #050b10;
-    border-color: #203b47;
+    background: var(--panel-surface, #050b10);
+    border-color: var(--panel-border, #203b47);
     box-shadow: inset 0 0 0 1px rgba(127, 232, 255, 0.04);
 }
 
 .path-card .card-body {
-    background: #02060a;
+    background: var(--panel-bg, #02060a);
+}
+
+.path-info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    flex: 0 0 auto;
+    min-height: 1.25rem;
+    margin-top: 0.3rem;
+    padding: 0.18rem 0.45rem;
+    border-top: 1px solid #132b36;
+    background: #050b10;
+    color: #39778b;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.72em;
+    letter-spacing: 0.04em;
+}
+
+.path-info-bar span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.path-info-bar [data-path-info-selected] {
+    color: #8bdff2;
 }
 
 .path-tree {
@@ -955,11 +1133,12 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     flex-shrink: 0;
     min-width: 9rem;
     max-width: 35%;
+    font-size: var(--path-font-size, 1em);
     overflow: auto;
     padding: 0.35rem 0.25rem;
-    border-right: 1px solid #132b36;
-    background: #02060a;
-    scrollbar-color: #244b5a #02060a;
+    border-right: 1px solid var(--panel-border, #132b36);
+    background: var(--panel-surface, #05080d);
+    scrollbar-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.35) var(--panel-surface, #05080d);
 }
 
 .path-tree-resizer {
@@ -1045,8 +1224,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     min-width: 0;
     margin: 0 0 0.35rem;
     padding: 0.2rem 0.25rem;
-    border-bottom: 1px solid #132b36;
-    background: #050b10;
+    border-bottom: 1px solid var(--panel-border, #132b36);
+    background: var(--panel-surface, #050b10);
 }
 
 .path-browser-toolbar button {
@@ -1391,7 +1570,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 .path-stage.view-grid,
 #desktop-stage.view-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(6.6rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--path-grid-min, 6.6rem), 1fr));
     grid-auto-rows: min-content;
     align-content: start;
     justify-items: center;
@@ -1411,6 +1590,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     flex-direction: column;
     border: 1px solid transparent;
     background: #030a10;
+    font-size: var(--path-font-size, 1em);
     transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
@@ -1439,6 +1619,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     padding: 0.25rem 0.5rem;
     border: 1px solid transparent;
     background: #030a10;
+    font-size: var(--path-font-size, 1em);
 }
 
 .path-stage.view-list .desk-icon-face svg,
@@ -1447,8 +1628,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 #desktop-stage.view-list .desk-icon-face img.sys-icon,
 .path-stage.view-list .desk-icon > svg,
 #desktop-stage.view-list .desk-icon > svg {
-    width: 2rem;
-    height: 2rem;
+    width: var(--path-list-icon-size, 2rem);
+    height: var(--path-list-icon-size, 2rem);
     margin: 0;
     flex-shrink: 0;
 }
@@ -1457,6 +1638,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 #desktop-stage.view-list .desk-icon h3 {
     flex: 1;
     text-align: left;
+    font-size: var(--path-label-size, 0.78rem);
 }
 
 .path-stage.view-list .desk-icon .meta,
@@ -1465,6 +1647,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     opacity: 0.55;
     margin-left: auto;
     flex-shrink: 0;
+    font-size: var(--path-label-size, 0.78rem);
 }
 
 .path-empty {
@@ -1664,6 +1847,10 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.path-stage.view-grid .desk-icon h3 {
+    font-size: var(--path-label-size, 0.78rem);
 }
 
 .desk-icon:hover,

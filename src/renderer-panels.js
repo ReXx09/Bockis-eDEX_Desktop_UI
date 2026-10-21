@@ -302,7 +302,7 @@ function cardToolsHtml({ allowMinimize = true } = {}) {
 }
 
 function closeCardMenus() {
-  document.querySelectorAll(".card-menu, .color-palette").forEach((m) => m.remove());
+  document.querySelectorAll(".card-menu, .color-palette, .snap-layout-picker").forEach((m) => m.remove());
 }
 
 function openCardMenu(anchorBtn, items, pos) {

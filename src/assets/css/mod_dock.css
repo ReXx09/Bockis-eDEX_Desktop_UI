@@ -91,6 +91,65 @@
     cursor: pointer;
 }
 
+.dock-item.has-tab-group {
+    position: relative;
+    overflow: visible;
+    background: rgba(127, 232, 255, 0.07);
+    border-color: rgba(127, 232, 255, 0.28);
+}
+
+.dock-item.has-tab-group:hover,
+.dock-item.has-tab-group:focus-visible {
+    background: rgba(127, 232, 255, 0.16);
+    border-color: rgba(127, 232, 255, 0.72);
+}
+
+.dock-item.has-tab-group::after {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 0.45rem);
+    z-index: 20;
+    width: max-content;
+    max-width: 18rem;
+    padding: 0.42rem 0.58rem;
+    border: 1px solid rgba(127, 232, 255, 0.48);
+    background: rgba(2, 8, 13, 0.97);
+    box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.48);
+    color: #d7f8ff;
+    content: attr(data-dock-tabs);
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 0.25rem);
+    transition: opacity 120ms ease, transform 120ms ease;
+    white-space: normal;
+}
+
+.dock-item.has-tab-group:hover::after,
+.dock-item.has-tab-group:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.dock-tab-count {
+    position: absolute;
+    top: 0.18rem;
+    right: 0.22rem;
+    min-width: 1.05rem;
+    height: 1.05rem;
+    padding: 0 0.18rem;
+    border: 1px solid rgba(127, 232, 255, 0.65);
+    border-radius: 50%;
+    background: rgba(2, 8, 13, 0.92);
+    color: #d7f8ff;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.68rem;
+    line-height: 0.95rem;
+    text-align: center;
+}
+
 .dock-item-icon {
     width: 3.1rem;
     height: 3.1rem;

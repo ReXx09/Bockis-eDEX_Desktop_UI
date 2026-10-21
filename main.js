@@ -118,6 +118,14 @@ let syncing = false;
 let syncTimer = null;
 let quitting = false;
 let exitDesktopRestore = null;
+let desktopOverlayReady = false;
+
+function activateDesktopOverlay() {
+  if (desktopOverlayReady || quitting) return;
+  desktopOverlayReady = true;
+  hideDesktopIcons(app.getPath("userData")).catch((err) => console.error("desktop icons", err));
+  scheduleWallpaper();
+}
 
 function restoreDesktopStateOnExit() {
   if (!exitDesktopRestore) {
@@ -132,6 +140,22 @@ function restoreDesktopStateOnExit() {
 let tray = null;
 const terminalSessions = new Map();
 const terminalSessionShells = new Map();
+const terminalSessionStopping = new Set();
+
+function stopTerminalSession(key, session) {
+  if (!session || terminalSessionStopping.has(session)) return;
+  terminalSessionStopping.add(session);
+  if (terminalSessions.get(key) === session) terminalSessions.delete(key);
+  terminalSessionShells.delete(key);
+  try {
+    session.kill();
+  } catch (error) {
+    appLog.warn("terminal.stop", "Terminal-Sitzung konnte nicht beendet werden", {
+      paneId: key,
+      error: error.message
+    });
+  }
+}
 const approvedPathRoots = new PathPolicy();
 
 function systemText(de, en, zh) {
@@ -429,6 +453,11 @@ function createWindowForDisplay(display, index) {
   });
   win.webContents.on("render-process-gone", (_e, details) => {
     console.error("render-process-gone", display.id, details);
+    if (!quitting && !win.isDestroyed()) {
+      setTimeout(() => {
+        if (!quitting && !win.isDestroyed()) win.webContents.reload();
+      }, 750);
+    }
   });
 
   win.once("ready-to-show", () => {
@@ -437,6 +466,7 @@ function createWindowForDisplay(display, index) {
       win.setBackgroundColor("#01000000");
       win.setIgnoreMouseEvents(true, { forward: true });
       showBehindApps(win);
+      activateDesktopOverlay();
     }
   });
 
@@ -628,9 +658,12 @@ if (!gotLock) {
     fileSearch.rebuild().catch((err) => console.error("file-search", err));
     syncAllWindows();
     setTimeout(() => syncAllWindows(), 600);
-    scheduleWallpaper();
+    [1500, 3500, 7000].forEach((delay) => {
+      setTimeout(() => {
+        if (!desktopOverlayReady && !quitting) syncAllWindows();
+      }, delay);
+    });
     scheduleRainmeter();
-    hideDesktopIcons(app.getPath("userData")).catch((err) => console.error("desktop icons", err));
 
     screen.on("display-added", () => scheduleSync("added"));
     screen.on("display-removed", () => scheduleSync("removed"));
@@ -1007,7 +1040,20 @@ ipcMain.handle("list-folder", async (event, root, options) => {
   if (!root) throw new Error("未選擇路徑");
   requireTrustedWindow(event);
   const opts = { systemIcons: "fast", ...(options || {}) };
-  return listFolder(root, opts);
+  try {
+    return await listFolder(root, opts);
+  } catch (error) {
+    if (error?.code === "EACCES" || error?.code === "EPERM") {
+      return {
+        root,
+        items: [],
+        destFolders: [],
+        total: 0,
+        readError: `Ordner kann nicht gelesen werden (keine Berechtigung): ${root}`
+      };
+    }
+    throw error;
+  }
 });
 
 ipcMain.handle("list-drives", async (event) => {
@@ -1057,7 +1103,7 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
   const win = requireTrustedWindow(event);
   if (!nodePty) throw new Error("ConPTY ist nicht verfügbar. Bitte node-pty für Electron rebuilden.");
   const key = `${win.id}:${String(paneId || "default")}`;
-  terminalSessions.get(key)?.kill();
+  stopTerminalSession(key, terminalSessions.get(key));
   const workingDirectory = typeof cwd === "string" && fs.existsSync(cwd) && fs.statSync(cwd).isDirectory()
     ? cwd
     : os.homedir();
@@ -1100,6 +1146,7 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
   };
   session.onData(sendData);
   session.onExit(({ exitCode }) => {
+    terminalSessionStopping.delete(session);
     if (terminalSessions.get(key) === session) terminalSessions.delete(key);
     terminalSessionShells.delete(key);
     if (!win.isDestroyed()) win.webContents.send("terminal-exit", { paneId, exitCode: exitCode ?? 1 });
@@ -1155,11 +1202,7 @@ ipcMain.on("terminal-close", (event, paneId) => {
   const win = getSenderWindow(event);
   const key = `${win?.id}:${String(paneId || "default")}`;
   const session = terminalSessions.get(key);
-  if (session) {
-    session.kill();
-    terminalSessions.delete(key);
-    terminalSessionShells.delete(key);
-  }
+  stopTerminalSession(key, session);
 });
 ipcMain.handle("search-files", async (event, query, limit) => {
   requireTrustedWindow(event);
