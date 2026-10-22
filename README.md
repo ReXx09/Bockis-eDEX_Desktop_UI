@@ -23,33 +23,23 @@ Dieses Projekt ist kein Terminal-Emulator wie das originale eDEX, sondern:
 
 ## Screenshots
 
-### Gesamter Hacker-Desktop
+Die aktuelle Oberfläche kombiniert Terminal, Systemdesktop, Überwachungs-Panels,
+Laufwerke, Datei-Container und Plugin-Module in einer frei anpassbaren
+Mehrmonitor-Ansicht.
 
-Überwachungs-Panels auf beiden Seiten, der zentrale Systemdesktop-Container sowie Laufwerke, Code-Regen und Taschenrechner vor einem Raster-Hintergrund.
-
-![Gesamter Hacker-Desktop]()
-
-### Cockpit-Radar, CPU-Versorgungspfad und Kalender
-
-Überlagerbare Plugin-Container: Radar-Cockpit, Darstellung des CPU-Kernpfads sowie Kalender mit Feiertagen und Terminvorschau.
-
-![Cockpit, CPU-Pfad und Kalender]()
-
-### Systemdesktop-Container
-
-Filterung nach Kategorien wie Ordner, Symbole, Dateien und Bilder; mit Tabs, Kontextmenü zum Aktualisieren und automatischen Sortieren, Datei-Drag-and-drop sowie schneller Aktualisierung.
-
-
+![Bockis-eDEX Desktop UI](docs/screenshots/Screenshot%20Display-UI.png)
 
 ## Hauptfunktionen
 
 - **Mehrmonitor-Unterstützung**: Eigenes Fenster pro Monitor; der **Systemdesktop wird nur auf dem Hauptmonitor angezeigt**; die Rasterdichte wird mit dem Maßstab des Hauptmonitors synchronisiert.
+- **Per-Monitor-Layout und Wallpaper**: Layouts, Raster und Wallpaper werden pro Display berücksichtigt; beim Beenden werden Windows-Desktop und Symbolsichtbarkeit wiederhergestellt.
 - **Container-System**: Verschieben, Skalieren, Sperren und Hintergrundfarbe ändern; neue Container lassen sich nacheinander hinzufügen und suchen automatisch freie Rasterzellen.
 - **Container hinzufügen**: Panels, Desktop-Container und Ordner-Container werden über den zentralen Dialog hinzugefügt, automatisch platziert und im aktuellen Monitor-Layout gespeichert.
 - **Panel-Setup**: Jedes Panel kann über das Zahnrad eigene Einstellungen, Hintergrundfarbe und Panel-Icon erhalten.
 - **Systemdesktop**: Filter, Tabs, Kontextmenü für „Inhalt aktualisieren“ und „Automatisch sortieren“, schnelle Aktualisierung nach externem Drag-and-drop.
 - **Pfad-Container**: Ordner als eigenständige Browserbereiche hinzufügen; neue Ordner werden nach Eingabe eines Namens erstellt.
 - **Plugins**: Taschenrechner, Musik-Kassette, Cockpit, CPU-Versorgungspfad, Code-Regen, Kalender und weitere.
+- **Erweiterte Datei-Darstellung**: Zentrale Datei-Markierungen über IPC, transparente Datei- und Ordner-Icons sowie Raster- und Listenansichten.
 - **Kalendereinträge**: Datum doppelt anklicken, um Einträge zu bearbeiten; Einträge können nach WeChat kopiert werden.
 - **Schnellsuche**: Dateinamensuche auf lokalen Laufwerken und in zusätzlichen Stammverzeichnissen.
 - **Wetter-Panel**: Ortsbasierte aktuelle Wetterdaten und 4-Tage-Prognose über Open-Meteo, ohne API-Key; der Ort kann direkt im Panel gesucht werden.
@@ -57,6 +47,8 @@ Filterung nach Kategorien wie Ordner, Symbole, Dateien und Bilder; mit Tabs, Kon
 - **Task-Dock**: Angeheftete Windows-Taskleisten-Apps werden dynamisch mit ihren Original-Icons übernommen und können direkt aus dem Dock gestartet werden.
 - **Autostart-Panel**: Windows-Autostart-Einträge werden dynamisch aus der Startup-Konfiguration gelesen und mit Name, Quelle, Benutzer und Startbefehl angezeigt.
 - **Log-Panel**: Das JSON-Lines-Fehlerprotokoll kann als Panel mit Level-Filtern und automatischer Aktualisierung geöffnet werden.
+- **Bootloader und Branding**: Transparenter, komprimierter WebP-Bootscreen sowie ein mehrstufiges Windows-ICO für Anwendung, Installer und Verknüpfungen.
+- **Persistente Einstellungen**: Theme-, Layout-, Display-, Dock- und Desktop-Einstellungen werden gespeichert und beim Start wieder geladen.
 
 ## Terminal
 
@@ -134,7 +126,7 @@ Mit einem expliziten Installer-Pfad kann auch eine Release-Datei außerhalb des
 Projekts verwendet werden:
 
 ```powershell
-.\install-tron.ps1 -InstallerPath "C:\Downloads\Bockis-eDEX-Desktop-UI-Setup-1.2.4.exe"
+.\install-tron.ps1 -InstallerPath "C:\Downloads\Bockis-eDEX-Desktop-UI-Setup-1.2.7.exe"
 ```
 
 Für einen entpackten Test-Build:
@@ -153,23 +145,7 @@ npm test
 
 - Repository: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI
 - Releases: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases
-- Aktueller Release: `v1.2.4`
-
-### winget
-
-Das Repository enthält unter `manifests/` ein vorbereitetes winget-Manifest
-für `ReXx09.Bockis-eDEXDesktopUI`. Sobald das Repository öffentlich ist und
-das Release-Asset erreichbar ist, kann das Paket lokal geprüft und installiert
-werden:
-
-```powershell
-winget validate .\manifests\ReXx09\Bockis-eDEXDesktopUI\1.2.4
-winget install --id ReXx09.Bockis-eDEXDesktopUI --source winget
-```
-
-Das Manifest verweist auf das Release-Asset, enthält dessen SHA-256-Prüfsumme
-und kennzeichnet das Projekt als GPL-3.0-Weiterentwicklung des ursprünglichen
-[eDEX Desktop Organizer](https://github.com/bananamax9113/edex-desktop-organizer).
+- Aktueller Release: `v1.2.7`
 
 ## Lizenz und Quellen
 

@@ -7,7 +7,7 @@ const required = [
   "css/boot_screen.css",
   "file-icons",
   "fonts",
-  "icons/branding/logo.png",
+  "icons/branding/logo.webp",
   "icons/file/file-icons.json",
   "misc/boot_log.txt",
   "misc/grid.json",

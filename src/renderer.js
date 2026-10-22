@@ -71,15 +71,7 @@ const PANEL_META = {
   taskdock: { title: "Task-Panel", box: { x: 25, y: 86, w: 50, h: 7 } }
 };
 
-const MACOS_TAGS = [
-  { id: "red", label: "紅色", color: "#ff3b30" },
-  { id: "orange", label: "橙色", color: "#ff9500" },
-  { id: "yellow", label: "黃色", color: "#ffcc00" },
-  { id: "green", label: "綠色", color: "#28cd41" },
-  { id: "blue", label: "藍色", color: "#007aff" },
-  { id: "purple", label: "紫色", color: "#af52de" },
-  { id: "gray", label: "灰色", color: "#8e8e93" }
-];
+let MACOS_TAGS = [];
 
 const fileStageCtx = window.edexFileStageCtx;
 let terminalGridMode = "1x1";
@@ -383,12 +375,6 @@ async function setRamGaugeMode(mode) {
 
 window.setRamGaugeMode = setRamGaugeMode;
 
-function wallpaperGridPx() {
-  const raw = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--grid-size"));
-  if (Number.isFinite(raw) && raw > 4) return raw;
-  return gridSize();
-}
-
 function searchFontSize() {
   const raw = Number(state.settings?.searchFontSize);
   if (!Number.isFinite(raw)) return 12;
@@ -468,57 +454,6 @@ const overlapsAny = (...args) => window.edexDesktopLayout.overlapsAny(...args);
 const resolveMoveNoOverlap = (...args) => window.edexDesktopLayout.resolveMoveNoOverlap(...args);
 const clampResizeNoOverlap = (...args) => window.edexDesktopLayout.clampResizeNoOverlap(...args);
 const snapAllLayoutToGrid = (...args) => window.edexDesktopLayout.snapAllLayoutToGrid(...args);
-
-function separateLayoutRects() {
-  const g = gridSize();
-  const ws = workspaceRect();
-  const entries = [];
-  Object.keys(state.layout).forEach((id) => {
-    if (!state.layout[id] || id === "status" || state.layout[id].minimized) return;
-    entries.push({
-      px: pxFromBox(state.layout[id]),
-      apply: (px) => applyBoxPx(state.layout[id], px.x, px.y, px.w, px.h)
-    });
-  });
-  if (state.desktopEnabled !== false && state.desktopStage && !state.desktopStage.minimized) {
-    entries.push({
-      px: pxFromBox(state.desktopStage),
-      apply: (px) => applyBoxPx(state.desktopStage, px.x, px.y, px.w, px.h)
-    });
-  }
-  state.pathCards.forEach((card) => {
-    if (card.minimized) return;
-    entries.push({
-      px: pxFromBox(card),
-      apply: (px) => applyBoxPx(card, px.x, px.y, px.w, px.h)
-    });
-  });
-  entries.forEach((entry, index) => {
-    const others = entries.filter((_, i) => i !== index).map((item) => item.px);
-    let { x, y, w, h } = entry.px;
-    x = alignGrid(x);
-    y = alignGrid(y);
-    w = alignGridSpan(w, 2);
-    h = alignGridSpan(h, 2);
-    if (overlapsAny({ x, y, w, h }, others)) {
-      let found = false;
-      for (let dy = 0; dy < 48 && !found; dy += 1) {
-        for (let dx = 0; dx < 48 && !found; dx += 1) {
-          const cx = x + dx * g;
-          const cy = y + dy * g;
-          if (cx < 0 || cy < 0 || cx + w > ws.width || cy + h > ws.height) continue;
-          if (!overlapsAny({ x: cx, y: cy, w, h }, others)) {
-            x = cx;
-            y = cy;
-            found = true;
-          }
-        }
-      }
-    }
-    entry.px = { x, y, w, h };
-    entry.apply(entry.px);
-  });
-}
 
 /** Occupied card rects from layout state (DOM may not exist yet during add). */
 function occupiedLayoutRects(exclude = {}) {
@@ -1231,7 +1166,7 @@ async function boot() {
         <div class="boot-log" data-boot-log aria-live="polite"></div>
       </section>
       <aside class="boot-brand-pane">
-        <img class="boot-logo" src="../assets/icons/branding/logo.png" alt="Bockis eDEX">
+        <img class="boot-logo" src="../assets/icons/branding/logo.webp" alt="Bockis eDEX">
         <pre class="boot-ascii">${BOOT_ASCII_LOGO}</pre>
         <div class="boot-tagline">DESKTOP UI / TRON SYSTEM</div>
         <div class="boot-progress-panel">
@@ -1244,7 +1179,7 @@ async function boot() {
       </aside>
     </div>
     <div class="boot-final" data-boot-final>
-      <img src="../assets/icons/branding/logo.png" alt="Bockis eDEX">
+      <img src="../assets/icons/branding/logo.webp" alt="Bockis eDEX">
       <h1>BOCKIS-eDEX</h1>
       <div class="sub">SYSTEM ONLINE</div>
       <div class="count" data-boot-count>starte Dashboard ...</div>
@@ -1662,7 +1597,7 @@ async function shutdown() {
         <div class="shutdown-log" data-shutdown-log aria-live="polite"></div>
       </div>
       <aside class="shutdown-brand">
-        <img src="../assets/icons/branding/logo.png" alt="Bockis eDEX">
+        <img src="../assets/icons/branding/logo.webp" alt="Bockis eDEX">
         <strong>BOCKIS-eDEX</strong>
         <span>SYSTEM POWER DOWN</span>
       </aside>
@@ -1670,7 +1605,7 @@ async function shutdown() {
     <div class="crt-beam" aria-hidden="true"></div>
     <div class="crt-dot" aria-hidden="true"></div>
     <div class="shutdown-final" data-shutdown-final>
-      <img src="../assets/icons/branding/logo.png" alt="Bockis eDEX">
+      <img src="../assets/icons/branding/logo.webp" alt="Bockis eDEX">
       <strong>BOCKIS-eDEX</strong>
       <span>SYSTEM POWER DOWN</span>
     </div>`;
@@ -1888,21 +1823,6 @@ function renderTaskDockItems() {
   });
 }
 
-function taskEmbedLayout() {
-  const zone = centralZoneRect();
-  const inset = Math.max(6, Math.round(gridSize() * 0.35));
-  const header = Math.max(34, Math.round(gridSize() * 1.35));
-  const width = Math.max(320, Math.min(zone.width - inset * 2, Math.round(zone.width * 0.68)));
-  const height = Math.max(220, Math.min(zone.height - inset * 2, Math.round(zone.height * 0.68)));
-  const frame = {
-    x: zone.x + Math.max(inset, Math.round((zone.width - width) / 2)),
-    y: zone.y + Math.max(inset, Math.round((zone.height - height) / 2)),
-    w: width,
-    h: height
-  };
-  return { frame, native: taskEmbedNativeBounds(frame, header) };
-}
-
 function taskEmbedNativeBounds(frame) {
   const header = Math.max(34, Math.round(gridSize() * 1.35));
   return {
@@ -1911,16 +1831,6 @@ function taskEmbedNativeBounds(frame) {
     w: frame.w,
     h: Math.max(80, frame.h - header)
   };
-}
-
-function syncTaskEmbedBounds(frame, hwnd) {
-  if (!hwnd) return;
-  window.edex?.embedBounds?.({ hwnd, bounds: taskEmbedNativeBounds({
-    x: frame.offsetLeft,
-    y: frame.offsetTop,
-    w: frame.offsetWidth,
-    h: frame.offsetHeight
-  }) });
 }
 
 function removeTaskEmbedFrame() {
@@ -2050,85 +1960,6 @@ async function setClockLedColor(color) {
     // Keep local value if save fails.
   }
   toast(`Uhr-Hervorhebung auf ${next} geändert`);
-}
-
-function pickClockLedColor(ctx) {
-  closeCardMenus();
-  window.edex?.setMouseIgnore?.(false);
-  const palette = document.createElement("div");
-  palette.className = "color-palette";
-  const swatches = [
-    { label: "Weiß", color: "#ffffff" },
-    { label: "Theme-Farbe", color: rgbToHex(state.theme?.colors?.r, state.theme?.colors?.g, state.theme?.colors?.b) },
-    ...themeColorSwatches().filter((s) => s.label !== "深底" && s.label !== "黑"),
-    { label: "Cyan", color: "#2ee6c7" },
-    { label: "Amber", color: "#ffb347" }
-  ];
-  const seen = new Set();
-  const list = swatches.filter((item) => {
-    const key = toHex6(item.color);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  const current = clockLedColor();
-  palette.innerHTML = `
-    <div class="color-palette-title">Uhr-Hervorhebung</div>
-    <label class="color-palette-custom">Benutzerdefiniert
-      <input type="color" id="clock_led_picker" value="${escapeHtml(current)}">
-    </label>
-    <div class="color-palette-grid">
-      ${list.map((item, i) => {
-        const fill = toHex6(item.color);
-        return `<button type="button" class="color-swatch" data-idx="${i}" title="${escapeHtml(item.label)}" style="background:${escapeHtml(fill)}"></button>`;
-      }).join("")}
-    </div>
-  `;
-  document.body.appendChild(palette);
-  window.edexI18n?.translatePage?.(palette);
-  const rect = ctx.el?.getBoundingClientRect?.() || { right: 80, top: 80 };
-  const pw = palette.offsetWidth;
-  const ph = palette.offsetHeight;
-  let left = rect.left;
-  let top = rect.top + 36;
-  if (left < 8) left = 8;
-  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
-  if (top + ph > window.innerHeight - 8) top = Math.max(8, rect.top - ph - 8);
-  palette.style.left = `${left}px`;
-  palette.style.top = `${top}px`;
-
-  const apply = (color) => {
-    if (!color) return;
-    setClockLedColor(color);
-  };
-
-  window.edexI18n?.translatePage?.(palette);
-  palette.addEventListener("pointerdown", (event) => {
-    event.stopPropagation();
-    window.edex?.setMouseIgnore?.(false);
-  }, true);
-  palette.querySelectorAll("[data-idx]").forEach((btn) => {
-    const choose = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const item = list[Number(btn.dataset.idx)];
-      if (item?.color) apply(item.color);
-      closeCardMenus();
-    };
-    btn.addEventListener("click", choose);
-  });
-  const picker = palette.querySelector("#clock_led_picker");
-  picker?.addEventListener("input", () => apply(picker.value));
-  picker?.addEventListener("change", () => {
-    apply(picker.value);
-    closeCardMenus();
-  });
-  const dismiss = (event) => {
-    if (palette.contains(event.target)) return;
-    closeCardMenus();
-    window.removeEventListener("pointerdown", dismiss, true);
-  };
-  setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
 }
 
 function fabBarHtml() {
@@ -2895,77 +2726,6 @@ function themeColorSwatches() {
     seen.add(key);
     return true;
   });
-}
-
-function pickCardBackground(ctx) {
-  closeCardMenus();
-  window.edex?.setMouseIgnore?.(false);
-  const palette = document.createElement("div");
-  palette.className = "color-palette";
-  const swatches = [...themeColorSwatches(), { label: "Standard", color: "" }];
-  const current = colorToFill(ctx.getBg?.()) || "#05080d";
-  const pickerValue = current.startsWith("#") ? current : (toHex6(current) || "#05080d");
-  palette.innerHTML = `
-    <div class="color-palette-title">Panel-Hintergrund</div>
-    <label class="color-palette-custom">Benutzerdefiniert
-      <input type="color" id="card_bg_picker" value="${escapeHtml(pickerValue)}">
-    </label>
-    <div class="color-palette-grid">
-      ${swatches.map((item, i) => {
-        const fill = item.color ? colorToFill(item.color) : "transparent";
-        const extra = item.color ? "" : " none";
-        return `<button type="button" class="color-swatch${extra}" data-idx="${i}" title="${escapeHtml(item.label)}" style="background:${escapeHtml(fill)}">${item.color ? "" : "×"}</button>`;
-      }).join("")}
-    </div>
-  `;
-  document.body.appendChild(palette);
-  const rect = ctx.el?.getBoundingClientRect?.() || { right: 80, top: 80 };
-  const pw = palette.offsetWidth;
-  const ph = palette.offsetHeight;
-  let left = rect.right - pw;
-  let top = rect.top + 36;
-  if (left < 8) left = 8;
-  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
-  if (top + ph > window.innerHeight - 8) top = Math.max(8, rect.top - ph - 8);
-  palette.style.left = `${left}px`;
-  palette.style.top = `${top}px`;
-  let picking = false;
-  const paint = (color) => {
-    ctx.setBg?.(color);
-    applyCardBg(ctx.el, color);
-    persistLayout();
-  };
-  palette.addEventListener("pointerdown", (event) => {
-    event.stopPropagation();
-    window.edex?.setMouseIgnore?.(false);
-  }, true);
-  palette.querySelectorAll("[data-idx]").forEach((btn) => {
-    btn.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const item = swatches[Number(btn.dataset.idx)];
-      paint(item?.color || "");
-      closeCardMenus();
-    });
-  });
-  const picker = palette.querySelector("#card_bg_picker");
-  picker?.addEventListener("pointerdown", (event) => {
-    event.stopPropagation();
-    picking = true;
-    window.edex?.setMouseIgnore?.(false);
-  });
-  picker?.addEventListener("input", () => paint(picker.value));
-  picker?.addEventListener("change", () => {
-    paint(picker.value);
-    picking = false;
-    closeCardMenus();
-  });
-  const dismiss = (event) => {
-    if (picking || palette.contains(event.target)) return;
-    closeCardMenus();
-    window.removeEventListener("pointerdown", dismiss, true);
-  };
-  setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
 }
 
 function bindFileDrop(el, getDest, onDone) {
@@ -3787,10 +3547,6 @@ function bindAutostartPanel() {
   root.querySelector("[data-autostart-refresh]")?.addEventListener("click", load);
   load();
   autostartPanelTimer = setInterval(load, 10000);
-}
-
-function updateDesktopViewToggle() {
-  // View toggle moved into the more-actions menu.
 }
 
 function toggleIconView(kind, pathId) {
@@ -6421,6 +6177,13 @@ window.addEventListener("keydown", (event) => {
   bindUiErrorLogging();
   logUiAction("ui.start", "Renderer gestartet");
   state.bootstrap = await window.edex.bootstrap();
+  const fileTags = await window.edex.getFileTags();
+  if (!Array.isArray(fileTags) || fileTags.some((tag) =>
+    !tag || typeof tag.id !== "string" || typeof tag.label !== "string" || typeof tag.color !== "string"
+  )) {
+    throw new Error("Datei-Markierungen konnten nicht geladen werden");
+  }
+  MACOS_TAGS = fileTags;
   state.settings = state.bootstrap.settings || {};
   try {
     state.windowsColors = await window.edex.getWindowsColors?.();

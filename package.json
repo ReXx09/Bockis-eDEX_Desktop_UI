@@ -70,7 +70,6 @@
         }
       ],
       "icon": "assets/icons/branding/app.ico",
-      "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false
     },
     "nsis": {

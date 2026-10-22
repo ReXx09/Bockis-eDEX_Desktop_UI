@@ -294,16 +294,6 @@
     if (header) header.textContent = info.externalIp || info.ip4 || "0.0000, 0.0000";
   }
 
-  function toPoints(series, w, h, invert) {
-    const max = Math.max(1, ...series);
-    return series.map((v, i) => {
-      const x = (i / Math.max(1, series.length - 1)) * w;
-      const ratio = Math.max(0, Math.min(1, v / max));
-      const y = invert ? 2.4 + ratio * (h - 5) : h - ratio * (h - 5) - 2.4;
-      return { x, y };
-    });
-  }
-
   function strokeArcSpline(ctx, pts) {
     if (!pts.length) return;
     ctx.beginPath();
@@ -323,52 +313,6 @@
       const cp2y = p2.y - (p3.y - p1.y) / 6;
       ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
     }
-  }
-
-  function drawSeries(canvas, series, palette, invert) {
-    // Bar chart (柱狀) for network traffic
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(40, canvas.clientWidth || 200);
-    const h = Math.max(24, canvas.clientHeight || 40);
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    if (!series.length) return;
-
-    const max = Math.max(1, ...series);
-    const n = series.length;
-    const gap = Math.max(0.5, Math.min(2.2, w / (n * 4)));
-    const barW = Math.max(1.2, (w - gap * (n + 1)) / n);
-
-    for (let i = 0; i < n; i += 1) {
-      const v = Math.max(0, series[i] || 0);
-      const ratio = Math.max(0.02, Math.min(1, v / max));
-      const bh = Math.max(1, ratio * (h - 3));
-      const x = gap + i * (barW + gap);
-      const y = invert ? 1.5 : h - bh - 1.5;
-      const grad = ctx.createLinearGradient(0, invert ? 0 : h, 0, invert ? h : 0);
-      grad.addColorStop(0, palette.fill0);
-      grad.addColorStop(1, palette.stroke);
-      ctx.fillStyle = grad;
-      ctx.shadowColor = palette.glow;
-      ctx.shadowBlur = i === n - 1 ? 5 : 0;
-      ctx.fillRect(x, y, barW, bh);
-    }
-    ctx.shadowBlur = 0;
-
-    // Latest bar outline
-    const last = n - 1;
-    const lv = Math.max(0, series[last] || 0);
-    const lr = Math.max(0.02, Math.min(1, lv / max));
-    const lbh = Math.max(1, lr * (h - 3));
-    const lx = gap + last * (barW + gap);
-    const ly = invert ? 1.5 : h - lbh - 1.5;
-    ctx.strokeStyle = palette.stroke;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(lx + 0.5, ly + 0.5, Math.max(0.5, barW - 1), Math.max(0.5, lbh - 1));
   }
 
   function cpuLoadColor(pct) {
@@ -465,47 +409,6 @@
       const y = h - ratio * (h - 5) - 2.4;
       return { x, y };
     });
-  }
-
-  function drawMultiSeries(canvas, seriesList, colorKey) {
-    if (!canvas || !seriesList?.length) return;
-    const ctx = canvas.getContext("2d");
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(40, canvas.clientWidth || 200);
-    const h = Math.max(24, canvas.clientHeight || 40);
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    const usable = seriesList.filter((s) => s.length >= 2);
-    if (!usable.length) return;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.lineWidth = 1.05;
-    usable.forEach((series, i) => {
-      const pts = toPointsFixed(series.map((v) => Math.max(0, Math.min(100, v))), w, h, 100);
-      ctx.strokeStyle = coreStroke(i, usable.length, colorKey);
-      ctx.globalAlpha = 0.5 + (0.5 * (i + 1)) / usable.length;
-      strokeArcSpline(ctx, pts);
-      ctx.stroke();
-    });
-    ctx.globalAlpha = 1;
-  }
-
-  function ensureCoreBars(host, count) {
-    if (!host) return [];
-    if (host.childElementCount !== count) {
-      host.innerHTML = Array.from({ length: count }, (_, i) => `
-        <div class="cpu-core" data-core="${i}" title="Core ${i}">
-          <div class="cpu-core-track">
-            <i></i>
-            <span class="cpu-core-idx">${i}</span>
-          </div>
-          <span class="cpu-core-pct">0</span>
-        </div>
-      `).join("");
-    }
-    return [...host.querySelectorAll(".cpu-core")];
   }
 
   function drawMemGauge(canvas, usedPct, availPct, valueText = `${Math.round(usedPct)}%`, valueLabel = "USED") {

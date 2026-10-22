@@ -1452,6 +1452,10 @@ ipcMain.handle("list-desktop-files", async (event) => {
   }
   return listing;
 });
+ipcMain.handle("get-file-tags", (event) => {
+  requireTrustedWindow(event);
+  return fileOps.MACOS_TAGS.map((tag) => ({ ...tag }));
+});
 
 ipcMain.handle("create-folder", async (event, parent, folderName) => {
   requireTrustedWindow(event);

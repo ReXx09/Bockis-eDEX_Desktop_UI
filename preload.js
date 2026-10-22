@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld("edex", {
   listFolder: (root, options) => ipcRenderer.invoke("list-folder", root, options || {}),
   listDesktopShortcuts: (options) => ipcRenderer.invoke("list-desktop-shortcuts", options),
   listDesktopFiles: () => ipcRenderer.invoke("list-desktop-files"),
+  getFileTags: () => ipcRenderer.invoke("get-file-tags"),
   listDrives: () => ipcRenderer.invoke("list-drives"),
 	runTerminalCommand: (command, cwd) => ipcRenderer.invoke("terminal-run", command, cwd),
   createTerminal: (paneId, cwd, shellType) => ipcRenderer.invoke("terminal-create", paneId, cwd, shellType),
