@@ -185,24 +185,24 @@
 
 .dock-item-icon-image { object-fit: contain; }
 
-.dock-item-icon-cpu { background-image: url("../icons/dock/cpu.png"); }
-.dock-item-icon-desktop { background-image: url("../icons/dock/desktop.png"); }
-.dock-item-icon-processes { background-image: url("../icons/dock/prozesse.png"); }
-.dock-item-icon-clock { background-image: url("../icons/dock/uhr.png"); }
-.dock-item-icon-world { background-image: url("../icons/dock/world-view.png"); }
-.dock-item-icon-ram { background-image: url("../icons/dock/ram.png"); }
-.dock-item-icon-network { background-image: url("../icons/dock/network.png"); }
-.dock-item-icon-drive { background-image: url("../icons/dock/lokale-laufwerke.png"); }
-.dock-item-icon-directories { background-image: url("../icons/dock/verzeichnisse.png"); }
-.dock-item-icon-folders { background-image: url("../icons/dock/ordner.png"); }
-.dock-item-icon-search { background-image: url("../icons/dock/suche.png"); }
-.dock-item-icon-browser { background-image: url("../icons/dock/browser.png"); }
-.dock-item-icon-cloud { background-image: url("../icons/dock/cloud.png"); }
-.dock-item-icon-terminal { background-image: url("../icons/dock/terminal.png"); }
-.dock-item-icon-log { background-image: url("../icons/dock/log.png"); }
-.dock-item-icon-weather { background-image: url("../icons/dock/wetter.png"); }
-.dock-item-icon-calendar { background-image: url("../icons/dock/kalender.png"); }
-.dock-item-icon-calculator { background-image: url("../icons/dock/taschenrechner.png"); }
+.dock-item-icon-cpu { background-image: url("../../../assets/icons/dock/cpu.png"); }
+.dock-item-icon-desktop { background-image: url("../../../assets/icons/dock/desktop.png"); }
+.dock-item-icon-processes { background-image: url("../../../assets/icons/dock/prozesse.png"); }
+.dock-item-icon-clock { background-image: url("../../../assets/icons/dock/uhr.png"); }
+.dock-item-icon-world { background-image: url("../../../assets/icons/dock/world-view.png"); }
+.dock-item-icon-ram { background-image: url("../../../assets/icons/dock/ram.png"); }
+.dock-item-icon-network { background-image: url("../../../assets/icons/dock/network.png"); }
+.dock-item-icon-drive { background-image: url("../../../assets/icons/dock/lokale-laufwerke.png"); }
+.dock-item-icon-directories { background-image: url("../../../assets/icons/dock/verzeichnisse.png"); }
+.dock-item-icon-folders { background-image: url("../../../assets/icons/dock/ordner.png"); }
+.dock-item-icon-search { background-image: url("../../../assets/icons/dock/suche.png"); }
+.dock-item-icon-browser { background-image: url("../../../assets/icons/dock/browser.png"); }
+.dock-item-icon-cloud { background-image: url("../../../assets/icons/dock/cloud.png"); }
+.dock-item-icon-terminal { background-image: url("../../../assets/icons/dock/terminal.png"); }
+.dock-item-icon-log { background-image: url("../../../assets/icons/dock/log.png"); }
+.dock-item-icon-weather { background-image: url("../../../assets/icons/dock/wetter.png"); }
+.dock-item-icon-calendar { background-image: url("../../../assets/icons/dock/kalender.png"); }
+.dock-item-icon-calculator { background-image: url("../../../assets/icons/dock/taschenrechner.png"); }
 .dock-item-icon-fallback {
     background-image: none;
     background-color: rgba(var(--ddj), 0.12);

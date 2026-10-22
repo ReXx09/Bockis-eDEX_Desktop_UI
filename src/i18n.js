@@ -229,7 +229,13 @@
       "Container hinzufügen": "添加容器", "Plugin-Schalter": "插件開關", "Plugin-Panels": "插件面板", "Sonstige": "其他",
       "Desktop-Container": "桌面容器", "Ordner-Panel": "資料夾面板", "Schließen": "關閉", "Position": "位置", "Rahmen": "外框",
       "Breite": "寬度", "Höhe": "高度", "Abgerundet": "圓角", "Rechteckig": "直角", "Dock-Icon-Set": "Dock 圖示組", "Nur Icon": "僅圖示", "Mit Beschriftung": "含標籤", "Oberes Dock (am oberen Bildschirmrand)": "頂部 Dock（貼螢幕頂邊）",
-      "Unteres Dock (am unteren Bildschirmrand)": "底部 Dock（貼螢幕底邊）", "Dock nur auf dem Hauptbildschirm": "Dock 僅主螢幕可用"
+      "Unteres Dock (am unteren Bildschirmrand)": "底部 Dock（貼螢幕底邊）", "Dock nur auf dem Hauptbildschirm": "Dock 僅主螢幕可用",
+      "No destination folder specified": "未指定目標資料夾",
+      "Original grid": "原版網格",
+      "Solid background": "純色背景",
+      "Scanlines": "掃描線",
+      "Radial glow": "輻射光暈",
+      "Hex field": "六角場域"
     }
   };
   const runtimeTranslations = {
@@ -287,6 +293,12 @@
       "請輸入本機磁碟路徑或 \\\\伺服器\\分享 網路路徑": "Bitte einen lokalen Laufwerkspfad oder einen Netzwerkpfad wie \\\\Server\\Freigabe eingeben",
       "無法還原的紀錄": "Keine Wiederherstellungsaufzeichnung vorhanden",
       "未指定目標資料夾": "Kein Zielordner angegeben",
+      "No destination folder specified": "Kein Zielordner angegeben",
+      "Original grid": "Originales Raster",
+      "Solid background": "Einfarbiger Hintergrund",
+      "Scanlines": "Scanlines",
+      "Radial glow": "Radialer Leuchteffekt",
+      "Hex field": "Hex-Feld",
       "空路徑": "Leerer Pfad",
       "拖放未能啟動，請按住左鍵拖移後再試": "Drag-and-drop konnte nicht gestartet werden. Halten Sie die linke Maustaste gedrückt und versuchen Sie es erneut.",
       "僅支援 Windows": "Nur Windows wird unterstützt",
@@ -390,6 +402,12 @@
       "請輸入本機磁碟路徑或 \\\\伺服器\\分享 網路路徑": "Enter a local drive path or a network path such as \\\\Server\\Share",
       "無法還原的紀錄": "No undo record available",
       "未指定目標資料夾": "No destination folder specified",
+      "No destination folder specified": "No destination folder specified",
+      "Original grid": "Original grid",
+      "Solid background": "Solid background",
+      "Scanlines": "Scanlines",
+      "Radial glow": "Radial glow",
+      "Hex field": "Hex field",
       "拖放未能啟動，請按住左鍵拖移後再試": "Drag-and-drop could not start. Hold the left mouse button and try again.",
       "僅支援 Windows": "Windows is required",
       "拖放服務未就緒": "Drag-and-drop service is not ready",
