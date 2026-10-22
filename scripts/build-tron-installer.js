@@ -10,7 +10,7 @@ const payload = `${installer}.payload.exe`;
 const blockmap = `${installer}.blockmap`;
 const bootstrapSource = path.join(root, 'build', 'tron_bootstrap.cs');
 const bootstrapManifest = path.join(root, 'build', 'tron_bootstrap.manifest');
-const icon = path.join(root, 'build', 'icon.ico');
+const icon = path.join(root, 'assets', 'icons', 'branding', 'app.ico');
 const cscCandidates = [
   path.join(process.env.SystemRoot, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
   path.join(process.env.SystemRoot, 'Microsoft.NET', 'Framework', 'v4.0.30319', 'csc.exe')

@@ -291,13 +291,16 @@ body.desktop-shell #workspace {
     cursor: pointer;
     display: inline-flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 0.3rem;
 }
 
 .path-tab-label {
+    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-align: left;
 }
 
 .path-tab-close {
@@ -307,6 +310,7 @@ body.desktop-shell #workspace {
     flex: 0 0 auto;
     width: 1rem;
     height: 1rem;
+    margin-left: auto;
     padding: 0;
     border: 1px solid transparent;
     color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
@@ -989,8 +993,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     padding: 0;
     overflow-x: auto;
     border-bottom: 0;
-    background: #000000;
-    border: 1px solid #000000;
+    background: var(--panel-content, #000000);
+    border: 1px solid var(--panel-content, #000000);
     border-bottom: none;
     scrollbar-width: none;
 }
@@ -1033,7 +1037,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     min-width: 12rem;
     max-width: 12rem;
     min-height: 1.75rem;
-    justify-content: center;
+    justify-content: flex-start;
     padding: 0.25rem 0.7rem 0.22rem;
     border: 1px solid var(--panel-border, #29404a);
     border-bottom-color: var(--panel-border, #29404a);
@@ -1076,10 +1080,12 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 }
 
 .path-card-header .path-tab-label {
-    text-align: center;
+    flex: 1 1 auto;
+    text-align: left;
 }
 
 .path-card-header .path-tab-close {
+    margin-left: auto;
     color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.55);
 }
 
@@ -1097,7 +1103,13 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 }
 
 .path-card .card-body {
-    background: var(--panel-bg, #02060a);
+    background: var(--panel-content, var(--panel-bg, #02060a));
+    color: var(--panel-text, rgb(var(--color_r), var(--color_g), var(--color_b)));
+}
+
+.desktop-card .card-body {
+    background: var(--panel-content, var(--panel-bg, #02060a));
+    color: var(--panel-text, rgb(var(--color_r), var(--color_g), var(--color_b)));
 }
 
 .path-info-bar {
@@ -1110,8 +1122,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     margin-top: 0.3rem;
     padding: 0.18rem 0.45rem;
     border-top: 1px solid #132b36;
-    background: #050b10;
-    color: #39778b;
+    background: var(--panel-surface, #050b10);
+    color: var(--panel-text, #39778b);
     font-family: "Share Tech Mono", "Courier New", monospace;
     font-size: 0.72em;
     letter-spacing: 0.04em;
@@ -1125,7 +1137,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 }
 
 .path-info-bar [data-path-info-selected] {
-    color: #8bdff2;
+    color: var(--panel-text, #8bdff2);
 }
 
 .path-tree {
@@ -1234,8 +1246,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     padding: 0.15rem 0.35rem;
     border: 1px solid #29404a;
     border-radius: 0.2rem;
-    background: #02060a;
-    color: #6aabbc;
+    background: var(--panel-content, #02060a);
+    color: var(--panel-text, #6aabbc);
     font-family: "Share Tech Mono", "Courier New", monospace;
     line-height: 1.2;
     cursor: pointer;
@@ -1243,8 +1255,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 
 .path-browser-toolbar button:hover:not(:disabled) {
     border-color: #7fe8ff;
-    background: #07151d;
-    color: #d7f8ff;
+    background: var(--panel-surface, #07151d);
+    color: var(--panel-text, #d7f8ff);
 }
 
 .path-browser-toolbar button:disabled {
@@ -1260,8 +1272,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     padding: 0.22rem 0.45rem;
     border: 1px solid #29404a;
     border-radius: 0.2rem;
-    background: #02060a;
-    color: #8bdff2;
+    background: var(--panel-content, #02060a);
+    color: var(--panel-text, #8bdff2);
     font-family: "Share Tech Mono", "Courier New", monospace;
     outline: none;
 }
@@ -1563,7 +1575,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     flex: 1;
     min-height: 8rem;
     overflow: auto;
-    background: #02060a;
+    background: var(--panel-content, #02060a);
     scrollbar-color: #244b5a #02060a;
 }
 
@@ -1589,7 +1601,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     text-align: center;
     flex-direction: column;
     border: 1px solid transparent;
-    background: #030a10;
+    background: var(--panel-surface, #030a10);
+    color: var(--panel-text, rgb(var(--color_r), var(--color_g), var(--color_b)));
     font-size: var(--path-font-size, 1em);
     transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
@@ -1618,7 +1631,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     gap: 0.7rem;
     padding: 0.25rem 0.5rem;
     border: 1px solid transparent;
-    background: #030a10;
+    background: var(--panel-surface, #030a10);
+    color: var(--panel-text, rgb(var(--color_r), var(--color_g), var(--color_b)));
     font-size: var(--path-font-size, 1em);
 }
 
@@ -2964,33 +2978,33 @@ div.modal_popup input[type="color"],
 .hud-card .card-body,
 .path-card .card-body,
 .desktop-card .card-body {
-    font-size: 1.05rem;
+    font-size: calc(1.05rem * var(--panel-font-scale, 1));
 }
 
 .hud-card .card-body [id^="mod_"] h1 {
-    font-size: 1.08rem !important;
+    font-size: calc(1.08rem * var(--panel-font-scale, 1)) !important;
     line-height: 1.25 !important;
     margin-bottom: 0.2rem !important;
 }
 
 .hud-card .card-body [id^="mod_"] h2 {
-    font-size: 1rem !important;
+    font-size: calc(1rem * var(--panel-font-scale, 1)) !important;
     line-height: 1.25 !important;
 }
 
 .hud-card .card-body [id^="mod_"] h3 {
-    font-size: 0.95rem !important;
+    font-size: calc(0.95rem * var(--panel-font-scale, 1)) !important;
 }
 
 .hud-card .card-body [id^="mod_"] i,
 .hud-card .card-body [id^="mod_"] em {
-    font-size: 0.92rem !important;
+    font-size: calc(0.92rem * var(--panel-font-scale, 1)) !important;
 }
 
 .hud-card .card-body [id^="mod_"] td,
 .hud-card .card-body [id^="mod_"] th,
 .hud-card .card-body [id^="mod_"] table {
-    font-size: 0.95rem !important;
+    font-size: calc(0.95rem * var(--panel-font-scale, 1)) !important;
 }
 
 .hud-card .card-body #mod_clock_led {
@@ -3400,6 +3414,45 @@ div.modal_popup input[type="color"],
 .cal-editor-item button {
     flex: 0 0 auto;
     min-width: 4.8rem !important;
+}
+
+.settings-tab-nav {
+    display: flex;
+    gap: 0.35rem;
+    width: 100%;
+    margin: 0.35rem 0 0.6rem;
+    padding: 0.25rem;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--panel-border-strong, rgba(var(--color_r), var(--color_g), var(--color_b), 0.55));
+    background: var(--panel-content, rgba(0, 0, 0, 0.24));
+}
+
+.settings-tab {
+    flex: 1 0 auto;
+    min-width: 7rem;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--panel-border, rgba(var(--color_r), var(--color_g), var(--color_b), 0.28));
+    background: var(--panel-surface, rgba(var(--color_r), var(--color_g), var(--color_b), 0.08));
+    color: var(--panel-text, rgb(var(--color_r), var(--color_g), var(--color_b)));
+    font: inherit;
+    cursor: pointer;
+}
+
+.settings-tab:hover,
+.settings-tab:focus-visible,
+.settings-tab.active {
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    outline: none;
+}
+
+.settings-section[hidden] {
+    display: none;
+}
+
+.settings-section > summary {
+    display: none;
 }
 
 .cal-editor-empty {

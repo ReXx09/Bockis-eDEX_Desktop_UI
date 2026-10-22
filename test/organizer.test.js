@@ -86,6 +86,18 @@ async function testImport() {
   }
 }
 
+async function testRejectsInvalidImportSources() {
+  const root = await temporaryRoot();
+  try {
+    const destination = path.join(root, "destination");
+    await assert.rejects(() => importFiles(destination, ["relative.txt"]));
+    await assert.rejects(() => importFiles(destination, [null]));
+    await assert.rejects(() => importFiles(destination, "not-an-array"));
+  } finally {
+    await removeRoot(root);
+  }
+}
+
 async function testRejectsOutsideRoot() {
   const root = await temporaryRoot();
   const outside = await temporaryRoot();
@@ -157,6 +169,7 @@ async function testPathPolicy() {
   await testMoveAndUndo();
   await testPartialFailureCanUndo();
   await testImport();
+  await testRejectsInvalidImportSources();
   await testRejectsOutsideRoot();
   await testRejectsSymlinkedSource();
   await testPathPolicy();

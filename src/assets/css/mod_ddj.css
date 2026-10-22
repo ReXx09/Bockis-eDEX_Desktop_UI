@@ -32,6 +32,153 @@
 
 .ddj-chrome b { font-weight: 400; }
 
+.ddj-mode-bar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+}
+
+.ddj-mode-bar button,
+.ddj-media-transport button,
+.ddj-system-actions button {
+  border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.4);
+  background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.06);
+  color: rgb(var(--color_r), var(--color_g), var(--color_b));
+  font: inherit;
+  font-size: 0.72em;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+}
+
+.ddj-mode-bar button.active,
+.ddj-mode-bar button:hover,
+.ddj-media-transport button:hover,
+.ddj-system-actions button:hover {
+  background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
+  border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+}
+
+.ddj-mode-panel {
+  padding: 0.6rem 0;
+}
+
+.ddj-mode-panel[hidden] {
+  display: none;
+}
+
+#mod_ddj[data-ddj-mode="media"] .ddj-body,
+#mod_ddj[data-ddj-mode="system"] .ddj-body {
+  display: none;
+}
+
+#mod_ddj[data-ddj-mode="media"] .ddj-media-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 48rem;
+  width: 100%;
+  margin: 0 auto;
+}
+
+#mod_ddj[data-ddj-mode="media"] .ddj-media-wave {
+  height: clamp(3rem, 12vh, 7rem);
+}
+
+.ddj-media-track,
+.ddj-system-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.ddj-media-track small,
+.ddj-system-head span,
+.ddj-media-levels label,
+.ddj-system-source {
+  color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+  font-size: 0.72em;
+}
+
+.ddj-media-track strong {
+  display: block;
+  color: rgb(var(--color_r), var(--color_g), var(--color_b));
+  font-size: 1.15em;
+}
+
+.ddj-media-wave {
+  height: 2rem;
+  margin: 0.45rem 0;
+  background: repeating-linear-gradient(90deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.8) 0 2px, transparent 2px 7px);
+  opacity: 0.7;
+}
+
+.ddj-media-transport,
+.ddj-media-levels,
+.ddj-system-actions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.ddj-media-transport button {
+  flex: 1;
+}
+
+.ddj-media-levels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 0.45rem;
+}
+
+.ddj-media-levels input,
+.ddj-media-levels meter {
+  width: 100%;
+  accent-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+}
+
+.ddj-system-source {
+  display: grid;
+  grid-template-columns: 7rem 1fr 2rem;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.45rem;
+}
+
+.ddj-system-source meter {
+  width: 100%;
+  accent-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+}
+
+.ddj-system-actions {
+  margin-top: 0.65rem;
+}
+
+@media (max-width: 38rem) {
+  .ddj-mode-bar {
+    overflow-x: auto;
+  }
+
+  .ddj-mode-bar button {
+    flex: 1 0 auto;
+  }
+
+  .ddj-media-track {
+    flex-wrap: wrap;
+  }
+
+  .ddj-media-track strong {
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .ddj-media-levels {
+    grid-template-columns: 1fr;
+  }
+}
+
 .ddj-body {
     flex: 1 1 auto;
     min-height: 0;

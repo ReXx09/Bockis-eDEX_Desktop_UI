@@ -128,6 +128,35 @@
           <span>4CH · MAGVEL</span>
           <span>MASTER <b data-ddj-master-read>70</b></span>
         </div>
+        <div class="ddj-mode-bar" role="tablist" aria-label="Audio-Modus">
+          <button type="button" data-ddj-mode="cockpit" role="tab">ADVANCED DJ</button>
+          <button type="button" class="active" data-ddj-mode="media" role="tab">MEDIA CONTROL</button>
+          <button type="button" data-ddj-mode="system" role="tab">SYSTEM AUDIO</button>
+        </div>
+        <section class="ddj-mode-panel ddj-media-panel" data-ddj-mode-panel="media">
+          <div class="ddj-media-track">
+            <small>NOW PLAYING · DECK A</small>
+            <strong data-ddj-media-track>TRON PULSE</strong>
+            <span data-ddj-media-meta>128 BPM · 8A</span>
+          </div>
+          <div class="ddj-media-wave" data-ddj-media-wave></div>
+          <div class="ddj-media-transport">
+            <button type="button" data-ddj-media-prev>PREV</button>
+            <button type="button" data-ddj-media-play>PLAY / PAUSE</button>
+            <button type="button" data-ddj-media-next>NEXT</button>
+          </div>
+          <div class="ddj-media-levels">
+            <label>MASTER <input type="range" min="0" max="100" value="70" data-ddj-media-master></label>
+            <label>DECK A <meter min="0" max="100" value="55" data-ddj-media-meter></meter></label>
+          </div>
+        </section>
+        <section class="ddj-mode-panel ddj-system-panel" data-ddj-mode-panel="system">
+          <div class="ddj-system-head"><b>SYSTEM AUDIO MATRIX</b><span>3 SOURCES · 2 OUTPUTS</span></div>
+          <div class="ddj-system-source"><span>eDEX PLAYER</span><meter min="0" max="100" value="72"></meter><b>72%</b></div>
+          <div class="ddj-system-source"><span>BROWSER</span><meter min="0" max="100" value="38"></meter><b>38%</b></div>
+          <div class="ddj-system-source"><span>GAME / APP</span><meter min="0" max="100" value="12"></meter><b>12%</b></div>
+          <div class="ddj-system-actions"><button type="button" data-ddj-output>OUTPUT: DEFAULT</button><button type="button" data-ddj-system-mute>MUTE OFF</button></div>
+        </section>
         <div class="ddj-body">
           ${deckHtml("L")}
           <div class="ddj-mixer">
@@ -219,6 +248,50 @@
       const el = document.getElementById("ddj_status");
       if (el) el.textContent = text;
     };
+
+    const setMode = (mode) => {
+      const next = ["cockpit", "media", "system"].includes(mode) ? mode : "media";
+      root.dataset.ddjMode = next;
+      root.querySelectorAll("[data-ddj-mode]").forEach((button) => {
+        const active = button.dataset.ddjMode === next;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      root.querySelectorAll("[data-ddj-mode-panel]").forEach((panel) => {
+        panel.hidden = panel.dataset.ddjModePanel !== next;
+      });
+      setStatus(next === "cockpit" ? "DDJ-1000 READY" : next === "media" ? "MEDIA CONTROL READY" : "SYSTEM AUDIO READY");
+      requestAnimationFrame(fitJogs);
+    };
+    root.querySelectorAll("[data-ddj-mode]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setMode(button.dataset.ddjMode);
+      });
+    });
+    root.querySelector("[data-ddj-media-play]")?.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const deck = root.querySelector('.ddj-deck[data-side="L"]');
+      const play = deck?.querySelector("[data-ddj-play]");
+      play?.click();
+    });
+    root.querySelector("[data-ddj-media-prev]")?.addEventListener("click", () => {
+      root.querySelector('.ddj-deck[data-side="L"] [data-ddj-shift]')?.click();
+    });
+    root.querySelector("[data-ddj-media-next]")?.addEventListener("click", () => {
+      root.querySelector('.ddj-deck[data-side="L"] [data-ddj-shift]')?.click();
+    });
+    root.querySelector("[data-ddj-system-mute]")?.addEventListener("click", (event) => {
+      const button = event.currentTarget;
+      const muted = button.dataset.muted === "1";
+      button.dataset.muted = muted ? "0" : "1";
+      button.textContent = muted ? "MUTE OFF" : "MUTE ON";
+      setStatus(muted ? "SYSTEM AUDIO UNMUTED" : "SYSTEM AUDIO MUTED");
+    });
+    root.querySelector("[data-ddj-output]")?.addEventListener("click", () => {
+      setStatus("OUTPUT ROUTING · WINDOWS AUDIO DEVICE INTEGRATION FOLLOWS");
+    });
+    setMode("media");
 
     const themeRgb = () => {
       const cs = getComputedStyle(document.documentElement);
@@ -453,6 +526,14 @@
       if (playBtn) {
         playBtn.classList.toggle("on", d.playing);
         playBtn.classList.toggle("off", !d.playing);
+      }
+      if (side === "L") {
+        const mediaTrack = root.querySelector("[data-ddj-media-track]");
+        const mediaMeta = root.querySelector("[data-ddj-media-meta]");
+        const mediaPlay = root.querySelector("[data-ddj-media-play]");
+        if (mediaTrack) mediaTrack.textContent = d.track.title;
+        if (mediaMeta) mediaMeta.textContent = `${effectiveBpm(d).toFixed(1)} BPM · ${d.track.key}`;
+        if (mediaPlay) mediaPlay.textContent = d.playing ? "PAUSE" : "PLAY";
       }
       const jog = el.querySelector("[data-ddj-jog]");
       const spin = el.querySelector("[data-ddj-spin]");

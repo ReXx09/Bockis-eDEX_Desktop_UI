@@ -20,7 +20,6 @@ const cssFiles = [
 ];
 
 const miscFiles = [
-  "file-icons-match.js",
   "grid.json",
   "boot_log.txt"
 ];
@@ -57,18 +56,19 @@ function replaceDir(from, to) {
 const cssOut = path.join(root, "src", "assets", "css");
 const vendorOut = path.join(root, "src", "assets", "vendor");
 const themesOut = path.join(root, "assets", "themes");
-const iconsOut = path.join(root, "assets", "icons");
+const iconsOut = path.join(root, "assets", "icons", "file");
+const dockIconsSource = path.join(root, "assets", "icons", "dock");
 const miscOut = path.join(root, "assets", "misc");
 const rendererMiscOut = path.join(root, "src", "assets", "misc");
-const dockIconsOut = path.join(root, "src", "assets", "misc", "dock-icons");
+const dockIconsOut = path.join(root, "src", "assets", "icons", "dock");
 
-replaceDir(path.join(root, "build", "icons_transparent"), dockIconsOut);
+replaceDir(dockIconsSource, dockIconsOut);
 
 const alreadyReady = fs.existsSync(path.join(cssOut, "boot_screen.css"))
   && fs.existsSync(path.join(vendorOut, "encom-globe.js"))
   && fs.existsSync(path.join(themesOut, "tron.json"))
   && fs.existsSync(path.join(iconsOut, "file-icons.json"))
-  && fs.existsSync(path.join(miscOut, "file-icons-match.js"))
+  && fs.existsSync(path.join(iconsOut, "file-icons-match.js"))
   && fs.existsSync(path.join(miscOut, "grid.json"));
 
 if (!fs.existsSync(edexSrc)) {
@@ -87,7 +87,7 @@ for (const name of cssFiles) {
 if (copyFile(path.join(edexSrc, "vendor", "encom-globe.js"), path.join(vendorOut, "encom-globe.js"))) ok += 1;
 if (copyFile(path.join(edexSrc, "icons", "file-icons.json"), path.join(iconsOut, "file-icons.json"))) ok += 1;
 for (const name of miscFiles) {
-  if (copyFile(path.join(edexSrc, "misc", name), path.join(miscOut, name))) ok += 1;
+if (copyFile(path.join(edexSrc, "misc", name), path.join(miscOut, name))) ok += 1;
   // Renderer fetch paths live under src/assets/misc
   if (name === "boot_log.txt") {
     copyFile(path.join(edexSrc, "misc", name), path.join(rendererMiscOut, name));

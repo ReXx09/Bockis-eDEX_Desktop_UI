@@ -96,6 +96,8 @@ const terminalBrowserState = new Map();
 const terminalBrowserTimers = new Map();
 let terminalBridgeBound = false;
 let taskbarDockItems = [];
+let taskbarWindowItems = [];
+let taskbarWindowTimer = null;
 let taskbarDockLoaded = false;
 let taskbarDockLoadPromise = null;
 let taskbarDockRetryTimer = null;
@@ -149,6 +151,8 @@ const state = {
   desktopLocked: false,
   desktopFilter: "all",
   desktopGrouped: false,
+  desktopIconScale: 1,
+  desktopFontScale: 1,
   desktopTabId: "classify",
   desktopFolderTabs: [],
   iconPositions: {},
@@ -375,6 +379,8 @@ async function setRamGaugeMode(mode) {
   const result = await window.edex.saveSettings({ ramGaugeMode: next });
   if (result?.settings) state.settings = result.settings;
 }
+
+window.setRamGaugeMode = setRamGaugeMode;
 
 function wallpaperGridPx() {
   const raw = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--grid-size"));
@@ -817,23 +823,31 @@ function findPanelZonePosition(el) {
     : [central];
   const others = occupiedLayoutRects({ panelId: id });
   const g = gridSize();
-  const fitsZone = (x, y) => regions.some((region) => (
+  const usableRegions = regions.filter((region) => region.width >= g * 2 && region.height >= g * 2);
+  if (!usableRegions.length) return null;
+  const largestRegion = usableRegions.slice().sort(
+    (a, b) => (b.width * b.height) - (a.width * a.height)
+  )[0];
+  const safeW = Math.max(g * 2, Math.min(current.w, Math.floor(largestRegion.width / g) * g));
+  const safeH = Math.max(g * 2, Math.min(current.h, Math.floor(largestRegion.height / g) * g));
+  const fitsZone = (x, y, w = safeW, h = safeH) => regions.some((region) => (
     x >= region.x && y >= region.y
-    && x + current.w <= region.x + region.width + g
-    && y + current.h <= region.y + region.height + g
+    && x + w <= region.x + region.width + g
+    && y + h <= region.y + region.height + g
   ));
-  const currentPosition = constrainPanelPosition(el, current.x, current.y, current.w, current.h);
-  if (fitsZone(current.x, current.y) && !overlapsAny(current, others)) return current;
+  const currentPosition = constrainPanelPosition(el, current.x, current.y, safeW, safeH);
+  const safeCurrent = { x: current.x, y: current.y, w: safeW, h: safeH };
+  if (fitsZone(current.x, current.y, safeW, safeH) && !overlapsAny(safeCurrent, others)) return safeCurrent;
 
   let best = null;
   let bestDistance = Infinity;
   for (const region of regions) {
-    if (region.width < current.w || region.height < current.h) continue;
-    const maxX = Math.max(region.x, region.x + region.width - current.w);
-    const maxY = Math.max(region.y, region.y + region.height - current.h);
+    if (region.width < safeW || region.height < safeH) continue;
+    const maxX = Math.max(region.x, region.x + region.width - safeW);
+    const maxY = Math.max(region.y, region.y + region.height - safeH);
     for (let y = alignGrid(region.y); y <= maxY; y += g) {
       for (let x = alignGrid(region.x); x <= maxX; x += g) {
-        const candidate = { x, y, w: current.w, h: current.h };
+        const candidate = { x, y, w: safeW, h: safeH };
         if (overlapsAny(candidate, others)) continue;
         const distance = (x - currentPosition.x) ** 2 + (y - currentPosition.y) ** 2;
         if (distance < bestDistance) {
@@ -843,7 +857,14 @@ function findPanelZonePosition(el) {
       }
     }
   }
-  return best;
+  if (best) return best;
+  const fallbackRegion = largestRegion;
+  return {
+    x: Math.max(fallbackRegion.x, Math.min(fallbackRegion.x + fallbackRegion.width - safeW, currentPosition.x)),
+    y: Math.max(fallbackRegion.y, Math.min(fallbackRegion.y + fallbackRegion.height - safeH, currentPosition.y)),
+    w: safeW,
+    h: safeH
+  };
 }
 
 function repositionPanelInZone(el) {
@@ -854,8 +875,10 @@ function repositionPanelInZone(el) {
   if (!next) return false;
   el.style.left = `${next.x}px`;
   el.style.top = `${next.y}px`;
+  el.style.width = `${next.w}px`;
+  el.style.height = `${next.h}px`;
   applyBoxPx(state.layout[id], next.x, next.y, next.w, next.h);
-  return next.x !== current.x || next.y !== current.y;
+  return next.x !== current.x || next.y !== current.y || next.w !== current.w || next.h !== current.h;
 }
 
 function clampPanelToZone(el) {
@@ -981,6 +1004,15 @@ function applyTheme(theme, wallpaperId) {
   const r = Math.round((c.r ?? 170) * (1 - blend) + windowsRgb[0] * blend);
   const g = Math.round((c.g ?? 207) * (1 - blend) + windowsRgb[1] * blend);
   const b = Math.round((c.b ?? 209) * (1 - blend) + windowsRgb[2] * blend);
+  const panelBase = c.black || "#000000";
+  const panelLight = c.light_black || "#05080d";
+  const panelMatch = String(panelBase).replace(/^#/, "").match(/^([0-9a-f]{6})$/i);
+  const panelLuma = panelMatch
+    ? (parseInt(panelMatch[1].slice(0, 2), 16) * 0.299
+      + parseInt(panelMatch[1].slice(2, 4), 16) * 0.587
+      + parseInt(panelMatch[1].slice(4, 6), 16) * 0.114)
+    : 0;
+  const panelText = panelLuma > 150 ? "#101820" : "#d7f8ff";
   document.documentElement.style.setProperty("--color_r", r);
   document.documentElement.style.setProperty("--color_g", g);
   document.documentElement.style.setProperty("--color_b", b);
@@ -989,8 +1021,10 @@ function applyTheme(theme, wallpaperId) {
   document.documentElement.style.setProperty("--color_grey", mixThemeColor(c.grey || "#262828", rawAccent, blend * 0.35));
   document.documentElement.style.setProperty("--color_red", c.red || "#ff3c3c");
   document.documentElement.style.setProperty("--color_yellow", c.yellow || "#ffd23c");
-  document.documentElement.style.setProperty("--panel-bg", c.black || "#000000");
-  document.documentElement.style.setProperty("--panel-surface", c.light_black || "#05080d");
+  document.documentElement.style.setProperty("--panel-bg", panelBase);
+  document.documentElement.style.setProperty("--panel-surface", panelLight);
+  document.documentElement.style.setProperty("--panel-content", panelBase);
+  document.documentElement.style.setProperty("--panel-text", panelText);
   document.documentElement.style.setProperty("--panel-border", `rgba(${r}, ${g}, ${b}, 0.28)`);
   document.documentElement.style.setProperty("--panel-border-strong", `rgba(${r}, ${g}, ${b}, 0.55)`);
   document.documentElement.style.setProperty("--snap-gap", `${snapGap()}px`);
@@ -1285,6 +1319,8 @@ function currentDisplayLayout() {
     desktopLocked: Boolean(state.desktopLocked),
     desktopFilter: state.desktopFilter || "all",
     desktopGrouped: Boolean(state.desktopGrouped),
+    desktopIconScale: Math.max(0.6, Math.min(2, Number(state.desktopIconScale) || Number(state.settings.desktopIconScale) || 1)),
+    desktopFontScale: Math.max(0.7, Math.min(1.8, Number(state.desktopFontScale) || Number(state.settings.desktopFontScale) || 1)),
     desktopTabId: state.desktopTabId || "classify",
     desktopFolderTabs: (state.desktopFolderTabs || []).map((tab) => ({
       id: tab.id,
@@ -1812,7 +1848,7 @@ async function boot() {
         <div class="boot-log" data-boot-log aria-live="polite"></div>
       </section>
       <aside class="boot-brand-pane">
-        <img class="boot-logo" src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
+        <img class="boot-logo" src="assets/icons/branding/logo.png" alt="Bockis eDEX">
         <pre class="boot-ascii">${BOOT_ASCII_LOGO}</pre>
         <div class="boot-tagline">DESKTOP UI / TRON SYSTEM</div>
         <div class="boot-progress-panel">
@@ -1825,7 +1861,7 @@ async function boot() {
       </aside>
     </div>
     <div class="boot-final" data-boot-final>
-      <img src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
+      <img src="assets/icons/branding/logo.png" alt="Bockis eDEX">
       <h1>BOCKIS-eDEX</h1>
       <div class="sub">SYSTEM ONLINE</div>
       <div class="count" data-boot-count>starte Dashboard ...</div>
@@ -2243,7 +2279,7 @@ async function shutdown() {
         <div class="shutdown-log" data-shutdown-log aria-live="polite"></div>
       </div>
       <aside class="shutdown-brand">
-        <img src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
+        <img src="assets/icons/branding/logo.png" alt="Bockis eDEX">
         <strong>BOCKIS-eDEX</strong>
         <span>SYSTEM POWER DOWN</span>
       </aside>
@@ -2251,7 +2287,7 @@ async function shutdown() {
     <div class="crt-beam" aria-hidden="true"></div>
     <div class="crt-dot" aria-hidden="true"></div>
     <div class="shutdown-final" data-shutdown-final>
-      <img src="assets/misc/bockis-logo.png" alt="Bockis eDEX">
+      <img src="assets/icons/branding/logo.png" alt="Bockis eDEX">
       <strong>BOCKIS-eDEX</strong>
       <span>SYSTEM POWER DOWN</span>
     </div>`;
@@ -2432,20 +2468,39 @@ function renderDockItems() {
 function renderTaskDockItems() {
   const host = document.querySelector("[data-task-dock-items]");
   if (!host) return;
+  if (state.settings?.taskbarIntegrationEnabled === true) startTaskbarWindowSync();
+  else taskbarWindowItems = [];
   const root = host.closest("#task-dock-panel");
   const card = host.closest(".hud-card");
-  if (card) card.hidden = taskbarDockItems.length === 0;
+  if (card) card.hidden = false;
   if (root) root.hidden = false;
-  host.innerHTML = taskbarDockItems.map((item) => `
-    <button type="button" class="dock-item" data-task-dock-path="${escapeHtml(item.path || "")}" title="${escapeHtml(item.name)}">
+  const pinnedHtml = taskbarDockItems.map((item) => `
+    <button type="button" class="dock-item taskbar-pinned-item" data-task-dock-path="${escapeHtml(item.path || "")}" title="${escapeHtml(item.name)}">
       ${item.iconDataUrl ? `<img class="dock-item-icon dock-item-icon-image" src="${escapeHtml(item.iconDataUrl)}" alt="" draggable="false">` : `<span class="dock-item-icon dock-item-icon-fallback" aria-hidden="true"></span>`}
       <span class="dock-item-label">${escapeHtml(item.name)}</span>
     </button>`).join("");
+  const runningHtml = taskbarWindowItems.map((item) => `
+    <button type="button" class="dock-item taskbar-window-item${item.active ? " active" : ""}${item.minimized ? " minimized" : ""}" data-task-window-hwnd="${escapeHtml(item.hwnd)}" title="${escapeHtml(item.title)}">
+      <span class="dock-item-icon dock-item-icon-fallback" aria-hidden="true"></span>
+      <span class="dock-item-label">${escapeHtml(item.title)}</span>
+    </button>`).join("");
+  host.innerHTML = `${pinnedHtml}${runningHtml || (!pinnedHtml ? '<span class="task-dock-empty">Keine Windows-Fenster erkannt</span>' : "")}`;
   window.edexI18n?.translatePage?.(host);
   host.querySelectorAll("[data-task-dock-path]").forEach((button) => {
     button.addEventListener("click", async () => {
       const item = taskbarDockItems.find((candidate) => candidate.path === button.dataset.taskDockPath);
       if (item) await openTaskDockItem(item);
+    });
+  });
+  host.querySelectorAll("[data-task-window-hwnd]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const hwnd = button.dataset.taskWindowHwnd;
+      if (!hwnd) return;
+      if (button.classList.contains("active")) {
+        await window.edex?.minimizeTaskbarWindow?.(hwnd);
+      } else {
+        await window.edex?.activateTaskbarWindow?.(hwnd);
+      }
     });
   });
 }
@@ -2516,6 +2571,7 @@ function loadTaskbarDockItems() {
       taskbarDockLoadAttempts = 0;
       logUiAction("taskdock.loaded", "Task-Dock geladen", { items: taskbarDockItems.length });
       renderTaskDockItems();
+      startTaskbarWindowSync();
     })
     .catch((error) => {
       taskbarDockItems = [];
@@ -2531,10 +2587,34 @@ function loadTaskbarDockItems() {
           loadTaskbarDockItems();
         }, 3000);
       }
+
     })
     .finally(() => {
       taskbarDockLoadPromise = null;
     });
+}
+
+function startTaskbarWindowSync() {
+  if (state.settings?.taskbarIntegrationEnabled !== true || taskbarWindowTimer || !window.edex?.listTaskbarWindows) return;
+  const refresh = async () => {
+    try {
+      const result = await window.edex.listTaskbarWindows();
+      const foreground = String(result?.foreground || "");
+      const next = (Array.isArray(result?.items) ? result.items : []).map((item) => ({
+        ...item,
+        active: String(item.hwnd) === foreground
+      }));
+      const changed = JSON.stringify(next) !== JSON.stringify(taskbarWindowItems);
+      taskbarWindowItems = next;
+      if (changed) renderTaskDockItems();
+    } catch (error) {
+      logUiAction("taskbar.windows_failed", "Windows-Taskbar konnte nicht synchronisiert werden", {
+        message: error?.message || String(error)
+      });
+    }
+  };
+  refresh();
+  taskbarWindowTimer = setInterval(refresh, 1200);
 }
 
 function setCardLocked(el, locked) {
@@ -2701,8 +2781,8 @@ function snapCardToQuarter(kind, ctx, slot) {
     bounds.width * ((slot.w ?? 50) / 100),
     bounds.height * ((slot.h ?? 50) / 100)
   );
-  ctx.el.style.cssText = styleFromBox(box);
   persistLayout();
+  rebuildWorkspace();
   toast(`${slot.label} angewendet`);
 }
 
@@ -2714,6 +2794,32 @@ function snapSlotForLayout(layout) {
   if (layout === "quarter-bl") return { x: 0, y: 50, w: 50, h: 50 };
   if (layout === "quarter-br") return { x: 50, y: 50, w: 50, h: 50 };
   return null;
+}
+
+function resizePanelPreset(kind, ctx, preset) {
+  if (ctx.locked) {
+    toast("Bitte zuerst entsperren");
+    return;
+  }
+  const box = kind === "panel"
+    ? state.layout[ctx.widgetId]
+    : kind === "desktop"
+      ? state.desktopStage
+      : state.pathCards.find((card) => card.id === ctx.id);
+  if (!box) return;
+  const zone = panelZoneRect(ctx.el);
+  const ratio = preset === "compact" ? 0.36 : preset === "large" ? 0.82 : 0.58;
+  const g = gridSize();
+  const w = Math.max(g * 2, Math.min(zone.width, alignGridSpan(zone.width * ratio, 2)));
+  const h = Math.max(g * 2, Math.min(zone.height, alignGridSpan(zone.height * ratio, 2)));
+  const current = pxFromBox(box);
+  const x = current.x + (current.w - w) / 2;
+  const y = current.y + (current.h - h) / 2;
+  const position = constrainPanelPosition(ctx.el, x, y, w, h);
+  applyBoxPx(box, position.x, position.y, w, h);
+  rebuildWorkspace();
+  persistLayout();
+  toast(`Panelgröße: ${preset === "compact" ? "kompakt" : preset === "large" ? "groß" : "Standard"}`);
 }
 
 function snapRectsOverlap(first, second) {
@@ -2807,6 +2913,12 @@ function menuItemsForCard(kind, ctx) {
       { label: "1/4 rechts oben", layout: "quarter-tr", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 0, label: "Rechts oben" }) },
       { label: "1/4 links unten", layout: "quarter-bl", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 50, label: "Links unten" }) },
       { label: "1/4 rechts unten", layout: "quarter-br", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 50, label: "Rechts unten" }) }
+    );
+    items.push(
+      { sep: true },
+      { label: "Panelgröße: kompakt", action: () => resizePanelPreset(kind, ctx, "compact") },
+      { label: "Panelgröße: Standard", action: () => resizePanelPreset(kind, ctx, "standard") },
+      { label: "Panelgröße: groß", action: () => resizePanelPreset(kind, ctx, "large") }
     );
   }
   if ((kind === "panel" && ctx.widgetId !== "dock") || kind === "desktop" || kind === "path") {
@@ -3039,6 +3151,7 @@ function openPanelSetup(el) {
         <option value="other">Sonstige</option>
       </select></td></tr>
       <tr><td>Gruppierung</td><td><input id="panel-desktop-grouped" type="checkbox"> Kategorien gruppieren</td></tr>`
+      + `<tr><td>Icongröße</td><td><input id="panel-desktop-icon-scale" type="number" min="0.6" max="2" step="0.1"></td></tr>`
     : id === "clock"
     ? `
       <tr><td>Darstellung</td><td><select id="panel-clock-mode"><option value="digital">Digital</option><option value="analog">Analog</option></select></td></tr>
@@ -3068,6 +3181,9 @@ function openPanelSetup(el) {
       : id === "filesearch"
         ? `<tr><td>Schriftgröße</td><td><input id="panel-search-font" type="number" min="8" max="72" step="1"></td></tr>`
         : `<tr><td>Panel-Einstellungen</td><td>Für dieses Panel sind derzeit keine individuellen Optionen vorhanden.</td></tr>`;
+  const panelFontScale = id === "desktop"
+    ? state.desktopFontScale || state.settings.desktopFontScale || 1
+    : state.layout[id]?.fontScale || 1;
   const zoneSetup = PANEL_META[id]
     ? `<tr><td>Positionierungszone</td><td><select id="panel-zone">
         <option value="workspace" ${state.layout[id]?.zone !== "edge" ? "selected" : ""}>Skalierzone</option>
@@ -3084,7 +3200,8 @@ function openPanelSetup(el) {
   modal.className = "modal_popup info panel-setup-modal";
   modal.innerHTML = `
     <h1>${escapeHtml(title)} - Setup</h1>
-    <table><tr><th>Option</th><th>Wert</th></tr>${nameSetup}${zoneSetup}${backgroundSetup}${iconSetup}${body}</table>
+    <table><tr><th>Option</th><th>Wert</th></tr>${nameSetup}${zoneSetup}${backgroundSetup}${iconSetup}${body}
+      <tr><td>Panel-Schriftgröße</td><td><input id="panel-font-scale" type="number" min="0.7" max="1.8" step="0.1"></td></tr></table>
     <div class="settings-footer">
       <button type="button" id="panel-setup-save">Speichern</button>
       <button type="button" id="panel-setup-close">Schließen</button>
@@ -3116,9 +3233,13 @@ function openPanelSetup(el) {
   const desktopView = modal.querySelector("#panel-desktop-view");
   const desktopFilter = modal.querySelector("#panel-desktop-filter");
   const desktopGrouped = modal.querySelector("#panel-desktop-grouped");
+  const desktopIconScale = modal.querySelector("#panel-desktop-icon-scale");
+  const panelFontScaleInput = modal.querySelector("#panel-font-scale");
   if (desktopView) desktopView.value = state.iconView === "list" ? "list" : "grid";
   if (desktopFilter) desktopFilter.value = state.desktopFilter || "all";
   if (desktopGrouped) desktopGrouped.checked = Boolean(state.desktopGrouped);
+  if (desktopIconScale) desktopIconScale.value = String(state.desktopIconScale || state.settings.desktopIconScale || 1);
+  if (panelFontScaleInput) panelFontScaleInput.value = String(panelFontScale);
   const panelZoneInput = modal.querySelector("#panel-zone");
   const panelNameInput = modal.querySelector("#panel-name");
   const panelIconSelect = modal.querySelector("#panel-icon-select");
@@ -3182,6 +3303,15 @@ function openPanelSetup(el) {
     const previousPanelIcon = id !== "desktop" && id !== "path" ? dockIcon("panel", id) : "";
     const selectedPanelIcon = panelIconSelect?.value || previousPanelIcon;
     const panelIconChanged = selectedPanelIcon && selectedPanelIcon !== previousPanelIcon;
+    const nextPanelFontScale = Math.max(0.7, Math.min(1.8, Number(panelFontScaleInput?.value) || 1));
+    const previousPanelFontScale = id === "desktop"
+      ? Number(state.desktopFontScale) || 1
+      : Number(state.layout[id]?.fontScale) || 1;
+    const panelFontScaleChanged = nextPanelFontScale !== previousPanelFontScale;
+    if (panelFontScaleChanged) {
+      if (id === "desktop") state.desktopFontScale = nextPanelFontScale;
+      else state.layout[id] = { ...state.layout[id], fontScale: nextPanelFontScale };
+    }
     let pathAppearanceChanged = false;
     let nextIconScale = null;
     let nextFontScale = null;
@@ -3219,14 +3349,15 @@ function openPanelSetup(el) {
       state.iconView = desktopView?.value === "list" ? "list" : "grid";
       state.desktopFilter = desktopFilter?.value || "all";
       state.desktopGrouped = Boolean(desktopGrouped?.checked);
+      state.desktopIconScale = Math.max(0.6, Math.min(2, Number(desktopIconScale?.value) || 1));
     }
-    if (panelIconChanged) state.layout[id] = { ...state.layout[id], icon: selectedPanelIcon };
+    if (panelIconChanged) setPanelIcon(id, selectedPanelIcon);
     if (pathCard && pathAppearanceChanged) {
       patch.pathIconScale = nextIconScale;
       patch.pathFontScale = nextFontScale;
     }
     const desktopChanged = id === "desktop";
-    if (!Object.keys(patch).length && !zoneChanged && !backgroundChanged && !panelIconChanged && !panelNameChanged && !pathAppearanceChanged && !desktopChanged) {
+    if (!Object.keys(patch).length && !zoneChanged && !backgroundChanged && !panelIconChanged && !panelNameChanged && !pathAppearanceChanged && !panelFontScaleChanged && !desktopChanged) {
       modal.remove();
       return;
     }
@@ -3238,7 +3369,7 @@ function openPanelSetup(el) {
       if (zoneChanged) persistLayout();
       if (backgroundChanged || panelIconChanged || panelNameChanged) persistLayout();
       if (pathAppearanceChanged) persistLayout();
-      if (desktopChanged) persistLayout();
+      if (panelFontScaleChanged || desktopChanged) persistLayout();
       if (id === "clock" && patch.clockDisplayMode === "analog" && state.layout.clock) {
         const minimum = analogClockMinimum().px;
         const box = pxFromBox(state.layout.clock);
@@ -3875,6 +4006,10 @@ function openAddPicker() {
 }
 
 function stopPluginRuntimes() {
+  if (taskbarWindowTimer) {
+    clearInterval(taskbarWindowTimer);
+    taskbarWindowTimer = null;
+  }
   if (state.cockpitRaf) {
     cancelAnimationFrame(state.cockpitRaf);
     state.cockpitRaf = null;
@@ -4097,6 +4232,7 @@ function buildLayout() {
       onClose: () => closePanel(id)
     }));
     applyCardBg(el, state.layout[id]?.bg);
+    el.style.setProperty("--panel-font-scale", `${Math.max(0.7, Math.min(1.8, Number(state.layout[id]?.fontScale) || 1))}`);
     makeInteractive(el, {
       widgetType: "panel",
       widgetId: id,
@@ -4143,6 +4279,7 @@ function buildLayout() {
       onClose: () => closeDesktopCard()
     }));
     applyCardBg(desk, state.desktopStage?.bg);
+    desk.style.setProperty("--panel-font-scale", `${Math.max(0.7, Math.min(1.8, Number(state.desktopFontScale) || 1))}`);
     bindDeskTabs(desk);
     bindDeskFilters(desk);
     bindFileDrop(desk, () => activeDesktopDropDir(), async () => {
@@ -6669,6 +6806,13 @@ async function arrangeDesktop() {
   const stage = document.getElementById("desktop-stage");
   if (!stage) return;
   syncDesktopChrome();
+  const iconScale = Math.max(0.6, Math.min(2, Number(state.desktopIconScale) || Number(state.settings.desktopIconScale) || 1));
+  const fontScale = Math.max(0.7, Math.min(1.8, Number(state.desktopFontScale) || Number(state.settings.desktopFontScale) || 1));
+  stage.style.setProperty("--path-icon-size", `${3.2 * iconScale}rem`);
+  stage.style.setProperty("--path-list-icon-size", `${2 * iconScale}rem`);
+  stage.style.setProperty("--path-grid-min", `${6.6 * iconScale}rem`);
+  stage.style.setProperty("--path-font-size", `${fontScale}em`);
+  stage.style.setProperty("--path-label-size", `${0.78 * fontScale}rem`);
 
   const folderTab = activeDesktopFolderTab();
   const view = state.iconView === "list" ? "list" : "grid";
@@ -7013,6 +7157,15 @@ function openSettings(focusPanel = "") {
         <td><select id="set-wall">${wallOpts}</select></td>
       </tr>
       <tr>
+        <td>Windows-Hintergrundbild</td>
+        <td>Eigenes Bild als Windows-Desktop verwenden; leer lassen zum Wiederherstellen des vorherigen Hintergrunds</td>
+        <td>
+          <input id="set-windows-wallpaper" type="text" readonly value="${escapeHtml(state.settings.windowsWallpaper || "")}" title="${escapeHtml(state.settings.windowsWallpaper || "")}">
+          <button type="button" id="set-pick-windows-wallpaper">Bild auswählen</button>
+          <button type="button" id="set-clear-windows-wallpaper">Entfernen</button>
+        </td>
+      </tr>
+      <tr>
         <td>圖示顯示</td>
         <td>桌面容器內圖示排列</td>
         <td>
@@ -7031,6 +7184,11 @@ function openSettings(focusPanel = "") {
         <td>底部 Dock</td>
         <td>主螢幕底邊背景條；寬度跟隨任務欄圖示；不遮擋點擊</td>
         <td><input id="set-dock" type="checkbox" ${dockEnabled() ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Windows-Taskbar-Integration</td>
+        <td>Laufende Windows-Fenster im eDEX-Task-Dock anzeigen und aktivieren/minimieren</td>
+        <td><input id="set-taskbar-integration" type="checkbox" ${state.settings.taskbarIntegrationEnabled === true ? "checked" : ""}></td>
       </tr>
       <tr>
         <td>Dock 外框</td>
@@ -7125,36 +7283,77 @@ function openSettings(focusPanel = "") {
     const rows = [...settingsTable.querySelectorAll("tr")];
     const header = rows.shift();
     const rowContains = (row, id) => Boolean(row.querySelector(`#${id}`));
-    const firstRow = (id) => {
-      const index = rows.findIndex((row) => rowContains(row, id));
-      return index < 0 ? rows.length : index;
+    const sectionForRow = (row) => {
+      if (rowContains(row, "set-theme")
+        || rowContains(row, "set-windows-colors")
+        || rowContains(row, "set-keep-theme-wallpaper")
+        || rowContains(row, "set-wall")
+        || rowContains(row, "set-windows-wallpaper")) return "themes";
+      if (rowContains(row, "set-rainmeter")
+        || rowContains(row, "set-rain-font")
+        || rowContains(row, "set-rain-speed")) return "extensions";
+      if (rowContains(row, "set-start-with-windows")) return "start";
+      if (rowContains(row, "set-icon-view")
+        || rowContains(row, "set-snap")
+        || rowContains(row, "set-dock")
+        || rowContains(row, "set-taskbar-integration")
+        || rowContains(row, "set-dock-frame")
+        || rowContains(row, "set-dock-label-color-mode")
+        || rowContains(row, "set-clock-panel")
+        || rowContains(row, "set-search-font")) return "panels";
+      return "edex";
     };
-    const windowsStart = firstRow("set-windows-colors");
-    const cuts = [
-      ["Anzeige & Theme", 0, windowsStart, true],
-      ["Windows-Integration", windowsStart, firstRow("set-grid"), false],
-      ["Uhr", firstRow("set-grid"), firstRow("set-search-font"), false],
-      ["Interface & Code-Hintergrund", firstRow("set-search-font"), rows.length, false]
+    const sections = [
+      ["edex", "eDEX"],
+      ["panels", "Panels"],
+      ["themes", "Themes"],
+      ["extensions", "Erweiterungen"],
+      ["start", "Start"]
     ];
     const fragment = document.createDocumentFragment();
-    cuts.forEach(([title, start, end, open], index) => {
+    sections.forEach(([id, title], index) => {
       const table = settingsTable.cloneNode(false);
       table.removeAttribute("id");
       table.classList.add("settings-section-table");
       if (index === 0) table.id = "settingsEditor";
       const body = document.createElement("tbody");
       if (header) body.appendChild(header.cloneNode(true));
-      rows.slice(start, end).forEach((row) => body.appendChild(row));
+      rows.filter((row) => sectionForRow(row) === id).forEach((row) => body.appendChild(row));
       table.appendChild(body);
       const details = document.createElement("details");
       details.className = "settings-section";
-      details.open = open;
+      details.dataset.settingsTab = id;
+      details.open = index === 0;
       const summary = document.createElement("summary");
       summary.textContent = title;
       details.append(summary, table);
       fragment.appendChild(details);
     });
+    const nav = document.createElement("nav");
+    nav.className = "settings-tab-nav";
+    nav.setAttribute("aria-label", "Einstellungsbereiche");
+    nav.innerHTML = sections.map(([id, title], index) =>
+      `<button type="button" class="settings-tab${index === 0 ? " active" : ""}" data-settings-tab="${id}" aria-selected="${index === 0 ? "true" : "false"}">${title}</button>`
+    ).join("");
+    modal.querySelector("#settingsEditor")?.before(nav);
     settingsTable.replaceWith(fragment);
+    nav.querySelectorAll("[data-settings-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const selected = button.dataset.settingsTab;
+        nav.querySelectorAll(".settings-tab").forEach((item) => {
+          const active = item === button;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        modal.querySelectorAll(".settings-section").forEach((section) => {
+          section.hidden = section.dataset.settingsTab !== selected;
+          section.open = section.dataset.settingsTab === selected;
+        });
+      });
+    });
+    modal.querySelectorAll(".settings-section").forEach((section, index) => {
+      section.hidden = index !== 0;
+    });
   }
   document.body.appendChild(modal);
   const saveStatus = modal.querySelector("#settings-save-status");
@@ -7202,12 +7401,10 @@ function openSettings(focusPanel = "") {
     }
   });
   const focusSection = focusPanel === "coderain"
-    ? "Interface & Code-Hintergrund"
-    : focusPanel === "clock" ? "Uhr" : focusPanel === "desktop" ? "Desktop UI" : "";
+    ? "extensions"
+    : focusPanel === "clock" || focusPanel === "desktop" ? "panels" : "";
   if (focusSection) {
-    modal.querySelectorAll(".settings-section").forEach((section) => {
-      section.open = section.querySelector("summary")?.textContent === focusSection;
-    });
+    modal.querySelector(`.settings-tab[data-settings-tab="${focusSection}"]`)?.click();
   }
 
   const presetSelect = modal.querySelector("#set-preset");
@@ -7317,6 +7514,22 @@ function openSettings(focusPanel = "") {
     const colorInput = modal.querySelector("#set-dock-label-color");
     if (colorInput) colorInput.disabled = event.target.value !== "custom";
   });
+  modal.querySelector("#set-pick-windows-wallpaper")?.addEventListener("click", async () => {
+    const selected = await window.edex.pickWindowsWallpaper?.();
+    if (!selected) return;
+    const input = modal.querySelector("#set-windows-wallpaper");
+    if (input) {
+      input.value = selected;
+      input.title = selected;
+    }
+  });
+  modal.querySelector("#set-clear-windows-wallpaper")?.addEventListener("click", () => {
+    const input = modal.querySelector("#set-windows-wallpaper");
+    if (input) {
+      input.value = "";
+      input.title = "";
+    }
+  });
   modal.querySelector("#set-cancel").onclick = () => {
     state.settings = { ...state.settings, layoutMode: prevLayoutMode, uiScale: prevUiScale };
     applyUiMetrics();
@@ -7334,6 +7547,7 @@ function openSettings(focusPanel = "") {
     const keepThemeWallpaper = Boolean(modal.querySelector("#set-keep-theme-wallpaper")?.checked);
     const rainmeterEnabled = Boolean(modal.querySelector("#set-rainmeter")?.checked);
     const wallpaper = modal.querySelector("#set-wall").value;
+    const windowsWallpaper = String(modal.querySelector("#set-windows-wallpaper")?.value || "").trim();
     const uiScaleRaw = Number(modal.querySelector("#set-ui-scale").value);
     const uiScale = Number.isFinite(uiScaleRaw) ? Math.max(0.4, Math.min(1.2, uiScaleRaw)) : 1;
     const layoutModeValue = modal.querySelector("#set-layout-mode")?.value === "4k" ? "4k" : "2k";
@@ -7354,6 +7568,7 @@ function openSettings(focusPanel = "") {
       ? Math.max(8, Math.min(72, Math.round(searchFontRaw)))
       : 12;
     const dockEnabledValue = Boolean(modal.querySelector("#set-dock")?.checked);
+    const taskbarIntegrationEnabled = Boolean(modal.querySelector("#set-taskbar-integration")?.checked);
     const dockFrameValue = String(modal.querySelector("#set-dock-frame")?.value || state.settings?.dockFrameStyle || "rounded");
     const dockLabelColorMode = modal.querySelector("#set-dock-label-color-mode")?.value === "custom" ? "custom" : "theme";
     const dockLabelColorInput = modal.querySelector("#set-dock-label-color")?.value || "#00eaff";
@@ -7376,6 +7591,7 @@ function openSettings(focusPanel = "") {
     state.settings = {
       ...state.settings,
       dockEnabled: dockEnabledValue,
+      taskbarIntegrationEnabled,
       dockFrameStyle: dockFrameValue,
       dockLabelColor: dockLabelColorValue,
       startWithWindows,
@@ -7388,6 +7604,7 @@ function openSettings(focusPanel = "") {
     const settingsPatch = {
       snapWidgets: modal.querySelector("#set-snap").checked,
       dockEnabled: dockEnabledValue,
+      taskbarIntegrationEnabled,
       dockFrameStyle: dockFrameValue,
       dockLabelColor: dockLabelColorValue,
       gridSize: gridSizeValue,
@@ -7403,6 +7620,7 @@ function openSettings(focusPanel = "") {
       rainmeterEnabled,
       startWithWindows,
       wallpaper,
+      windowsWallpaper,
       iconView: state.iconView,
       windowZoneEnabled,
       windowZoneMargins,
@@ -7415,6 +7633,10 @@ function openSettings(focusPanel = "") {
       displayLayout: currentDisplayLayout()
     });
     state.settings = result.settings;
+    if (!taskbarIntegrationEnabled && taskbarWindowTimer) {
+      clearInterval(taskbarWindowTimer);
+      taskbarWindowTimer = null;
+    }
     window.edexI18n?.setLocale?.(state.settings.locale);
     state.themeName = result.themeName;
     if (result.displays) state.displays = result.displays;
@@ -7632,6 +7854,8 @@ window.addEventListener("keydown", (event) => {
   }
 
   state.iconView = (saved?.iconView || state.settings.iconView) === "list" ? "list" : "grid";
+  state.desktopIconScale = Math.max(0.6, Math.min(2, Number(saved?.desktopIconScale) || Number(state.settings.desktopIconScale) || 1));
+  state.desktopFontScale = Math.max(0.7, Math.min(1.8, Number(saved?.desktopFontScale) || Number(state.settings.desktopFontScale) || 1));
   state.iconPositions = saved?.iconPositions || {};
   if (state.settings?.layoutMode !== "4k" && state.settings?.layoutMode !== "2k") {
     state.settings = { ...state.settings, layoutMode: defaultLayoutMode() };

@@ -69,7 +69,7 @@
           ]
         }
       ],
-      "icon": "build/icon.ico",
+      "icon": "assets/icons/branding/app.ico",
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false
     },

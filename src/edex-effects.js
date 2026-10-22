@@ -823,13 +823,13 @@
     document.querySelectorAll("[data-ram-gauge]").forEach((button) => {
       button.addEventListener("click", async () => {
         const mode = button.dataset.ramGauge || "used";
-        document.documentElement.dataset.ramGaugeMode = mode;
-        document.querySelectorAll("[data-ram-gauge]").forEach((item) => item.classList.toggle("on", item === button));
-        try {
+        if (typeof window.setRamGaugeMode === "function") {
+          await window.setRamGaugeMode(mode);
+        } else {
+          document.documentElement.dataset.ramGaugeMode = mode;
           await window.edex.saveSettings({ ramGaugeMode: mode });
-        } catch {
-          // Keep the visual selection until the next settings refresh.
         }
+        document.querySelectorAll("[data-ram-gauge]").forEach((item) => item.classList.toggle("on", item === button));
         refreshMem();
       });
     });

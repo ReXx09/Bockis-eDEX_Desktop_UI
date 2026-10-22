@@ -20,8 +20,13 @@ const { scanRoot, listFolder, importFiles, buildPlan, executePlan, undoLast } = 
 const { dirIcon } = require("./lib/icons");
 const { loadSettings, saveSettings } = require("./lib/settings-store");
 const { WALLPAPERS, listThemes, loadTheme, resolveThemeName } = require("./lib/themes");
-const { applyAppWallpaper, restoreWallpaper, hideDesktopIcons, restoreDesktopIcons } = require("./lib/system-desktop");
-const rainmeter = require("./lib/rainmeter");
+const {
+  applyAppWallpaper,
+  restoreWallpaper,
+  setWindowsWallpaper,
+  hideDesktopIcons,
+  restoreDesktopIcons
+} = require("./lib/system-desktop");
 const appLog = require("./lib/app-log");
 const {
   pinWindowBottom,
@@ -156,6 +161,20 @@ function stopTerminalSession(key, session) {
     });
   }
 }
+
+ipcMain.handle("pick-windows-wallpaper", async (event) => {
+  requireTrustedWindow(event);
+  const win = getSenderWindow(event);
+  const desktopPath = path.join(os.homedir(), "Desktop");
+  const result = await dialog.showOpenDialog(win, {
+    title: "Bild vom Desktop auswählen",
+    defaultPath: fs.existsSync(desktopPath) ? desktopPath : os.homedir(),
+    properties: ["openFile"],
+    filters: [{ name: "Bilder", extensions: ["jpg", "jpeg", "png", "bmp"] }]
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  return result.filePaths[0];
+});
 const approvedPathRoots = new PathPolicy();
 
 function systemText(de, en, zh) {
@@ -567,7 +586,10 @@ function scheduleWallpaper() {
       loadTheme(settings.theme || "tron"),
       settings.wallpaper || "grid",
       settings.gridSize
-    ).catch((err) => console.error("desktop wallpaper", err));
+    ).then(async () => {
+      const custom = String(settings.windowsWallpaper || "").trim();
+      if (custom && fs.existsSync(custom)) await setWindowsWallpaper(custom, "fill");
+    }).catch((err) => console.error("desktop wallpaper", err));
   }, 400);
 }
 
@@ -581,32 +603,6 @@ function windowsAccentHex() {
     // Keep the cyan fallback when Windows cannot provide its accent color.
   }
   return accent;
-}
-
-function effectiveRainmeterTheme(theme) {
-  const mode = settings.windowsColorMode || "subtle";
-  if (mode === "off") return theme;
-  const accent = windowsAccentHex().slice(1).match(/[0-9a-f]{2}/gi)?.map((part) => parseInt(part, 16)) || [0, 234, 255];
-  const colors = theme?.colors || {};
-  const blend = mode === "strong" ? 0.55 : 0.22;
-  const mix = (base, next) => Math.round(Number(base || 0) * (1 - blend) + next * blend);
-  const r = mix(colors.r, accent[0]);
-  const g = mix(colors.g, accent[1]);
-  const b = mix(colors.b, accent[2]);
-  const foreground = `#${[r, g, b].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
-  return {
-    ...theme,
-    colors: { ...colors, r, g, b },
-    terminal: { ...(theme?.terminal || {}), foreground }
-  };
-}
-
-function scheduleRainmeter() {
-  clearTimeout(scheduleRainmeter.timer);
-  scheduleRainmeter.timer = setTimeout(() => {
-    rainmeter.syncRainmeter(effectiveRainmeterTheme(loadTheme(settings.theme || "tron")), settings.rainmeterEnabled === true)
-      .catch((err) => console.error("rainmeter", err));
-  }, 250);
 }
 
 function broadcast(channel, payload) {
@@ -663,7 +659,13 @@ if (!gotLock) {
         if (!desktopOverlayReady && !quitting) syncAllWindows();
       }, delay);
     });
-    scheduleRainmeter();
+    setTimeout(() => {
+      if (!desktopOverlayReady && !quitting) {
+        restoreDesktopStateOnExit().catch((err) => {
+          console.error("restore desktop after startup timeout", err);
+        });
+      }
+    }, 12000);
 
     screen.on("display-added", () => scheduleSync("added"));
     screen.on("display-removed", () => scheduleSync("removed"));
@@ -682,14 +684,12 @@ if (!gotLock) {
       quitting = true;
       clearTimeout(syncTimer);
       clearTimeout(scheduleWallpaper.timer);
-      clearTimeout(scheduleRainmeter.timer);
       try { tray?.destroy(); } catch { /* ignore */ }
       tray = null;
       stopZOrderDaemon();
       stopOleDragDaemon();
       try { await win32Embed.releaseAllEmbeds(); } catch { /* ignore */ }
       try { win32Embed.stopEmbedDaemon(); } catch { /* ignore */ }
-      try { await rainmeter.stopRainmeter(); } catch { /* ignore */ }
       appLog.close();
       try {
         await restoreDesktopStateOnExit();
@@ -930,7 +930,6 @@ ipcMain.handle("save-settings", (event, patch) => {
   appLog.info("settings.update", "Einstellungen aktualisiert", {
     theme: settings.theme,
     wallpaper: settings.wallpaper,
-    rainmeterEnabled: settings.rainmeterEnabled
   });
 
   const themeName = resolveThemeName(settings.theme || "tron");
@@ -953,21 +952,11 @@ ipcMain.handle("save-settings", (event, patch) => {
     Object.prototype.hasOwnProperty.call(globalPatch, "theme")
     || Object.prototype.hasOwnProperty.call(globalPatch, "wallpaper")
     || Object.prototype.hasOwnProperty.call(globalPatch, "gridSize")
+    || Object.prototype.hasOwnProperty.call(globalPatch, "windowsWallpaper")
   ) {
     scheduleWallpaper();
   }
-  if (
-    Object.prototype.hasOwnProperty.call(globalPatch, "theme")
-    || Object.prototype.hasOwnProperty.call(globalPatch, "rainmeterEnabled")
-  ) {
-    scheduleRainmeter();
-  }
   return payload;
-});
-
-ipcMain.handle("rainmeter-status", (event) => {
-  requireTrustedWindow(event);
-  return { ...rainmeter.status(), enabled: settings.rainmeterEnabled === true };
 });
 
 ipcMain.handle("save-display-layout", (event, layout) => {
@@ -1285,7 +1274,8 @@ ipcMain.handle("undo", async (event) => {
 ipcMain.handle("import-files", async (event, destDir, sources) => {
   requireTrustedWindow(event);
   requireApprovedPath(destDir);
-  return importFiles(destDir, sources || []);
+  if (!Array.isArray(sources)) throw new Error("Quellpfade müssen aus einer Dateiauswahl stammen");
+  return importFiles(destDir, sources);
 });
 
 ipcMain.handle("read-file-preview", async (event, target) => {
@@ -1787,6 +1777,28 @@ ipcMain.handle("list-embed-windows", async (event) => {
   requireTrustedWindow(event);
   const items = await win32Embed.listTopWindows(50);
   return { items };
+});
+
+ipcMain.handle("list-taskbar-windows", async (event) => {
+  requireTrustedWindow(event);
+  const ownPids = new Set(process.platform === "win32" ? [process.pid] : []);
+  const ownHwnds = new Set([...windows.values()]
+    .filter((window) => window && !window.isDestroyed())
+    .map((window) => win32Embed.hwndFromBuffer(window.getNativeWindowHandle())));
+  const items = (await win32Embed.listTaskbarWindows(100))
+    .filter((item) => !ownPids.has(Number(item.pid)))
+    .filter((item) => !ownHwnds.has(String(item.hwnd)));
+  return { items, foreground: await win32Embed.foregroundWindow() };
+});
+
+ipcMain.handle("activate-taskbar-window", async (event, hwnd) => {
+  requireTrustedWindow(event);
+  return { ok: await win32Embed.activateWindow(hwnd) };
+});
+
+ipcMain.handle("minimize-taskbar-window", async (event, hwnd) => {
+  requireTrustedWindow(event);
+  return { ok: await win32Embed.minimizeWindow(hwnd) };
 });
 
 function parentHwndOf(event) {
