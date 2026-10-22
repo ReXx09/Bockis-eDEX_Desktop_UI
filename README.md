@@ -175,6 +175,6 @@ und kennzeichnet das Projekt als GPL-3.0-Weiterentwicklung des ursprünglichen
 
 - Dieses Tool ist eine GPL-3.0-Weiterentwicklung auf Basis von [eDEX Desktop Organizer](https://github.com/bananamax9113/edex-desktop-organizer).
 - Die visuelle Gestaltung und Teile der Frontend-Ressourcen stammen aus eDEX-UI: https://github.com/GitSquared/edex-ui
-- Themes und Modul-Stile orientieren sich an `src/assets` und dem originalen eDEX-CSS.
+- Themes und Modul-Stile liegen unter `assets` und orientieren sich am originalen eDEX-CSS.
 - Ergänzende Informationen zur Farbgestaltung stehen in [`tron-theme.md`](tron-theme.md).
 - Vollständige Quellen- und Lizenzhinweise stehen in [`NOTICE.md`](NOTICE.md).

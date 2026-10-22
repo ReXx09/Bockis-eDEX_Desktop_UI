@@ -1,6 +1,6 @@
 # Tron-Theme-Farben (Referenz für die Frontend-Entwicklung)
 
-Quelle: `src/assets/themes/tron.json` (Standard-Theme von eDEX) sowie die CSS-Variablen und semantischen Fallback-Farben, die das Desktop-UI-Frontend verwendet.
+Quelle: `assets/themes/tron.json` (Standard-Theme von eDEX) sowie die CSS-Variablen und semantischen Fallback-Farben, die das Desktop-UI-Frontend verwendet.
 
 Die Hauptfarbe ist ein kühles Cyan-Weiß (cyan-ice), der Hintergrund ist fast schwarzblau. Die Oberfläche baut ihre Ebenen fast ausschließlich aus „Hauptfarbe + Transparenz“ auf; Rot und Gelb sind Fehlern und Warnungen vorbehalten.
 
@@ -213,6 +213,6 @@ Verwendungsbeispiel: `bg-tron-bg text-tron border-tron/45 hover:bg-tron/18`
 
 ## Quelldateien
 
-- Theme-Definition: `src/assets/themes/tron.json`
+- Theme-Definition: `assets/themes/tron.json`
 - Standard-CSS des Frontends: `src/organizer.css` mit `:root`
 - Anwendung zur Laufzeit: `src/renderer.js` → `applyTheme()`

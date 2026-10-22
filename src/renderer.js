@@ -881,7 +881,7 @@ function iconSvg(icon) {
   return `<svg viewBox="0 0 ${icon.width} ${icon.height}" fill="${color}">${icon.svg}</svg>`;
 }
 
-const FILE_BROWSER_ICON_DIR = "assets/file-icons/";
+const FILE_BROWSER_ICON_DIR = "../assets/file-icons/";
 const FILE_BROWSER_ICON_BY_EXTENSION = {
   ".css": "datei_css.png",
   ".exe": "datei_exe.png",
@@ -1231,7 +1231,7 @@ async function boot() {
         <div class="boot-log" data-boot-log aria-live="polite"></div>
       </section>
       <aside class="boot-brand-pane">
-        <img class="boot-logo" src="assets/icons/branding/logo.png" alt="Bockis eDEX">
+        <img class="boot-logo" src="../assets/icons/branding/logo.png" alt="Bockis eDEX">
         <pre class="boot-ascii">${BOOT_ASCII_LOGO}</pre>
         <div class="boot-tagline">DESKTOP UI / TRON SYSTEM</div>
         <div class="boot-progress-panel">
@@ -1244,7 +1244,7 @@ async function boot() {
       </aside>
     </div>
     <div class="boot-final" data-boot-final>
-      <img src="assets/icons/branding/logo.png" alt="Bockis eDEX">
+      <img src="../assets/icons/branding/logo.png" alt="Bockis eDEX">
       <h1>BOCKIS-eDEX</h1>
       <div class="sub">SYSTEM ONLINE</div>
       <div class="count" data-boot-count>starte Dashboard ...</div>
@@ -1662,7 +1662,7 @@ async function shutdown() {
         <div class="shutdown-log" data-shutdown-log aria-live="polite"></div>
       </div>
       <aside class="shutdown-brand">
-        <img src="assets/icons/branding/logo.png" alt="Bockis eDEX">
+        <img src="../assets/icons/branding/logo.png" alt="Bockis eDEX">
         <strong>BOCKIS-eDEX</strong>
         <span>SYSTEM POWER DOWN</span>
       </aside>
@@ -1670,7 +1670,7 @@ async function shutdown() {
     <div class="crt-beam" aria-hidden="true"></div>
     <div class="crt-dot" aria-hidden="true"></div>
     <div class="shutdown-final" data-shutdown-final>
-      <img src="assets/icons/branding/logo.png" alt="Bockis eDEX">
+      <img src="../assets/icons/branding/logo.png" alt="Bockis eDEX">
       <strong>BOCKIS-eDEX</strong>
       <span>SYSTEM POWER DOWN</span>
     </div>`;
