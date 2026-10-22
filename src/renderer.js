@@ -81,7 +81,7 @@ const MACOS_TAGS = [
   { id: "gray", label: "灰色", color: "#8e8e93" }
 ];
 
-const fileStageCtx = new WeakMap();
+const fileStageCtx = window.edexFileStageCtx;
 let terminalGridMode = "1x1";
 let terminalNextPane = 1;
 const terminalPaneIds = [];
@@ -172,6 +172,7 @@ const state = {
   dockRaf: null
   ,weatherTimer: null
 };
+window.edexRendererState = state;
 
 function defaultWidgets() {
   return JSON.parse(JSON.stringify(state.primary ? DEFAULT_WIDGETS_PRIMARY : DEFAULT_WIDGETS_SECONDARY));
@@ -449,188 +450,24 @@ const LED_GLYPHS = {
 
 const LED_ROWS = 5;
 
-function snapGap() {
-  return gridSize();
-}
-
-function alignGrid(value) {
-  const g = gridSize();
-  return Math.round(value / g) * g;
-}
-
-function gridCells(px) {
-  return Math.max(0, Math.round(px / gridSize()));
-}
-
-function cellsPx(count) {
-  return Math.max(0, Math.round(count)) * gridSize();
-}
-
-function alignGridSpan(size, minCells = 2) {
-  const g = gridSize();
-  const cells = Math.max(minCells, Math.round(Math.max(0, size) / g));
-  return cells * g;
-}
-
-function snapExclusiveEdge(px) {
-  return Math.round(px / gridSize()) * gridSize();
-}
-
-function gridLineOf(exclusiveEdge) {
-  return snapExclusiveEdge(exclusiveEdge) - 1;
-}
-
-function pxFromBox(box) {
-  const g = gridSize();
-  if (Number.isFinite(Number(box?.gx)) && Number.isFinite(Number(box?.gw))) {
-    return {
-      x: cellsPx(box.gx),
-      y: cellsPx(box.gy),
-      w: cellsPx(Math.max(2, box.gw)),
-      h: cellsPx(Math.max(2, box.gh))
-    };
-  }
-  const x = alignGrid(pxFromVw(box?.x || 0));
-  const y = alignGrid(pxFromVh(box?.y || 0));
-  return {
-    x,
-    y,
-    w: alignGridSpan(pxFromVw(box?.w || 16), 2),
-    h: alignGridSpan(pxFromVh(box?.h || 10), 2)
-  };
-}
-
-function boxToPx(box) {
-  return pxFromBox(box);
-}
-
-function snapBoxVwVh(box) {
-  const px = pxFromBox(box);
-  return { ...box, ...pxToGridFields(px.x, px.y, px.w, px.h) };
-}
-
-function pxToGridFields(x, y, w, h) {
-  const g = gridSize();
-  const gx = gridCells(x);
-  const gy = gridCells(y);
-  const gw = Math.max(2, gridCells(w));
-  const gh = Math.max(2, gridCells(h));
-  return {
-    gx,
-    gy,
-    gw,
-    gh,
-    x: vw(gx * g),
-    y: vh(gy * g),
-    w: vw(gw * g),
-    h: vh(gh * g)
-  };
-}
-
-function applyBoxPx(target, x, y, w, h) {
-  Object.assign(target, pxToGridFields(x, y, w, h));
-  return target;
-}
-
-function rectsTooClose(a, b) {
-  const gap = gridSize();
-  return a.x < b.x + b.w + gap && a.x + a.w + gap > b.x && a.y < b.y + b.h + gap && a.y + a.h + gap > b.y;
-}
-
-function otherCardRects(excludeEl) {
-  return [...document.querySelectorAll(".hud-card, .path-card, .desktop-card")]
-    .filter((el) => el && el !== excludeEl)
-    .map((el) => ({
-      x: alignGrid(el.offsetLeft),
-      y: alignGrid(el.offsetTop),
-      w: alignGridSpan(el.offsetWidth, 2),
-      h: alignGridSpan(el.offsetHeight, 2)
-    }));
-}
-
-function overlapsAny(rect, others) {
-  return others.some((other) => rectsTooClose(rect, other));
-}
-
-function resolveMoveNoOverlap(el, x, y, w, h, fallback) {
-  const g = gridSize();
-  const ws = workspaceRect();
-  const others = otherCardRects(el);
-  x = alignGrid(x);
-  y = alignGrid(y);
-  w = alignGridSpan(w, 2);
-  h = alignGridSpan(h, 2);
-  const wanted = { x, y, w, h };
-  if (!overlapsAny(wanted, others)) return { x, y, w, h };
-
-  const candidates = [];
-  if (fallback) candidates.push({ x: alignGrid(fallback.x), y: alignGrid(fallback.y) });
-  others.forEach((o) => {
-    candidates.push(
-      { x: alignGrid(o.x + o.w + g), y: alignGrid(o.y) },
-      { x: alignGrid(o.x - w - g), y: alignGrid(o.y) },
-      { x: alignGrid(o.x), y: alignGrid(o.y + o.h + g) },
-      { x: alignGrid(o.x), y: alignGrid(o.y - h - g) },
-      { x: alignGrid(o.x + o.w + g), y },
-      { x: alignGrid(o.x - w - g), y },
-      { x, y: alignGrid(o.y + o.h + g) },
-      { x, y: alignGrid(o.y - h - g) }
-    );
-  });
-
-  let best = fallback ? { x: alignGrid(fallback.x), y: alignGrid(fallback.y), w, h } : wanted;
-  let bestD = Infinity;
-  candidates.forEach((c) => {
-    if (c.x < 0 || c.y < 0 || c.x + w > ws.width + g || c.y + h > ws.height + g) return;
-    const rect = { x: c.x, y: c.y, w, h };
-    if (overlapsAny(rect, others)) return;
-    const d = (c.x - x) ** 2 + (c.y - y) ** 2;
-    if (d < bestD) {
-      bestD = d;
-      best = rect;
-    }
-  });
-  if (overlapsAny(best, others) && fallback) {
-    return { x: alignGrid(fallback.x), y: alignGrid(fallback.y), w, h };
-  }
-  return best;
-}
-
-function clampResizeNoOverlap(el, left, top, w, h, minW, minH) {
-  const g = gridSize();
-  w = alignGridSpan(w, gridCells(minW || g * 2));
-  h = alignGridSpan(h, gridCells(minH || g * 2));
-  const others = otherCardRects(el);
-  others.forEach((o) => {
-    const hitsX = left < o.x + o.w + g && left + w + g > o.x;
-    const hitsY = top < o.y + o.h + g && top + h + g > o.y;
-    if (!hitsX || !hitsY) return;
-    if (left <= o.x && left + w + g > o.x) {
-      w = alignGridSpan(Math.min(w, o.x - g - left), gridCells(minW || g * 2));
-    }
-    if (top <= o.y && top + h + g > o.y) {
-      h = alignGridSpan(Math.min(h, o.y - g - top), gridCells(minH || g * 2));
-    }
-  });
-  while (w > (minW || g * 2) && overlapsAny({ x: left, y: top, w, h }, others)) w -= g;
-  while (h > (minH || g * 2) && overlapsAny({ x: left, y: top, w, h }, others)) h -= g;
-  return {
-    w: Math.max(minW || g * 2, w),
-    h: Math.max(minH || g * 2, h)
-  };
-}
-
-function snapAllLayoutToGrid() {
-  Object.keys(state.layout).forEach((id) => {
-    state.layout[id] = { ...state.layout[id], ...snapBoxVwVh(state.layout[id]) };
-  });
-  if (state.desktopStage) {
-    state.desktopStage = { ...state.desktopStage, ...snapBoxVwVh(state.desktopStage) };
-  }
-  state.pathCards.forEach((card) => {
-    Object.assign(card, snapBoxVwVh(card));
-  });
-}
+const snapGap = (...args) => window.edexDesktopLayout.snapGap(...args);
+const alignGrid = (...args) => window.edexDesktopLayout.alignGrid(...args);
+const gridCells = (...args) => window.edexDesktopLayout.gridCells(...args);
+const cellsPx = (...args) => window.edexDesktopLayout.cellsPx(...args);
+const alignGridSpan = (...args) => window.edexDesktopLayout.alignGridSpan(...args);
+const snapExclusiveEdge = (...args) => window.edexDesktopLayout.snapExclusiveEdge(...args);
+const gridLineOf = (...args) => window.edexDesktopLayout.gridLineOf(...args);
+const pxFromBox = (...args) => window.edexDesktopLayout.pxFromBox(...args);
+const boxToPx = (...args) => window.edexDesktopLayout.boxToPx(...args);
+const snapBoxVwVh = (...args) => window.edexDesktopLayout.snapBoxVwVh(...args);
+const pxToGridFields = (...args) => window.edexDesktopLayout.pxToGridFields(...args);
+const applyBoxPx = (...args) => window.edexDesktopLayout.applyBoxPx(...args);
+const rectsTooClose = (...args) => window.edexDesktopLayout.rectsTooClose(...args);
+const otherCardRects = (...args) => window.edexDesktopLayout.otherCardRects(...args);
+const overlapsAny = (...args) => window.edexDesktopLayout.overlapsAny(...args);
+const resolveMoveNoOverlap = (...args) => window.edexDesktopLayout.resolveMoveNoOverlap(...args);
+const clampResizeNoOverlap = (...args) => window.edexDesktopLayout.clampResizeNoOverlap(...args);
+const snapAllLayoutToGrid = (...args) => window.edexDesktopLayout.snapAllLayoutToGrid(...args);
 
 function separateLayoutRects() {
   const g = gridSize();
@@ -738,154 +575,15 @@ function findEmptyBox(preferredBox, exclude = {}) {
   return snapBoxVwVh({ ...base, ...pxToGridFields(x, y, w, h) });
 }
 
-function workspaceRect() {
-  const ws = document.getElementById("workspace");
-  return {
-    width: ws?.clientWidth || window.innerWidth,
-    height: ws?.clientHeight || Math.floor(window.innerHeight * 0.86)
-  };
-}
+const workspaceRect = (...args) => window.edexDesktopLayout.workspaceRect(...args);
+const panelZoneMode = (...args) => window.edexDesktopLayout.panelZoneMode(...args);
+const centralZoneRect = (...args) => window.edexDesktopLayout.centralZoneRect(...args);
+const panelZoneRect = (...args) => window.edexDesktopLayout.panelZoneRect(...args);
 
-function panelZoneMode(el) {
-  const id = el?.dataset?.panelId;
-  return id && state.layout[id]?.zone === "edge" ? "edge" : "workspace";
-}
-
-function centralZoneRect() {
-  const ws = workspaceRect();
-  const margins = state.settings.windowZoneMargins || {};
-  const left = ws.width * Math.max(0, Math.min(45, Number(margins.left) || 0)) / 100;
-  const top = ws.height * Math.max(0, Math.min(45, Number(margins.top) || 0)) / 100;
-  const right = ws.width * (1 - Math.max(0, Math.min(45, Number(margins.right) || 0)) / 100);
-  const bottom = ws.height * (1 - Math.max(0, Math.min(45, Number(margins.bottom) || 0)) / 100);
-  return {
-    x: left,
-    y: top,
-    width: Math.max(40, right - left),
-    height: Math.max(40, bottom - top)
-  };
-}
-
-function panelZoneRect(el) {
-  const ws = workspaceRect();
-  if (panelZoneMode(el) === "edge" || state.settings.windowZoneEnabled === false) {
-    return { x: 0, y: 0, width: ws.width, height: ws.height };
-  }
-  return centralZoneRect();
-}
-
-function constrainPanelPosition(el, x, y, w, h) {
-  const ws = workspaceRect();
-  if (state.settings.windowZoneEnabled === false) {
-    return {
-      x: Math.max(0, Math.min(ws.width - w, x)),
-      y: Math.max(0, Math.min(ws.height - h, y))
-    };
-  }
-  if (panelZoneMode(el) === "workspace") {
-    const zone = centralZoneRect();
-    return {
-      x: Math.max(zone.x, Math.min(zone.x + zone.width - w, x)),
-      y: Math.max(zone.y, Math.min(zone.y + zone.height - h, y))
-    };
-  }
-  const central = centralZoneRect();
-  const regions = [
-    { x: 0, y: 0, width: central.x, height: ws.height },
-    { x: central.x + central.width, y: 0, width: ws.width - central.x - central.width, height: ws.height },
-    { x: 0, y: 0, width: ws.width, height: central.y },
-    { x: 0, y: central.y + central.height, width: ws.width, height: ws.height - central.y - central.height }
-  ];
-  const candidates = regions
-    .filter((region) => region.width >= w && region.height >= h)
-    .map((region) => ({
-      x: Math.max(region.x, Math.min(region.x + region.width - w, x)),
-      y: Math.max(region.y, Math.min(region.y + region.height - h, y))
-    }));
-  return candidates.sort(
-    (a, b) => ((a.x - x) ** 2 + (a.y - y) ** 2) - ((b.x - x) ** 2 + (b.y - y) ** 2)
-  )[0] || { x: 0, y: 0 };
-}
-
-function findPanelZonePosition(el) {
-  const id = el?.dataset?.panelId;
-  if (!id || !state.layout[id]) return null;
-  const current = pxFromBox(state.layout[id]);
-  const ws = workspaceRect();
-  const central = centralZoneRect();
-  const regions = panelZoneMode(el) === "edge"
-    ? [
-      { x: 0, y: 0, width: central.x, height: ws.height },
-      { x: central.x + central.width, y: 0, width: ws.width - central.x - central.width, height: ws.height },
-      { x: 0, y: 0, width: ws.width, height: central.y },
-      { x: 0, y: central.y + central.height, width: ws.width, height: ws.height - central.y }
-    ]
-    : [central];
-  const others = occupiedLayoutRects({ panelId: id });
-  const g = gridSize();
-  const usableRegions = regions.filter((region) => region.width >= g * 2 && region.height >= g * 2);
-  if (!usableRegions.length) return null;
-  const largestRegion = usableRegions.slice().sort(
-    (a, b) => (b.width * b.height) - (a.width * a.height)
-  )[0];
-  const safeW = Math.max(g * 2, Math.min(current.w, Math.floor(largestRegion.width / g) * g));
-  const safeH = Math.max(g * 2, Math.min(current.h, Math.floor(largestRegion.height / g) * g));
-  const fitsZone = (x, y, w = safeW, h = safeH) => regions.some((region) => (
-    x >= region.x && y >= region.y
-    && x + w <= region.x + region.width + g
-    && y + h <= region.y + region.height + g
-  ));
-  const currentPosition = constrainPanelPosition(el, current.x, current.y, safeW, safeH);
-  const safeCurrent = { x: current.x, y: current.y, w: safeW, h: safeH };
-  if (fitsZone(current.x, current.y, safeW, safeH) && !overlapsAny(safeCurrent, others)) return safeCurrent;
-
-  let best = null;
-  let bestDistance = Infinity;
-  for (const region of regions) {
-    if (region.width < safeW || region.height < safeH) continue;
-    const maxX = Math.max(region.x, region.x + region.width - safeW);
-    const maxY = Math.max(region.y, region.y + region.height - safeH);
-    for (let y = alignGrid(region.y); y <= maxY; y += g) {
-      for (let x = alignGrid(region.x); x <= maxX; x += g) {
-        const candidate = { x, y, w: safeW, h: safeH };
-        if (overlapsAny(candidate, others)) continue;
-        const distance = (x - currentPosition.x) ** 2 + (y - currentPosition.y) ** 2;
-        if (distance < bestDistance) {
-          best = candidate;
-          bestDistance = distance;
-        }
-      }
-    }
-  }
-  if (best) return best;
-  const fallbackRegion = largestRegion;
-  return {
-    x: Math.max(fallbackRegion.x, Math.min(fallbackRegion.x + fallbackRegion.width - safeW, currentPosition.x)),
-    y: Math.max(fallbackRegion.y, Math.min(fallbackRegion.y + fallbackRegion.height - safeH, currentPosition.y)),
-    w: safeW,
-    h: safeH
-  };
-}
-
-function repositionPanelInZone(el) {
-  const id = el?.dataset?.panelId;
-  if (!id || !state.layout[id]) return false;
-  const current = pxFromBox(state.layout[id]);
-  const next = findPanelZonePosition(el);
-  if (!next) return false;
-  el.style.left = `${next.x}px`;
-  el.style.top = `${next.y}px`;
-  el.style.width = `${next.w}px`;
-  el.style.height = `${next.h}px`;
-  applyBoxPx(state.layout[id], next.x, next.y, next.w, next.h);
-  return next.x !== current.x || next.y !== current.y || next.w !== current.w || next.h !== current.h;
-}
-
-function clampPanelToZone(el) {
-  const id = el?.dataset?.panelId;
-  if (!id || !state.layout[id]) return false;
-  return repositionPanelInZone(el);
-}
+const constrainPanelPosition = (...args) => window.edexDesktopLayout.constrainPanelPosition(...args);
+const findPanelZonePosition = (...args) => window.edexDesktopLayout.findPanelZonePosition(...args);
+const repositionPanelInZone = (...args) => window.edexDesktopLayout.repositionPanelInZone(...args);
+const clampPanelToZone = (...args) => window.edexDesktopLayout.clampPanelToZone(...args);
 
 function vw(px) {
   const den = layoutProfile().w * layoutFitScale();
@@ -993,52 +691,7 @@ function panelDisplayTitle(id) {
   return state.layout[id]?.title || PANEL_META[id]?.title || id;
 }
 
-function applyTheme(theme, wallpaperId) {
-  state.theme = theme;
-  const c = theme.colors || {};
-  const mode = state.settings.windowsColorMode || "subtle";
-  const rawAccent = state.windowsColors?.accent || "#00eaff";
-  const match = rawAccent.replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-  const windowsRgb = match ? match.slice(1).map((part) => parseInt(part, 16)) : [0, 234, 255];
-  const blend = mode === "strong" ? 0.55 : mode === "subtle" ? 0.22 : 0;
-  const r = Math.round((c.r ?? 170) * (1 - blend) + windowsRgb[0] * blend);
-  const g = Math.round((c.g ?? 207) * (1 - blend) + windowsRgb[1] * blend);
-  const b = Math.round((c.b ?? 209) * (1 - blend) + windowsRgb[2] * blend);
-  const panelBase = c.black || "#000000";
-  const panelLight = c.light_black || "#05080d";
-  const panelMatch = String(panelBase).replace(/^#/, "").match(/^([0-9a-f]{6})$/i);
-  const panelLuma = panelMatch
-    ? (parseInt(panelMatch[1].slice(0, 2), 16) * 0.299
-      + parseInt(panelMatch[1].slice(2, 4), 16) * 0.587
-      + parseInt(panelMatch[1].slice(4, 6), 16) * 0.114)
-    : 0;
-  const panelText = panelLuma > 150 ? "#101820" : "#d7f8ff";
-  document.documentElement.style.setProperty("--color_r", r);
-  document.documentElement.style.setProperty("--color_g", g);
-  document.documentElement.style.setProperty("--color_b", b);
-  document.documentElement.style.setProperty("--color_black", c.black || "#000000");
-  document.documentElement.style.setProperty("--color_light_black", mixThemeColor(c.light_black || "#05080d", rawAccent, blend * 0.18));
-  document.documentElement.style.setProperty("--color_grey", mixThemeColor(c.grey || "#262828", rawAccent, blend * 0.35));
-  document.documentElement.style.setProperty("--color_red", c.red || "#ff3c3c");
-  document.documentElement.style.setProperty("--color_yellow", c.yellow || "#ffd23c");
-  document.documentElement.style.setProperty("--panel-bg", panelBase);
-  document.documentElement.style.setProperty("--panel-surface", panelLight);
-  document.documentElement.style.setProperty("--panel-content", panelBase);
-  document.documentElement.style.setProperty("--panel-text", panelText);
-  document.documentElement.style.setProperty("--panel-border", `rgba(${r}, ${g}, ${b}, 0.28)`);
-  document.documentElement.style.setProperty("--panel-border-strong", `rgba(${r}, ${g}, ${b}, 0.55)`);
-  document.documentElement.style.setProperty("--snap-gap", `${snapGap()}px`);
-  applyUiMetrics();
-  window.__edexTheme = theme;
-
-  const wp = wallpaperId || state.settings.wallpaper || "grid";
-  document.body.className = `desktop-shell wp-${wp}`;
-  const windowsThemeSync = window.edex?.applyWindowsTheme?.({
-    mode,
-    rgb: { r: c.r ?? 170, g: c.g ?? 207, b: c.b ?? 209 }
-  });
-  windowsThemeSync?.catch?.(() => {});
-}
+const applyTheme = (...args) => window.edexDesktopLayout.applyTheme(...args);
 
 function ledGlyph(ch) {
   return LED_GLYPHS[ch] || LED_GLYPHS[" "];
@@ -1305,65 +958,8 @@ function itemLabel(item) {
   return item?.displayName || item?.name || "";
 }
 
-function currentDisplayLayout() {
-  return {
-    displayIndex: state.displayIndex,
-    dockEnabled: dockEnabled(),
-    dockPosition: state.displayDockSettings?.position || state.settings?.dockPosition || "bottom",
-    dockWidth: state.displayDockSettings?.width || state.settings?.dockWidth || 720,
-    dockHeight: state.displayDockSettings?.height || state.settings?.dockHeight || 72,
-    dockFrameStyle: state.displayDockSettings?.frameStyle || state.settings?.dockFrameStyle || "rounded",
-    layout: state.layout,
-    desktopStage: state.desktopStage,
-    desktopEnabled: state.desktopEnabled !== false,
-    desktopLocked: Boolean(state.desktopLocked),
-    desktopFilter: state.desktopFilter || "all",
-    desktopGrouped: Boolean(state.desktopGrouped),
-    desktopIconScale: Math.max(0.6, Math.min(2, Number(state.desktopIconScale) || Number(state.settings.desktopIconScale) || 1)),
-    desktopFontScale: Math.max(0.7, Math.min(1.8, Number(state.desktopFontScale) || Number(state.settings.desktopFontScale) || 1)),
-    desktopTabId: state.desktopTabId || "classify",
-    desktopFolderTabs: (state.desktopFolderTabs || []).map((tab) => ({
-      id: tab.id,
-      path: tab.path,
-      name: tab.name
-    })),
-    pathCards: state.pathCards.map((card) => ({
-      id: card.id,
-      path: card.path,
-      name: card.name || "",
-      x: card.x,
-      y: card.y,
-      w: card.w,
-      h: card.h,
-      treeWidth: Number.isFinite(Number(card.treeWidth)) ? Number(card.treeWidth) : 192,
-      gx: card.gx,
-      gy: card.gy,
-      gw: card.gw,
-      gh: card.gh,
-      locked: Boolean(card.locked),
-      minimized: Boolean(card.minimized),
-      fixedDisplayId: Number.isFinite(Number(card.fixedDisplayId)) ? Number(card.fixedDisplayId) : null,
-      iconView: card.iconView === "list" ? "list" : "grid",
-      fileIconScale: Math.max(0.6, Math.min(2, Number(card.fileIconScale) || Number(state.settings.pathIconScale) || 1)),
-      fileFontScale: Math.max(0.7, Math.min(1.8, Number(card.fileFontScale) || Number(state.settings.pathFontScale) || 1)),
-      bg: card.bg || "",
-      activeTabId: card.activeTabId || `${card.id}:root`,
-      tabs: ensurePathTabs(card).map((tab) => ({
-        id: tab.id,
-        path: tab.path,
-        name: tab.name || "",
-        iconView: tab.iconView === "list" ? "list" : "grid"
-      }))
-    })),
-    desktopBg: state.desktopStage?.bg || "",
-    iconPositions: state.iconPositions,
-    iconView: state.iconView
-  };
-}
-
-function persistLayout() {
-  return window.edex.saveDisplayLayout(currentDisplayLayout());
-}
+const currentDisplayLayout = (...args) => window.edexDesktopLayout.currentDisplayLayout(...args);
+const persistLayout = (...args) => window.edexDesktopLayout.persistLayout(...args);
 
 function clearSnapGuides() {
   const box = document.getElementById("snap-guides");
@@ -1426,229 +1022,16 @@ function showWindowZonePreview(settingsModal) {
   guides.style.backgroundSize = `${grid}px ${grid}px`;
 }
 
-function showSnapGuides(guides) {
-  const box = document.getElementById("snap-guides");
-  if (!box) return;
-  const g = gridSize();
-  box.classList.add("on");
-  box.style.backgroundSize = `${g}px ${g}px`;
-  box.innerHTML = (guides || []).map((item) => {
-    const pos = gridLineOf(item.line == null ? item.pos : item.line + 1);
-    const cls = `snap-guide ${item.type}${item.ref ? " ref" : ""}${item.match ? " match" : ""}`;
-    const label = item.label
-      ? `<span class="snap-label">${escapeHtml(item.label)}</span>`
-      : "";
-    return item.type === "v"
-      ? `<div class="${cls}" style="left:${pos}px">${label}</div>`
-      : `<div class="${cls}" style="top:${pos}px">${label}</div>`;
-  }).join("");
-}
+const showSnapGuides = (...args) => window.edexDesktopLayout.showSnapGuides(...args);
+const collectSnapTargets = (...args) => window.edexDesktopLayout.collectSnapTargets(...args);
+const referenceGuides = (...args) => window.edexDesktopLayout.referenceGuides(...args);
 
-function collectSnapTargets(excludeEl) {
-  const gap = snapGap();
-  const ws = workspaceRect();
-  const edgesX = [];
-  const edgesY = [];
-  document.querySelectorAll(".hud-card, .path-card, .desktop-card").forEach((el) => {
-    if (el === excludeEl) return;
-    const left = alignGrid(el.offsetLeft);
-    const top = alignGrid(el.offsetTop);
-    const right = left + alignGridSpan(el.offsetWidth, 2);
-    const bottom = top + alignGridSpan(el.offsetHeight, 2);
-    edgesX.push({ left, right });
-    edgesY.push({ top, bottom });
-  });
-  return { edgesX, edgesY, gap, ws };
-}
+const neighborDisplay = (...args) => window.edexDesktopLayout.neighborDisplay(...args);
+const maybeTransferCard = (...args) => window.edexDesktopLayout.maybeTransferCard(...args);
 
-function referenceGuides(ws) {
-  const midX = snapExclusiveEdge(ws.width / 2);
-  const midY = snapExclusiveEdge(ws.height / 2);
-  return [
-    { type: "v", pos: midX, ref: true, label: "中" },
-    { type: "h", pos: midY, ref: true, label: "中" }
-  ];
-}
-
-function neighborDisplay(direction) {
-  const mine = state.displays.find((d) => d.id === state.displayId);
-  if (!mine) return null;
-  const candidates = state.displays.filter((d) => d.id !== state.displayId);
-  if (direction === "left") {
-    return candidates
-      .filter((d) => d.bounds.x + d.bounds.width <= mine.bounds.x + 48)
-      .sort((a, b) => b.bounds.x - a.bounds.x)[0] || null;
-  }
-  if (direction === "right") {
-    return candidates
-      .filter((d) => d.bounds.x >= mine.bounds.x + mine.bounds.width - 48)
-      .sort((a, b) => a.bounds.x - b.bounds.x)[0] || null;
-  }
-  if (direction === "up") {
-    return candidates
-      .filter((d) => d.bounds.y + d.bounds.height <= mine.bounds.y + 48)
-      .sort((a, b) => b.bounds.y - a.bounds.y)[0] || null;
-  }
-  return candidates
-    .filter((d) => d.bounds.y >= mine.bounds.y + mine.bounds.height - 48)
-    .sort((a, b) => a.bounds.y - b.bounds.y)[0] || null;
-}
-
-async function maybeTransferCard(el, x, y, w, h, opts) {
-  const g = gridSize();
-  const ws = workspaceRect();
-  let target = null;
-  let placeX = g;
-  let placeY = g;
-  const outLeft = x <= -g || (opts.clientX != null && opts.clientX < 12);
-  const outRight = x + w >= ws.width + g || (opts.clientX != null && opts.clientX > window.innerWidth - 12);
-  const outUp = y <= -g || (opts.clientY != null && opts.clientY < 12);
-  const outDown = y + h >= ws.height + g || (opts.clientY != null && opts.clientY > window.innerHeight - 12);
-  if (outLeft) {
-    target = neighborDisplay("left");
-    placeX = Math.max(g, alignGrid(ws.width - w - g));
-  } else if (outRight) {
-    target = neighborDisplay("right");
-    placeX = g;
-  } else if (outUp) {
-    target = neighborDisplay("up");
-    placeY = Math.max(g, alignGrid(ws.height - h - g));
-  } else if (outDown) {
-    target = neighborDisplay("down");
-    placeY = g;
-  }
-  if (!target || !opts.widgetType) return false;
-  if (opts.widgetType === "desktop" && !target.primary) {
-    toast("系統桌面僅能顯示在主顯示器");
-    return false;
-  }
-
-  const placed = pxToGridFields(placeX, placeY, w, h);
-  const widget = {
-    type: opts.widgetType,
-    id: opts.widgetId,
-    data: opts.widgetData,
-    ...placed
-  };
-  const result = await window.edex.transferWidget(target.id, widget);
-  if (result?.ok) {
-    opts.onTransferred?.();
-    toast(`已移至 ${target.label}`);
-    return true;
-  }
-  if (result?.message) toast(result.message);
-  return false;
-}
-
-function magneticSnap(el, x, y, w, h, pointer) {
-  const { edgesX, edgesY, gap, ws } = collectSnapTargets(el);
-  const nearLeft = pointer && pointer.x < 40;
-  const nearRight = pointer && pointer.x > window.innerWidth - 40;
-  const nearTop = pointer && pointer.y < 40;
-  const nearBottom = pointer && pointer.y > window.innerHeight - 40;
-  w = alignGridSpan(w, 2);
-  h = alignGridSpan(h, 2);
-  let nextX = alignGrid(x);
-  let nextY = alignGrid(y);
-  const guides = [];
-  const threshold = gap * 0.55;
-
-  for (const edge of edgesX) {
-    const dockRight = edge.right + gap;
-    const dockLeft = edge.left - gap - w;
-    if (Math.abs(nextX - dockRight) <= threshold) {
-      nextX = dockRight;
-      guides.push({ type: "v", pos: dockRight });
-    } else if (Math.abs(nextX - dockLeft) <= threshold) {
-      nextX = dockLeft;
-      guides.push({ type: "v", pos: nextX + w });
-    }
-  }
-  for (const edge of edgesY) {
-    const dockBelow = edge.bottom + gap;
-    const dockAbove = edge.top - gap - h;
-    if (Math.abs(nextY - dockBelow) <= threshold) {
-      nextY = dockBelow;
-      guides.push({ type: "h", pos: dockBelow });
-    } else if (Math.abs(nextY - dockAbove) <= threshold) {
-      nextY = dockAbove;
-      guides.push({ type: "h", pos: nextY + h });
-    }
-  }
-
-  const constrained = constrainPanelPosition(el, nextX, nextY, w, h);
-  nextX = constrained.x;
-  nextY = constrained.y;
-  nextX = alignGrid(nextX);
-  nextY = alignGrid(nextY);
-  if (!(nearLeft || nearRight || nearTop || nearBottom)) {
-    const resolved = resolveMoveNoOverlap(el, nextX, nextY, w, h, {
-      x: el.offsetLeft,
-      y: el.offsetTop
-    });
-    nextX = resolved.x;
-    nextY = resolved.y;
-    const reclamped = constrainPanelPosition(el, nextX, nextY, w, h);
-    nextX = alignGrid(reclamped.x);
-    nextY = alignGrid(reclamped.y);
-  }
-  guides.push(
-    { type: "v", pos: nextX, match: true },
-    { type: "v", pos: nextX + w, match: true },
-    { type: "h", pos: nextY, match: true },
-    { type: "h", pos: nextY + h, match: true }
-  );
-  return { x: nextX, y: nextY, guides: [...referenceGuides(ws), ...guides] };
-}
-
-function gridMinSize(px) {
-  const g = gridSize();
-  return Math.max(g * 2, alignGridSpan(px, 2));
-}
-
-function magneticResize(el, w, h, left, top, minWPx, minHPx) {
-  const { edgesX, edgesY, gap, ws } = collectSnapTargets(el);
-  const zone = panelZoneRect(el);
-  const g = gridSize();
-  const threshold = g * 0.55;
-  const minW = gridMinSize(minWPx || g * 2);
-  const minH = gridMinSize(minHPx || g * 2);
-  let right = left + w;
-  let bottom = top + h;
-  const guides = [...referenceGuides(ws)];
-
-  for (const edge of edgesX) {
-    const dockToLeft = edge.left - gap;
-    if (Math.abs(right - dockToLeft) <= threshold) {
-      right = dockToLeft;
-      guides.push({ type: "v", pos: dockToLeft, match: true });
-    }
-  }
-  for (const edge of edgesY) {
-    const dockAbove = edge.top - gap;
-    if (Math.abs(bottom - dockAbove) <= threshold) {
-      bottom = dockAbove;
-      guides.push({ type: "h", pos: dockAbove, match: true });
-    }
-  }
-
-  right = snapExclusiveEdge(right);
-  bottom = snapExclusiveEdge(bottom);
-  let nextW = Math.max(minW, right - left);
-  let nextH = Math.max(minH, bottom - top);
-  nextW = alignGridSpan(nextW, gridCells(minW));
-  nextH = alignGridSpan(nextH, gridCells(minH));
-  const maxW = alignGridSpan(Math.max(minW, snapExclusiveEdge(zone.x + zone.width) - left), gridCells(minW));
-  const maxH = alignGridSpan(Math.max(minH, snapExclusiveEdge(zone.y + zone.height) - top), gridCells(minH));
-  nextW = Math.min(maxW, nextW);
-  nextH = Math.min(maxH, nextH);
-  const clamped = clampResizeNoOverlap(el, left, top, nextW, nextH, minW, minH);
-  nextW = clamped.w;
-  nextH = clamped.h;
-  guides.push({ type: "v", pos: left + nextW, match: true });
-  guides.push({ type: "h", pos: top + nextH, match: true });
-  return { w: nextW, h: nextH, guides };
-}
+const magneticSnap = (...args) => window.edexDesktopLayout.magneticSnap(...args);
+const gridMinSize = (...args) => window.edexDesktopLayout.gridMinSize(...args);
+const magneticResize = (...args) => window.edexDesktopLayout.magneticResize(...args);
 
 function isCardLocked(el) {
   return el?.classList.contains("locked");
@@ -5830,585 +5213,21 @@ function tagDotsHtml(tags) {
   return dots ? `<span class="tag-dots">${dots}</span>` : "";
 }
 
-function canNativeFileItem(item) {
-  if (!item?.path || isVirtualPath(item.path)) return false;
-  if (item.kind === "drive" || item.kind === "thispc" || item.kind === "recycle") return false;
-  if (isDriveRoot(item.path)) return false;
-  return true;
-}
-
-/** Nearest stage root so grouped 系統桌面 + 桌面捷徑 share selection / drag paths. */
-function fileStageRoot(nodeOrStage) {
-  if (!nodeOrStage) return null;
-  return nodeOrStage.closest?.(
-    "#desktop-stage, #shortcuts-stage, .path-stage, .fs-results, .drives-stage"
-  ) || nodeOrStage;
-}
-
-function stageFileNodes(stage) {
-  const root = fileStageRoot(stage) || stage;
-  return [...root.querySelectorAll(".desk-icon[data-path], .fs-row[data-path]")];
-}
-
-function clearStageSelection(stage) {
-  stageFileNodes(stage).forEach((el) => el.classList.remove("selected"));
-  fileStageCtx.get(stage)?.onSelectionChange?.();
-}
-
-function selectedPathsInStage(stage) {
-  return stageFileNodes(stage)
-    .filter((el) => el.classList.contains("selected"))
-    .map((el) => el.dataset.path)
-    .filter(Boolean);
-}
-
-function selectFileNode(stage, node, event) {
-  const root = fileStageRoot(stage) || stage;
-  if (!node || !root.contains(node)) return;
-  const item = itemFromIcon(node);
-  if (!canNativeFileItem(item) && !node.classList.contains("fs-row")) {
-    if (!(event.ctrlKey || event.metaKey || event.shiftKey)) clearStageSelection(root);
-    return;
-  }
-  const nodes = stageFileNodes(root);
-  if (event.shiftKey) {
-    const anchor = root._fileAnchor && nodes.includes(root._fileAnchor) ? root._fileAnchor : node;
-    const a = nodes.indexOf(anchor);
-    const b = nodes.indexOf(node);
-    if (a >= 0 && b >= 0) {
-      const lo = Math.min(a, b);
-      const hi = Math.max(a, b);
-      if (!(event.ctrlKey || event.metaKey)) clearStageSelection(root);
-      for (let i = lo; i <= hi; i += 1) nodes[i].classList.add("selected");
-      root._fileAnchor = node;
-      return;
-    }
-  }
-  if (event.ctrlKey || event.metaKey) node.classList.toggle("selected");
-  else {
-    clearStageSelection(root);
-    node.classList.add("selected");
-  }
-  root._fileAnchor = node;
-}
-
-function ensureFileDragGhost() {
-  let ghost = document.getElementById("file-drag-ghost");
-  if (ghost) return ghost;
-  ghost = document.createElement("div");
-  ghost.id = "file-drag-ghost";
-  ghost.hidden = true;
-  document.body.appendChild(ghost);
-  return ghost;
-}
-
-function showFileDragGhost(node, x, y) {
-  const ghost = ensureFileDragGhost();
-  const face = node.querySelector(".desk-icon-face")?.innerHTML
-    || node.querySelector("img, svg")?.outerHTML
-    || "";
-  const label = node.querySelector("h3")?.textContent || "";
-  ghost.innerHTML = `${face}<span>${escapeHtml(label)}</span>`;
-  ghost.hidden = false;
-  ghost.style.left = `${x + 12}px`;
-  ghost.style.top = `${y + 12}px`;
-  document.body.classList.add("is-file-dragging");
-}
-
-function moveFileDragGhost(x, y) {
-  const ghost = document.getElementById("file-drag-ghost");
-  if (!ghost || ghost.hidden) return;
-  ghost.style.left = `${x + 12}px`;
-  ghost.style.top = `${y + 12}px`;
-}
-
-function hideFileDragGhost() {
-  const ghost = document.getElementById("file-drag-ghost");
-  if (ghost) ghost.hidden = true;
-  document.body.classList.remove("is-file-dragging");
-}
-
-/**
- * Native OS file drag — OLE-first.
- * Critical: do NOT arm / capture / prepare on pointerdown — that breaks dblclick
- * (open in Explorer + Ctrl+dblclick desktop tabs).
- */
-function bindNativeFileDrag(node, item, stage) {
-  if (!canNativeFileItem(item)) return;
-  const dragStage = fileStageRoot(stage) || stage;
-  node.setAttribute("draggable", "false");
-  node.style.webkitUserDrag = "none";
-  node.style.cursor = "pointer";
-  node.querySelectorAll("img, svg, a, .desk-icon-face, h3, .meta, .tag-dots").forEach((el) => {
-    el.setAttribute("draggable", "false");
-    el.style.webkitUserDrag = "none";
-    el.style.pointerEvents = "none";
-  });
-
-  // Prefer double-click open / Ctrl+tab. OS drag only after a deliberate gesture:
-  // Alt+drag, or press-and-hold >350ms then move past threshold.
-  const THRESHOLD = 20;
-  const HOLD_BEFORE_DRAG_MS = 350;
-  let pressing = false;
-  let armed = false;
-  let started = false;
-  let startX = 0;
-  let startY = 0;
-  let downAt = 0;
-  let altDrag = false;
-
-  const collectPaths = () => {
-    const paths = selectedPathsInStage(dragStage).filter((p) => canNativeFileItem({ path: p }));
-    return paths.length ? paths : [item.path].filter(Boolean);
-  };
-
-  const disarm = () => {
-    pressing = false;
-    armed = false;
-    altDrag = false;
-    document.body.classList.remove("is-file-drag-armed");
-    node.classList.remove("dragging");
-    hideFileDragGhost();
-    window.edex?.setFileDragArmed?.(false);
-    window.edex?.cancelFileDragPrepare?.();
-    window.removeEventListener("pointermove", onMove, true);
-    window.removeEventListener("pointerup", onUp, true);
-    window.removeEventListener("pointercancel", onUp, true);
-  };
-
-  const armForDrag = () => {
-    if (armed || started) return;
-    armed = true;
-    document.body.classList.add("is-file-drag-armed");
-    window.edex?.setFileDragArmed?.(true);
-    window.edex?.prepareFileDrag?.()?.catch?.(() => {});
-  };
-
-  const beginOleDrag = async () => {
-    if (!pressing || started) return;
-    const list = collectPaths();
-    if (!list.length) {
-      toast("無法開始拖放（請確認檔案仍存在）");
-      disarm();
-      return;
-    }
-    started = true;
-    armForDrag();
-    document.body.classList.add("is-file-dragging");
-    node.classList.add("dragging");
-    showFileDragGhost(node, startX, startY);
-    try {
-      const result = await window.edex?.startFileDrag?.(list);
-      if (!result?.ok) toast(result?.message || "無法開始拖放");
-    } catch (err) {
-      toast(err?.message || "無法開始拖放");
-    } finally {
-      started = false;
-      disarm();
-      document.body.classList.remove("is-file-dragging");
-    }
-  };
-
-  const onMove = (event) => {
-    if (!pressing || started) return;
-    const dx = event.clientX - startX;
-    const dy = event.clientY - startY;
-    const dist2 = dx * dx + dy * dy;
-    if (dist2 < THRESHOLD * THRESHOLD) return;
-    const held = Date.now() - downAt;
-    if (!altDrag && held < HOLD_BEFORE_DRAG_MS) return;
-    if (!node.classList.contains("selected")) {
-      clearStageSelection(dragStage);
-      node.classList.add("selected");
-      dragStage._fileAnchor = node;
-    }
-    showFileDragGhost(node, event.clientX, event.clientY);
-    moveFileDragGhost(event.clientX, event.clientY);
-    beginOleDrag();
-  };
-
-  const onUp = () => {
-    if (!started) disarm();
-  };
-
-  node.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) return;
-    if (event.target?.closest?.("input, textarea, .icon-rename")) return;
-    if (event.detail > 1) {
-      disarm();
-      return;
-    }
-    // Ctrl/Cmd = select / Ctrl+dblclick tabs — never start OLE.
-    if (event.ctrlKey || event.metaKey) return;
-    pressing = true;
-    armed = false;
-    started = false;
-    altDrag = Boolean(event.altKey);
-    startX = event.clientX;
-    startY = event.clientY;
-    downAt = Date.now();
-    window.addEventListener("pointermove", onMove, true);
-    window.addEventListener("pointerup", onUp, true);
-    window.addEventListener("pointercancel", onUp, true);
-  });
-}
-
-function bindFileStage(stage, opts) {
-  fileStageCtx.set(stage, opts || {});
-  if (stage.tabIndex < 0) stage.tabIndex = 0;
-  stage.style.cursor = "default";
-  if (stage.dataset.fileMenuBound) return;
-  stage.dataset.fileMenuBound = "1";
-  stage.addEventListener("pointerdown", (event) => {
-    const node = event.target.closest(".desk-icon, .fs-row");
-    if (!node || !stage.contains(node)) {
-      if (!event.target.closest("input, textarea, button, a, .icon-rename")) {
-        clearStageSelection(stage);
-      }
-      return;
-    }
-    if (event.button !== 0) return;
-    if (event.target.closest("input, textarea, .icon-rename")) return;
-    selectFileNode(stage, node, event);
-    fileStageCtx.get(stage)?.onSelectionChange?.();
-  });
-  stage.addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const ctx = fileStageCtx.get(stage) || {};
-    const node = event.target.closest(".desk-icon, .fs-row, .drive-row");
-    const item = node
-      ? (ctx.itemFromNode?.(node) || itemFromIcon(node))
-      : null;
-    if (node && item && canNativeFileItem(item) && !node.classList.contains("selected")) {
-      clearStageSelection(stage);
-      node.classList.add("selected");
-      stage._fileAnchor = node;
-    }
-    const menuItems = fileMenuItems(stage, item, ctx);
-    if (!menuItems.length) return;
-    openCardMenu(node || stage, menuItems, { x: event.clientX, y: event.clientY });
-  });
-  stage.addEventListener("dragover", (event) => {
-    const ctx = fileStageCtx.get(stage) || {};
-    if (ctx.destDir && (event.dataTransfer?.types?.includes("application/x-edex-file") || event.dataTransfer?.types?.includes("Files"))) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      stage.classList.add("drop-target");
-    }
-  });
-  stage.addEventListener("dragleave", (event) => {
-    if (!stage.contains(event.relatedTarget)) stage.classList.remove("drop-target");
-  });
-  stage.addEventListener("drop", async (event) => {
-    const ctx = fileStageCtx.get(stage) || {};
-    stage.classList.remove("drop-target");
-    const encoded = event.dataTransfer?.getData("application/x-edex-file") || "";
-    let sources = [];
-    try { sources = encoded ? JSON.parse(encoded) : []; } catch { sources = []; }
-    if (!sources.length && event.dataTransfer?.files?.length) {
-      sources = [...event.dataTransfer.files].map((file) => window.edex.pathForFile(file)).filter(Boolean);
-    }
-    if (!ctx.destDir || !sources.length) return;
-    event.preventDefault();
-    try {
-      const result = await window.edex.importFiles(ctx.destDir, sources);
-      toast(`${result.count || 0} Element(e) eingefügt`);
-      await ctx.onRefresh?.();
-    } catch (err) {
-      toast(err.message || "Dateien konnten nicht eingefügt werden");
-    }
-  });
-}
-
-function itemFromIcon(node) {
-  if (!node?.dataset?.path) return null;
-  let tags = [];
-  try { tags = JSON.parse(node.dataset.tags || "[]"); } catch { tags = []; }
-  return {
-    path: node.dataset.path,
-    name: node.dataset.name || node.querySelector("h3")?.textContent || "",
-    isDirectory: node.dataset.dir === "1",
-    targetPath: node.dataset.targetPath || "",
-    targetIsDirectory: node.dataset.targetDir === "1",
-    kind: node.dataset.kind || "",
-    tags
-  };
-}
-
-function fileMenuItems(stage, item, ctx) {
-  const destDir = ctx.allowCreate === false
-    ? ""
-    : (ctx.destDir || (item && !isVirtualPath(item.path) ? (item.isDirectory ? item.path : parentDir(item.path)) : ""));
-  const items = [];
-  const isDesktopStage = Boolean(ctx.desktopActions) || stage?.id === "desktop-stage";
-  if (isDesktopStage) {
-    items.push(
-      {
-        label: "刷新內容",
-        action: async () => {
-          try {
-            await refreshActiveDesktopView();
-            toast("已刷新內容");
-          } catch (err) {
-            toast(err.message || "無法刷新");
-          }
-        }
-      },
-      {
-        label: "自動整理",
-        action: () => runOrganize()
-      },
-      {
-        label: "Organisation konfigurieren",
-        action: () => openOrganizerSettings()
-      },
-      { sep: true }
-    );
-  }
-  const folderTab = resolveFolderForTab(item);
-  if (folderTab) {
-    items.push(
-      {
-        label: "在系統桌面標籤頁開啟",
-        action: () => openFolderInDesktopTab(folderTab)
-      },
-      {
-        label: "Als Ordner-Panel hinzufügen",
-        action: () => addPathCardAt(folderTab.path)
-      }
-    );
-  }
-  if (destDir && !isVirtualPath(destDir)) {
-    items.push({
-      label: "新建資料夾",
-      action: async () => {
-        const name = await promptFolderName("未命名資料夾");
-        if (name == null) return;
-        try {
-          const created = await window.edex.createFolder(destDir, name);
-          toast(`已建立 ${created.name}`);
-          await ctx.onRefresh?.();
-        } catch (err) {
-          toast(err.message || "無法建立資料夾");
-        }
-      }
-    });
-    if (state.fileClipboard.paths.length) {
-      items.push({
-        label: state.fileClipboard.cut ? "Einfügen und Verschieben" : "Einfügen und Kopieren",
-        action: async () => {
-          try {
-            const result = await window.edex.importFiles(destDir, state.fileClipboard.paths);
-            if (state.fileClipboard.cut) {
-              for (const source of state.fileClipboard.paths) {
-                await window.edex.trashItem(source);
-              }
-            }
-            state.fileClipboard = { paths: [], cut: false };
-            toast(`${result.count || 0} Element(e) eingefügt`);
-            await ctx.onRefresh?.();
-          } catch (err) {
-            toast(err.message || "Einfügen fehlgeschlagen");
-          }
-        }
-      });
-    }
-  }
-  const canEdit = item && !isVirtualPath(item.path) && item.kind !== "drive" && !isDriveRoot(item.path);
-  if (canEdit) {
-    items.push(
-      {
-        label: "Vorschau",
-        action: () => window.edexFilePreview?.showFilePreview(item)
-      },
-      {
-        label: "Kopieren",
-        action: () => {
-          state.fileClipboard = { paths: [item.path], cut: false };
-          window.edex.clipboardWriteFiles?.([item.path]).catch?.(() => {});
-          toast("Element zum Kopieren vorgemerkt");
-        }
-      },
-      {
-        label: "Ausschneiden",
-        action: () => {
-          state.fileClipboard = { paths: [item.path], cut: true };
-          window.edex.clipboardWriteFiles?.([item.path]).catch?.(() => {});
-          toast("Element zum Verschieben vorgemerkt");
-        }
-      },
-      {
-        label: "Eigenschaften",
-        action: () => {
-          const modified = Number(item.mtime) > 0 ? new Date(item.mtime).toLocaleString() : "Nicht verfügbar";
-          const size = item.isDirectory ? "Ordner" : (item.sizeLabel || "Nicht verfügbar");
-          window.alert(`Name: ${item.name || ""}\nPfad: ${item.path || ""}\nTyp: ${item.isDirectory ? "Ordner" : "Datei"}\nGröße: ${size}\nGeändert: ${modified}`);
-        }
-      },
-      { sep: true },
-      {
-        label: "刪除",
-        action: async () => {
-          try {
-            const result = await window.edex.trashItem(item.path);
-            if (result?.cancelled) return;
-            toast("已移至回收桶");
-            await ctx.onRefresh?.();
-          } catch (err) {
-            toast(err.message || "無法刪除");
-          }
-        }
-      },
-      {
-        label: "重新命名",
-        action: () => {
-          const node = [...stage.querySelectorAll(".desk-icon, .fs-row")].find((el) => el.dataset.path === item.path);
-          if (node?.classList.contains("desk-icon")) startRename(node, item, ctx.onRefresh);
-          else promptRename(item, ctx.onRefresh);
-        }
-      }
-    );
-    if (item.isDirectory) {
-      items.push(
-        { sep: true },
-        {
-          kind: "tags",
-          tags: item.tags || [],
-          onChange: async (tags) => {
-            await window.edex.setItemTags(item.path, tags);
-            const node = [...stage.querySelectorAll(".desk-icon")].find((el) => el.dataset.path === item.path);
-            if (node) {
-              node.dataset.tags = JSON.stringify(tags);
-              const face = node.querySelector(".desk-icon-face");
-              const dots = node.querySelector(".tag-dots");
-              const html = tagDotsHtml(tags);
-              if (dots && html) dots.outerHTML = html;
-              else if (dots) dots.remove();
-              else if (html && face) face.insertAdjacentHTML("beforeend", html);
-              else if (html) node.querySelector("h3")?.insertAdjacentHTML("beforebegin", html);
-            }
-          }
-        }
-      );
-    }
-  }
-  return items;
-}
-
-/** Modal text prompt — resolves with trimmed string, or null if cancelled. */
-function promptTextInput({ title = "輸入", hint = "", value = "", okLabel = "確定", cancelLabel = "取消" } = {}) {
-  return new Promise((resolve) => {
-    document.getElementById("textInputPrompt")?.closest(".modal_popup")?.remove();
-    const modal = document.createElement("div");
-    modal.className = "modal_popup info";
-    modal.innerHTML = `
-      <h1>${escapeHtml(title)}</h1>
-      ${hint ? `<h2>${escapeHtml(hint)}</h2>` : ""}
-      <table id="textInputPrompt">
-        <tr><th>名稱</th><th><input id="text_input_field" type="text" spellcheck="false" /></th></tr>
-      </table>
-      <div class="settings-footer">
-        <button type="button" id="text-input-cancel">${escapeHtml(cancelLabel)}</button>
-        <button type="button" id="text-input-ok">${escapeHtml(okLabel)}</button>
-      </div>`;
-    document.body.appendChild(modal);
-    window.edexI18n?.translatePage?.(modal);
-    placeCentered(modal, { width: Math.min(420, window.innerWidth * 0.42), topRatio: 0.22 });
-    const input = modal.querySelector("#text_input_field");
-    if (input) {
-      input.value = value || "";
-      input.focus();
-      input.select();
-    }
-    const finish = (result) => {
-      modal.remove();
-      resolve(result);
-    };
-    modal.querySelector("#text-input-cancel").onclick = () => finish(null);
-    modal.querySelector("#text-input-ok").onclick = () => {
-      const next = String(input?.value || "").trim();
-      if (!next) {
-        toast("請輸入名稱");
-        input?.focus();
-        return;
-      }
-      finish(next);
-    };
-    input?.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") modal.querySelector("#text-input-ok")?.click();
-      if (event.key === "Escape") finish(null);
-    });
-  });
-}
-
-function promptFolderName(defaultName = "未命名資料夾") {
-  return promptTextInput({
-    title: "新建資料夾",
-    hint: "請輸入資料夾名稱",
-    value: defaultName,
-    okLabel: "建立"
-  });
-}
-
-function promptRename(item, onRefresh) {
-  promptTextInput({
-    title: "重新命名",
-    value: item.name || "",
-    okLabel: "確定"
-  }).then((next) => {
-    if (next == null || next === item.name) return;
-    window.edex.renameItem(item.path, next).then(async () => {
-      toast("已重新命名");
-      await onRefresh?.();
-    }).catch((err) => toast(err.message || "無法重新命名"));
-  });
-}
-
-function startRename(node, item, onRefresh) {
-  const title = node.querySelector("h3");
-  if (!title) {
-    promptRename(item, onRefresh);
-    return;
-  }
-  const input = document.createElement("input");
-  input.className = "icon-rename";
-  input.value = item.name || title.textContent || "";
-  title.replaceWith(input);
-  input.focus();
-  input.select();
-  window.edex?.setMouseIgnore?.(false);
-  let done = false;
-  const finish = async (commit) => {
-    if (done) return;
-    done = true;
-    const value = input.value.trim();
-    if (!commit || !value || value === item.name) {
-      await onRefresh?.();
-      return;
-    }
-    try {
-      await window.edex.renameItem(item.path, value);
-      toast("已重新命名");
-      await onRefresh?.();
-    } catch (err) {
-      toast(err.message || "無法重新命名");
-      await onRefresh?.();
-    }
-  };
-  input.addEventListener("pointerdown", (event) => event.stopPropagation());
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      finish(true);
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      finish(false);
-    }
-  });
-  input.addEventListener("blur", () => finish(true));
-}
+const bindFileStage = (...args) => window.edexFolderPanel.bindFileStage(...args);
+const itemFromIcon = (...args) => window.edexFolderPanel.itemFromIcon(...args);
+const fileMenuItems = (...args) => window.edexFolderPanel.fileMenuItems(...args);
+const canNativeFileItem = (...args) => window.edexFolderPanel.canNativeFileItem(...args);
+const fileStageRoot = (...args) => window.edexFolderPanel.fileStageRoot(...args);
+const stageFileNodes = (...args) => window.edexFolderPanel.stageFileNodes(...args);
+const clearStageSelection = (...args) => window.edexFolderPanel.clearStageSelection(...args);
+const selectedPathsInStage = (...args) => window.edexFolderPanel.selectedPathsInStage(...args);
+const selectFileNode = (...args) => window.edexFolderPanel.selectFileNode(...args);
+const hideFileDragGhost = (...args) => window.edexFolderPanel.hideFileDragGhost(...args);
+const bindNativeFileDrag = (...args) => window.edexFolderPanel.bindNativeFileDrag(...args);
+const promptTextInput = (...args) => window.edexFolderPanel.promptTextInput(...args);
+const promptFolderName = (...args) => window.edexFolderPanel.promptFolderName(...args);
+const promptRename = (...args) => window.edexFolderPanel.promptRename(...args);
+const startRename = (...args) => window.edexFolderPanel.startRename(...args);
 
 function fillIconStage(stage, items, opts = {}) {
   const view = opts.view === "list" ? "list" : "grid";
@@ -6535,21 +5354,9 @@ function matchesDeskFilter(item, filter) {
   return bucket === filter;
 }
 
-function activeDesktopFolderTab() {
-  if (!state.desktopTabId || state.desktopTabId === "classify") return null;
-  return (state.desktopFolderTabs || []).find((tab) => tab.id === state.desktopTabId) || null;
-}
-
-function activeDesktopDropDir() {
-  const tab = activeDesktopFolderTab();
-  if (tab?.path) return tab.path;
-  return state.bootstrap?.desktop || "";
-}
-
-function folderTabTitle(pathValue, fallback = "") {
-  const base = String(pathValue || "").split(/[/\\]/).filter(Boolean).pop();
-  return base || fallback || "資料夾";
-}
+const activeDesktopFolderTab = (...args) => window.edexFolderPanel.activeDesktopFolderTab(...args);
+const activeDesktopDropDir = (...args) => window.edexFolderPanel.activeDesktopDropDir(...args);
+const folderTabTitle = (...args) => window.edexFolderPanel.folderTabTitle(...args);
 
 function ensureDesktopEnabled() {
   if (!state.primary) return false;
@@ -6622,123 +5429,12 @@ function resolveFolderForTab(item) {
   return null;
 }
 
-function renderDeskTabs() {
-  const bar = document.getElementById("desk-tab-bar");
-  if (!bar) return;
-  const active = state.desktopTabId || "classify";
-  const folderTabs = state.desktopFolderTabs || [];
-  const closeLabel = window.edexI18n?.translateDynamic?.("關閉") || "Schließen";
-  bar.innerHTML = [
-    `<button type="button" class="desk-tab${active === "classify" ? " on" : ""}" data-desk-tab="classify"><span class="desk-tab-label">Desktop-Kategorien</span></button>`,
-    ...folderTabs.map((tab) => `
-      <button type="button" class="desk-tab${active === tab.id ? " on" : ""}" data-desk-tab="${escapeHtml(tab.id)}" title="${escapeHtml(tab.path || "")}">
-        <span class="desk-tab-label">${escapeHtml(tab.name || folderTabTitle(tab.path))}</span>
-        <span class="desk-tab-close" data-desk-tab-close="${escapeHtml(tab.id)}" title="${escapeHtml(closeLabel)}">×</span>
-      </button>
-    `)
-  ].join("");
-}
-
-function bindDeskTabs(desk) {
-  const bar = desk.querySelector("#desk-tab-bar") || document.getElementById("desk-tab-bar");
-  if (!bar) return;
-  if (bar.dataset.bound === "1") {
-    renderDeskTabs();
-    return;
-  }
-  bar.dataset.bound = "1";
-  bar.addEventListener("click", async (event) => {
-    const closeBtn = event.target.closest("[data-desk-tab-close]");
-    if (closeBtn) {
-      event.preventDefault();
-      event.stopPropagation();
-      await closeDesktopFolderTab(closeBtn.dataset.deskTabClose);
-      return;
-    }
-    const tabBtn = event.target.closest("[data-desk-tab]");
-    if (!tabBtn) return;
-    event.preventDefault();
-    event.stopPropagation();
-    state.desktopTabId = tabBtn.dataset.deskTab || "classify";
-    persistLayout();
-    await arrangeDesktop();
-  });
-  renderDeskTabs();
-}
-
-async function openFolderInDesktopTab(item) {
-  const folder = resolveFolderForTab(item) || (
-    item?.isDirectory && item?.path && !isVirtualPath(item.path)
-      ? { path: item.path, name: itemLabel(item) || item.name, isDirectory: true }
-      : null
-  );
-  const folderPath = String(folder?.path || "").trim();
-  if (!folderPath || isVirtualPath(folderPath)) {
-    toast("無法在桌面容器開啟此資料夾");
-    return;
-  }
-  if (!ensureDesktopEnabled()) {
-    toast("系統桌面容器未啟用");
-    return;
-  }
-  const existing = (state.desktopFolderTabs || []).find(
-    (tab) => String(tab.path || "").toLowerCase() === folderPath.toLowerCase()
-  );
-  if (existing) {
-    state.desktopTabId = existing.id;
-  } else {
-    const id = `ft${Date.now().toString(36)}`;
-    const tab = {
-      id,
-      path: folderPath,
-      name: folder.name || folderTabTitle(folderPath, item?.name),
-      listing: null
-    };
-    state.desktopFolderTabs = [...(state.desktopFolderTabs || []), tab];
-    state.desktopTabId = id;
-  }
-  await persistLayout();
-  const desk = document.getElementById("card_desktop");
-  if (desk) bindDeskTabs(desk);
-  renderDeskTabs();
-  await arrangeDesktop();
-  toast(`已在系統桌面開啟「${folderTabTitle(folderPath, folder.name)}」`);
-}
-
-async function closeDesktopFolderTab(tabId) {
-  const id = String(tabId || "");
-  if (!id || id === "classify") return;
-  state.desktopFolderTabs = (state.desktopFolderTabs || []).filter((tab) => tab.id !== id);
-  if (state.desktopTabId === id) state.desktopTabId = "classify";
-  persistLayout();
-  renderDeskTabs();
-  await arrangeDesktop();
-}
-
-async function refreshActiveDesktopView() {
-  const tab = activeDesktopFolderTab();
-  if (tab) {
-    tab.listing = null;
-    await arrangeDesktop();
-    return;
-  }
-  await loadDesktopListing({ decorate: "fast", includeShell: false });
-  arrangeDesktop();
-}
-
-async function loadFolderTabListing(tab) {
-  if (!tab?.path) return { items: [], total: 0 };
-  try {
-    const listing = await window.edex.listFolder(tab.path, { systemIcons: "fast" });
-    tab.listing = listing;
-    tab.listingError = listing?.readError || "";
-    return listing;
-  } catch (err) {
-    tab.listing = { items: [], total: 0 };
-    tab.listingError = err.message || "無法讀取資料夾";
-    return tab.listing;
-  }
-}
+const renderDeskTabs = (...args) => window.edexFolderPanel.renderDeskTabs(...args);
+const bindDeskTabs = (...args) => window.edexFolderPanel.bindDeskTabs(...args);
+const openFolderInDesktopTab = (...args) => window.edexFolderPanel.openFolderInDesktopTab(...args);
+const closeDesktopFolderTab = (...args) => window.edexFolderPanel.closeDesktopFolderTab(...args);
+const refreshActiveDesktopView = (...args) => window.edexFolderPanel.refreshActiveDesktopView(...args);
+const loadFolderTabListing = (...args) => window.edexFolderPanel.loadFolderTabListing(...args);
 
 function bindDeskFilters(desk) {
   desk.querySelectorAll("[data-desk-filter]").forEach((btn) => {
@@ -6754,27 +5450,10 @@ function bindDeskFilters(desk) {
   syncDeskFilters();
 }
 
-function syncDeskFilters() {
-  const current = state.desktopFilter || "all";
-  document.querySelectorAll("[data-desk-filter]").forEach((btn) => {
-    btn.classList.toggle("on", btn.dataset.deskFilter === current);
-  });
-}
-
-function syncDesktopChrome() {
-  const filterBar = document.getElementById("desk-filter-bar");
-  const pathText = document.getElementById("desktop-path-text");
-  const folderTab = activeDesktopFolderTab();
-  const onClassify = !folderTab;
-  if (filterBar) filterBar.hidden = !onClassify;
-  if (pathText) {
-    const shown = folderTab?.path || state.bootstrap?.desktop || "";
-    pathText.textContent = shown;
-    pathText.title = shown;
-  }
-  renderDeskTabs();
-  syncDeskFilters();
-}
+const syncDeskFilters = (...args) => window.edexDesktopLayout.syncDeskFilters(...args);
+const renderGroupedDesktop = (...args) => window.edexDesktopLayout.renderGroupedDesktop(...args);
+const renderDesktopFolderTab = (...args) => window.edexDesktopLayout.renderDesktopFolderTab(...args);
+const syncDesktopChrome = (...args) => window.edexDesktopLayout.syncDesktopChrome(...args);
 
 async function arrangeDesktop() {
   const stage = document.getElementById("desktop-stage");
@@ -6792,32 +5471,7 @@ async function arrangeDesktop() {
   const view = state.iconView === "list" ? "list" : "grid";
 
   if (folderTab) {
-    stage.classList.remove("view-grouped");
-    if (!folderTab.listing) {
-      stage.innerHTML = `<p class="path-empty">${escapeHtml(window.edexI18n?.translateDynamic?.("讀取中…") || "Loading …")}</p>`;
-      await loadFolderTabListing(folderTab);
-    }
-    const destDir = folderTab.path || "";
-    const fileOpts = {
-      destDir,
-      desktopActions: true,
-      onRefresh: async () => {
-        folderTab.listing = null;
-        await arrangeDesktop();
-      }
-    };
-    if (folderTab.listingError) {
-      stage.innerHTML = `<p class="path-empty">${escapeHtml(folderTab.listingError)}</p>`;
-      bindFileStage(stage, fileOpts);
-      return;
-    }
-    const items = listingItems(folderTab.listing);
-    if (!items.length) {
-      stage.innerHTML = `<p class="path-empty">${escapeHtml(window.edexI18n?.translateDynamic?.("此資料夾沒有可顯示的項目") || "This folder has no items to display")}</p>`;
-      bindFileStage(stage, fileOpts);
-      return;
-    }
-    fillIconStage(stage, items, { draggable: false, view, ...fileOpts });
+    await renderDesktopFolderTab(stage, folderTab, view, arrangeDesktop);
     return;
   }
 
@@ -6834,30 +5488,7 @@ async function arrangeDesktop() {
   };
   const buckets = deskFilterBuckets();
   if (state.desktopGrouped && filter === "all") {
-    stage.classList.remove("view-list", "view-grid");
-    stage.classList.add("view-grouped");
-    const visibleBuckets = buckets.filter((bucket) => all.some((item) => matchesDeskFilter(item, bucket.id)));
-    const list = visibleBuckets.length ? visibleBuckets : buckets;
-    stage.innerHTML = list.map((bucket) => {
-      const count = all.filter((item) => matchesDeskFilter(item, bucket.id)).length;
-      const label = window.edexI18n?.translateDynamic?.(bucket.label) || bucket.label;
-      return `<section class="desk-group" data-bucket="${bucket.id}"><h4>${escapeHtml(label)}<em>${count}</em></h4><div class="desk-group-items"></div></section>`;
-    }).join("");
-    list.forEach((bucket) => {
-      const inner = stage.querySelector(`[data-bucket="${bucket.id}"] .desk-group-items`);
-      if (!inner) return;
-      const items = all.filter((item) => matchesDeskFilter(item, bucket.id));
-      if (!items.length) {
-        inner.className = "desk-group-items";
-        const label = window.edexI18n?.translateDynamic?.(bucket.label) || bucket.label;
-        const locale = window.edexI18n?.locale?.() || "de";
-        const empty = locale === "zh-Hant" ? `沒有${bucket.label}` : locale === "en" ? `No ${label}` : `Keine ${label}`;
-        inner.innerHTML = `<p class="path-empty">${escapeHtml(empty)}</p>`;
-        return;
-      }
-      fillIconStage(inner, items, { draggable: false, view, ...fileOpts });
-    });
-    bindFileStage(stage, fileOpts);
+    renderGroupedDesktop(stage, all, buckets, view, fileOpts);
     return;
   }
   stage.classList.remove("view-grouped");
