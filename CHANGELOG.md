@@ -6,6 +6,8 @@
 
 - Centralized file-tag color definitions delivered to the renderer through IPC.
 - GPL-3.0 license text in the repository.
+- OpenSSH sessions directly inside terminal panes through the existing ConPTY/xterm.js bridge.
+- OpenSSH-only terminal mode with saved SSH profiles.
 
 ### Improved
 
@@ -14,6 +16,9 @@
 - Regenerated the Windows application icon with multiple resolutions.
 - Enabled executable resource editing so the application icon is embedded in the packaged EXE.
 - Improved Windows desktop icon restoration and stale hidden-icon recovery.
+- Added keyboard-driven TRON terminal configuration for the optional Rainmeter installation.
+- Corrected Snap-Grid occupancy for panels touching zone boundaries and adjacent grid cells.
+- Added ordered shutdown cleanup for active ConPTY, PowerShell, and SSH terminal sessions.
 
 ### Validation
 

@@ -36,14 +36,106 @@ internal static class TronBootstrap
         WriteLine("  " + label + new string('-', width), ConsoleColor.Yellow);
     }
 
-    private static bool Confirm(string prompt, bool defaultValue)
+    private static void ShowInformation()
     {
-        Console.ForegroundColor = ConsoleColor.DarkCyan;
-        Console.Write(prompt + (defaultValue ? " [J/n]: " : " [j/N]: "));
-        Console.ResetColor();
-        string answer = (Console.ReadLine() ?? string.Empty).Trim().ToLowerInvariant();
-        if (answer.Length == 0) return defaultValue;
-        return answer == "j" || answer == "ja" || answer == "y" || answer == "yes";
+        Console.Clear();
+        WriteLine("============================================================", ConsoleColor.Cyan);
+        WriteLine("  H I N W E I S E   U N D   A B H A E N G I G K E I T E N", ConsoleColor.Cyan);
+        WriteLine("============================================================", ConsoleColor.Cyan);
+        Console.WriteLine();
+        WriteLine("  Bockis-eDEX verwendet transparente Overlay-Fenster.", ConsoleColor.DarkCyan);
+        WriteLine("  Der Windows-Desktop kann waehrend der Laufzeit ueberlagert", ConsoleColor.DarkCyan);
+        WriteLine("  werden. Beim Beenden werden Desktop und Symbole wiederhergestellt.", ConsoleColor.DarkCyan);
+        Console.WriteLine();
+        WriteLine("  ENTHALTENE KOMPONENTEN", ConsoleColor.Yellow);
+        WriteLine("  [ OK ] Electron Runtime", ConsoleColor.DarkCyan);
+        WriteLine("  [ OK ] PowerShell / ConPTY", ConsoleColor.DarkCyan);
+        WriteLine("  [ OK ] xterm.js-Terminaldarstellung", ConsoleColor.DarkCyan);
+        WriteLine("  [ OK ] node-pty-Windows-Anbindung", ConsoleColor.DarkCyan);
+        WriteLine("  [ OK ] Windows-Desktop-Integration", ConsoleColor.DarkCyan);
+        Console.WriteLine();
+        WriteLine("  Diese Komponenten sind Bestandteil der Anwendung und", ConsoleColor.DarkGray);
+        WriteLine("  koennen nicht einzeln abgewahlt werden.", ConsoleColor.DarkGray);
+        Console.WriteLine();
+        WriteLine("  [Enter] Zur Installationskonfiguration", ConsoleColor.Cyan);
+        Console.ReadKey(true);
+    }
+
+    private static void DrawConfiguration(string installPath, bool installRainmeter, int selected)
+    {
+        Console.Clear();
+        WriteLine("============================================================", ConsoleColor.Cyan);
+        WriteLine("  I N S T A L L A T I O N S K O N F I G U R A T I O N", ConsoleColor.Cyan);
+        WriteLine("============================================================", ConsoleColor.Cyan);
+        Console.WriteLine();
+        WriteLine("  [Pfeile] Auswahl   [Leertaste] Ein/Aus   [Enter] Weiter", ConsoleColor.DarkGray);
+        Console.WriteLine();
+
+        string[] options =
+        {
+            "[ OK ] Transparente Overlay-Fenster akzeptieren",
+            "[ " + (installRainmeter ? "x" : " ") + " ] Rainmeter-HUD installieren",
+            "[ P  ] Installationspfad bearbeiten",
+            "[ >  ] Installation starten"
+        };
+        for (int index = 0; index < options.Length; index++)
+        {
+            ConsoleColor color = index == selected ? ConsoleColor.Yellow : ConsoleColor.DarkCyan;
+            WriteLine((index == selected ? "  > " : "    ") + options[index], color);
+        }
+
+        Console.WriteLine();
+        WriteLine("  Aktueller Pfad:", ConsoleColor.DarkGray);
+        WriteLine("  " + installPath, ConsoleColor.Cyan);
+        Console.WriteLine();
+        WriteLine("  Rainmeter ist optional. Ohne Rainmeter bleibt die Anwendung", ConsoleColor.DarkGray);
+        WriteLine("  vollstaendig funktionsfaehig.", ConsoleColor.DarkGray);
+    }
+
+    private static bool ConfigureInstallation(ref string installPath, ref bool installRainmeter)
+    {
+        int selected = 1;
+        while (true)
+        {
+            DrawConfiguration(installPath, installRainmeter, selected);
+            ConsoleKey key = Console.ReadKey(true).Key;
+            if (key == ConsoleKey.UpArrow)
+            {
+                selected = (selected + 3) % 4;
+            }
+            else if (key == ConsoleKey.DownArrow)
+            {
+                selected = (selected + 1) % 4;
+            }
+            else if (key == ConsoleKey.Spacebar && selected == 1)
+            {
+                installRainmeter = !installRainmeter;
+            }
+            else if (key == ConsoleKey.Enter)
+            {
+                if (selected == 1)
+                {
+                    installRainmeter = !installRainmeter;
+                }
+                else if (selected == 2)
+                {
+                    Console.WriteLine();
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.Write("  Neuer Installationspfad (leer = unveraendert): ");
+                    Console.ResetColor();
+                    string requestedPath = (Console.ReadLine() ?? string.Empty).Trim();
+                    if (requestedPath.Length > 0) installPath = requestedPath;
+                }
+                else if (selected == 3)
+                {
+                    return true;
+                }
+            }
+            else if (key == ConsoleKey.Escape)
+            {
+                return false;
+            }
+        }
     }
 
     private static int Main(string[] args)
@@ -87,13 +179,13 @@ internal static class TronBootstrap
         bool installRainmeter = false;
         if (!silent)
         {
-            WriteSection("Installation settings");
-            Console.ForegroundColor = ConsoleColor.DarkCyan;
-            Console.Write("  [PATH] Install directory [" + defaultPath + "]: ");
-            Console.ResetColor();
-            string requestedPath = (Console.ReadLine() ?? string.Empty).Trim();
-            installPath = requestedPath.Length == 0 ? defaultPath : requestedPath;
-            installRainmeter = Confirm("  [HUD ] Install optional Rainmeter HUD", true);
+            ShowInformation();
+            if (!ConfigureInstallation(ref installPath, ref installRainmeter))
+            {
+                WriteLine("  [ABORT] Installation cancelled by operator.", ConsoleColor.Yellow);
+                WaitForClose();
+                return 0;
+            }
         }
         else
         {

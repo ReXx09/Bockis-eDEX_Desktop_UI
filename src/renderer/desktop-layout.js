@@ -85,9 +85,9 @@
   }
 
   function rectsTooClose(a, b) {
-    const gap = gridSize();
-    return a.x < b.x + b.w + gap && a.x + a.w + gap > b.x
-      && a.y < b.y + b.h + gap && a.y + a.h + gap > b.y;
+    // Adjacent grid cells are valid; only a real rectangle intersection blocks placement.
+    return a.x < b.x + b.w && a.x + a.w > b.x
+      && a.y < b.y + b.h && a.y + a.h > b.y;
   }
 
   function otherCardRects(excludeEl) {
@@ -155,14 +155,14 @@
     h = alignGridSpan(h, gridCells(minH || g * 2));
     const others = otherCardRects(el);
     others.forEach((o) => {
-      const hitsX = left < o.x + o.w + g && left + w + g > o.x;
-      const hitsY = top < o.y + o.h + g && top + h + g > o.y;
+      const hitsX = left < o.x + o.w && left + w > o.x;
+      const hitsY = top < o.y + o.h && top + h > o.y;
       if (!hitsX || !hitsY) return;
-      if (left <= o.x && left + w + g > o.x) {
-        w = alignGridSpan(Math.min(w, o.x - g - left), gridCells(minW || g * 2));
+      if (left <= o.x && left + w > o.x) {
+        w = alignGridSpan(Math.min(w, o.x - left), gridCells(minW || g * 2));
       }
-      if (top <= o.y && top + h + g > o.y) {
-        h = alignGridSpan(Math.min(h, o.y - g - top), gridCells(minH || g * 2));
+      if (top <= o.y && top + h > o.y) {
+        h = alignGridSpan(Math.min(h, o.y - top), gridCells(minH || g * 2));
       }
     });
     while (w > (minW || g * 2) && overlapsAny({ x: left, y: top, w, h }, others)) w -= g;

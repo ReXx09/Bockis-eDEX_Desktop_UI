@@ -79,11 +79,13 @@ let terminalNextPane = 1;
 const terminalPaneIds = [];
 const terminalBuffers = new Map();
 const terminalStarted = new Set();
-const terminalNativePanes = new Map();
 const terminalInstances = new Map();
+const terminalFitAddons = new Map();
 const terminalResizeObservers = new Map();
 const terminalCwds = new Map();
 const terminalShells = new Map();
+const terminalModes = new Map();
+const terminalSshOptions = new Map();
 const terminalBrowserState = new Map();
 const terminalBrowserTimers = new Map();
 let terminalBridgeBound = false;
@@ -2036,27 +2038,35 @@ function resizePanelPreset(kind, ctx, preset) {
   toast(`Panelgröße: ${preset === "compact" ? "kompakt" : preset === "large" ? "groß" : "Standard"}`);
 }
 
-function snapRectsOverlap(first, second) {
-  return first.left < second.right
-    && first.right > second.left
-    && first.top < second.bottom
-    && first.bottom > second.top;
+function snapRectCoverage(target, panel) {
+  const overlapWidth = Math.max(0, Math.min(target.right, panel.right) - Math.max(target.left, panel.left));
+  const overlapHeight = Math.max(0, Math.min(target.bottom, panel.bottom) - Math.max(target.top, panel.top));
+  const overlapArea = overlapWidth * overlapHeight;
+  const targetArea = Math.max(1, (target.right - target.left) * (target.bottom - target.top));
+  const panelCenterX = panel.left + (panel.right - panel.left) / 2;
+  const panelCenterY = panel.top + (panel.bottom - panel.top) / 2;
+  const centerInside = panelCenterX >= target.left
+    && panelCenterX < target.right
+    && panelCenterY >= target.top
+    && panelCenterY < target.bottom;
+  return centerInside || overlapArea / targetArea >= 0.45;
 }
 
 function occupiedSnapLayouts(ctx, items) {
   const zone = panelZoneRect(ctx.el);
+  const workspace = document.getElementById("workspace")?.getBoundingClientRect?.() || { left: 0, top: 0 };
   const otherPanels = [...document.querySelectorAll(".hud-card, .path-card, .program-card, .desktop-card")]
     .filter((el) => el !== ctx.el && !el.classList.contains("minimized"));
   return items.map((item) => {
     const slot = snapSlotForLayout(item.layout);
     if (!slot) return item;
     const target = {
-      left: zone.x + zone.width * slot.x / 100,
-      top: zone.y + zone.height * slot.y / 100,
-      right: zone.x + zone.width * (slot.x + slot.w) / 100,
-      bottom: zone.y + zone.height * (slot.y + slot.h) / 100
+      left: workspace.left + zone.x + zone.width * slot.x / 100,
+      top: workspace.top + zone.y + zone.height * slot.y / 100,
+      right: workspace.left + zone.x + zone.width * (slot.x + slot.w) / 100,
+      bottom: workspace.top + zone.y + zone.height * (slot.y + slot.h) / 100
     };
-    const occupied = otherPanels.some((panel) => snapRectsOverlap(target, panel.getBoundingClientRect()));
+    const occupied = otherPanels.some((panel) => snapRectCoverage(target, panel.getBoundingClientRect()));
     return { ...item, occupied };
   });
 }
@@ -2192,11 +2202,11 @@ function menuItemsForCard(kind, ctx) {
       { label: "Hervorhebung: Cyan", action: () => setClockLedColor("#2ee6c7") },
       {
         label: `Benutzerdefinierte Hervorhebung (${clockLedColor()})`,
-        action: () => {
-          const next = window.prompt("Farbe der Uhr-Hervorhebung (#RRGGBB)", clockLedColor());
-          if (next == null) return;
-          setClockLedColor(next);
-        }
+        action: () => openInputDialog("Uhr-Hervorhebung", [
+          { id: "value", label: "Farbe (#RRGGBB)", value: clockLedColor() }
+        ]).then((result) => {
+          if (result?.value != null) setClockLedColor(result.value);
+        })
       },
       {
         label: "Uhr kleiner",
@@ -2208,11 +2218,11 @@ function menuItemsForCard(kind, ctx) {
       },
       {
         label: `Raster ${clockScale().toFixed(2)}× (verkleinerbar)`,
-        action: () => {
-          const next = window.prompt("Uhr-Rasterfaktor (0,25–2,0; 1,0 = eine Wallpaper-Rasterzelle)", String(clockScale()));
-          if (next == null) return;
-          setClockScale(Number(next));
-        }
+        action: () => openInputDialog("Uhr-Rasterfaktor", [
+          { id: "value", label: "Faktor (0,25–2,0)", value: String(clockScale()) }
+        ]).then((result) => {
+          if (result?.value != null) setClockScale(Number(result.value));
+        })
       }
     );
   }
@@ -3488,6 +3498,14 @@ function bindPluginPanels() {
 
 let logPanelTimer = null;
 
+function formatLogTimestamp(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return String(value || "");
+  const pad = (part, length = 2) => String(part).padStart(length, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+    + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+}
+
 function bindLogPanel() {
   if (logPanelTimer) clearInterval(logPanelTimer);
   logPanelTimer = null;
@@ -3505,7 +3523,7 @@ function bindLogPanel() {
       if (!list) return;
       list.innerHTML = entries.map((entry) => {
         const details = entry.details == null ? "" : ` ${JSON.stringify(entry.details)}`;
-        return `<div class="log-entry log-${escapeHtml(entry.level || "info")}"><time>${escapeHtml(String(entry.time || "").replace("T", " ").replace("Z", ""))}</time><b>${escapeHtml(String(entry.level || "INFO").toUpperCase())}</b><span>${escapeHtml(String(entry.event || ""))}</span><em>${escapeHtml(`${entry.message || ""}${details}`)}</em></div>`;
+        return `<div class="log-entry log-${escapeHtml(entry.level || "info")}"><time>${escapeHtml(formatLogTimestamp(entry.time))}</time><b>${escapeHtml(String(entry.level || "INFO").toUpperCase())}</b><span>${escapeHtml(String(entry.event || ""))}</span><em>${escapeHtml(`${entry.message || ""}${details}`)}</em></div>`;
       }).join("") || `<div class="log-empty">Keine Einträge für diesen Filter</div>`;
       list.scrollTop = list.scrollHeight;
     } catch (error) {
@@ -4231,8 +4249,167 @@ async function fillDrivesStage() {
   }
 }
 
+function openInputDialog(title, fields) {
+  return new Promise((resolve) => {
+    const modal = document.createElement("div");
+    modal.className = "modal_popup info terminal-input-dialog";
+    modal.innerHTML = `
+      <h2>${escapeHtml(title)}</h2>
+      <form data-input-dialog-form>
+        ${fields.map((field) => `
+          <label class="settings-field">
+            <span>${escapeHtml(field.label)}</span>
+            <input type="${field.type === "number" ? "number" : "text"}"
+              data-input-dialog="${escapeHtml(field.id)}"
+              value="${escapeHtml(field.value || "")}"
+              placeholder="${escapeHtml(field.placeholder || "")}"
+              ${field.required ? "required" : ""}>
+          </label>
+        `).join("")}
+        <div class="modal-actions">
+          <button type="button" data-input-dialog-cancel>Abbrechen</button>
+          <button type="submit" data-input-dialog-submit>Übernehmen</button>
+        </div>
+      </form>
+    `;
+    const finish = (result) => {
+      modal.remove();
+      resolve(result);
+    };
+    document.body.appendChild(modal);
+    window.edexI18n?.translatePage?.(modal);
+    placeCentered(modal, { width: Math.min(520, window.innerWidth * 0.8) });
+    const first = modal.querySelector("[data-input-dialog]");
+    first?.focus();
+    modal.querySelector("[data-input-dialog-cancel]")?.addEventListener("click", () => finish(null));
+    modal.querySelector("[data-input-dialog-form]")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const result = {};
+      fields.forEach((field) => {
+        result[field.id] = modal.querySelector(`[data-input-dialog="${CSS.escape(field.id)}"]`)?.value || "";
+      });
+      finish(result);
+    });
+    modal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish(null);
+      }
+    });
+  });
+}
+
+function openConnectionDialog(type, current) {
+  const profiles = (state.settings.connectionProfiles || []).filter((profile) => profile.type === "ssh");
+  return new Promise((resolve) => {
+    let selected = profiles.find((profile) => profile.id === current?.profileId);
+    const values = selected || current || {};
+    const modal = document.createElement("div");
+    modal.className = "modal_popup info terminal-input-dialog";
+    modal.innerHTML = `
+      <h2>SSH-Verbindung</h2>
+      <form data-connection-form>
+        <label class="settings-field">
+          <span>Gespeichertes Profil</span>
+          <select data-connection-profile>
+            <option value="">Neue Verbindung</option>
+            ${profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label class="settings-field">
+          <span>Profilname zum Speichern</span>
+          <input type="text" data-connection-field="name" value="${escapeHtml(values.name || "")}" placeholder="z. B. Mein Server">
+        </label>
+        <label class="settings-field"><span>Host oder IP-Adresse</span><input required type="text" data-connection-field="host" value="${escapeHtml(values.host || "")}"></label>
+        <label class="settings-field"><span>Benutzer</span><input required type="text" data-connection-field="user" value="${escapeHtml(values.user || "")}"></label>
+        <label class="settings-field"><span>Port</span><input required type="number" min="1" max="65535" data-connection-field="port" value="${escapeHtml(String(values.port || 22))}"></label>
+        <label class="settings-field"><span>Privater Schlüssel (optional)</span><input type="text" data-connection-field="identityFile" value="${escapeHtml(values.identityFile || "")}"></label>
+        <div class="modal-actions">
+          <button type="button" data-connection-cancel>Abbrechen</button>
+          <button type="button" data-connection-delete ${selected ? "" : "disabled"}>Profil löschen</button>
+          <button type="button" data-connection-save>Profil speichern</button>
+          <button type="submit" data-connection-connect>Verbinden</button>
+        </div>
+      </form>
+    `;
+    const finish = (action) => {
+      modal.remove();
+      resolve(action);
+    };
+    const readValues = () => {
+      const result = { type };
+      modal.querySelectorAll("[data-connection-field]").forEach((field) => {
+        result[field.dataset.connectionField] = field.value.trim();
+      });
+      result.port = Number(result.port || 22);
+      return result;
+    };
+    const applyProfile = (profile) => {
+      modal.querySelectorAll("[data-connection-field]").forEach((field) => {
+        field.value = profile?.[field.dataset.connectionField] || (field.dataset.connectionField === "port" ? "22" : "");
+      });
+      modal.querySelector("[data-connection-delete]").disabled = !profile;
+    };
+    document.body.appendChild(modal);
+    placeCentered(modal, { width: Math.min(620, window.innerWidth * 0.86) });
+    modal.querySelector("[data-connection-profile]")?.addEventListener("change", (event) => {
+      selected = profiles.find((profile) => profile.id === event.target.value);
+      applyProfile(selected);
+    });
+    modal.querySelector("[data-connection-cancel]")?.addEventListener("click", () => finish(null));
+    modal.querySelector("[data-connection-delete]")?.addEventListener("click", () => {
+      const id = modal.querySelector("[data-connection-profile]")?.value;
+      if (id) finish({ action: "delete", id });
+    });
+    modal.querySelector("[data-connection-save]")?.addEventListener("click", () => {
+      const result = readValues();
+      if (!result.name) {
+        toast("Bitte einen Profilnamen eingeben");
+        return;
+      }
+      finish({ action: "save", profile: { ...result, id: selected?.id || "" } });
+    });
+    modal.querySelector("[data-connection-form]")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const result = readValues();
+      if (type === "ssh" && (!result.host || !result.user || !Number.isInteger(result.port) || result.port < 1 || result.port > 65535)) {
+        toast("Bitte Host, Benutzer und einen gültigen Port eingeben");
+        return;
+      }
+      finish({ action: "connect", profile: { ...result, id: selected?.id || "" } });
+    });
+    modal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish(null);
+      }
+    });
+    modal.querySelector("[data-connection-field]")?.focus();
+  });
+}
+
+async function updateConnectionProfiles(action) {
+  const profiles = [...(state.settings.connectionProfiles || [])];
+  if (action.action === "delete") {
+    const next = profiles.filter((profile) => profile.id !== action.id);
+    const result = await window.edex.saveSettings({ connectionProfiles: next });
+    state.settings = result?.settings || { ...state.settings, connectionProfiles: next };
+  } else if (action.action === "save") {
+    const profile = { ...action.profile, id: action.profile.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+    const next = profiles.filter((item) => item.id !== profile.id && item.name !== profile.name);
+    next.unshift(profile);
+    const result = await window.edex.saveSettings({ connectionProfiles: next.slice(0, 50) });
+    state.settings = result?.settings || { ...state.settings, connectionProfiles: next.slice(0, 50) };
+  }
+}
+
 function terminalParentPath(value) {
   const target = String(value || "").replace(/[\\/]+$/, "");
+  if (target.startsWith("/") || target.startsWith("~")) {
+    if (!target || target === "/") return "/";
+    const parent = target.slice(0, target.lastIndexOf("/"));
+    return parent || (target.startsWith("~") ? "~" : "/");
+  }
   const root = /^[A-Za-z]:$/.test(target) ? `${target}\\` : target.slice(0, Math.max(0, target.lastIndexOf("\\")));
   return root || target;
 }
@@ -4249,7 +4426,11 @@ async function refreshTerminalFileBrowser(id, pane) {
   const requestId = (state.requestId || 0) + 1;
   state.requestId = requestId;
   try {
-    const listing = await window.edex.listFolder(target, { systemIcons: "fast" });
+    const isRemote = terminalModes.get(id) === "ssh";
+    const listing = isRemote
+      ? await window.edex.listRemoteTerminalFolder(id, target)
+      : await window.edex.listFolder(target, { systemIcons: "fast" });
+    if (listing?.error) throw new Error(listing.error);
     if (terminalBrowserState.get(id)?.requestId !== requestId) return;
     state.path = listing.root;
     browser.innerHTML = `
@@ -4281,15 +4462,58 @@ async function refreshTerminalFileBrowser(id, pane) {
         window.edex.changeTerminalDirectory(id, nextPath);
         refreshTerminalFileBrowser(id, pane);
       } else {
-        window.edex.openPath(nextPath);
+        if (terminalModes.get(id) !== "ssh") window.edex.openPath(nextPath);
       }
     }));
-    if (!terminalBrowserTimers.has(id)) {
+    if (!terminalBrowserTimers.has(id) && terminalModes.get(id) !== "ssh") {
       terminalBrowserTimers.set(id, setInterval(() => refreshTerminalFileBrowser(id, pane), 2000));
     }
   } catch (error) {
     browser.innerHTML = `<div class="terminal-file-empty">${escapeHtml(error.message || "Ordner konnte nicht gelesen werden")}</div>`;
   }
+}
+
+function fitTerminalPane(id, terminal, output, attempt = 0) {
+  const fitAddon = terminalFitAddons.get(id);
+  if (!terminal || !fitAddon || terminalInstances.get(id) !== terminal
+    || !output?.isConnected || !terminal.element?.isConnected
+    || output.clientWidth < 2 || output.clientHeight < 2) return;
+  if (attempt < 12) {
+    const dimensions = terminal._core?._renderService?.dimensions;
+    if (!dimensions?.css?.width || !dimensions?.css?.height) {
+      requestAnimationFrame(() => fitTerminalPane(id, terminal, output, attempt + 1));
+      return;
+    }
+  }
+  try {
+    fitAddon.fit();
+  } catch (error) {
+    const message = String(error?.message || error || "");
+    if (attempt < 20 && message.includes("dimensions")) {
+      setTimeout(() => fitTerminalPane(id, terminal, output, attempt + 1), 50);
+      return;
+    }
+    if (!message.includes("dimensions")) window.edex?.logError?.("terminal.fit", "Terminalgröße konnte nicht angepasst werden", {
+      paneId: id,
+      message
+    });
+  }
+}
+
+function disposeTerminalInstance(id) {
+  terminalResizeObservers.get(id)?.disconnect();
+  terminalResizeObservers.delete(id);
+  terminalFitAddons.delete(id);
+  terminalInstances.get(id)?.dispose();
+  terminalInstances.delete(id);
+}
+
+function disposeAllTerminalInstances() {
+  terminalResizeObservers.forEach((observer) => observer.disconnect());
+  terminalResizeObservers.clear();
+  terminalFitAddons.clear();
+  terminalInstances.forEach((terminal) => terminal.dispose());
+  terminalInstances.clear();
 }
 
 function bindTerminal() {
@@ -4326,28 +4550,31 @@ function bindTerminal() {
   }
   if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
   grid.style.setProperty("--terminal-columns", terminalGridMode === "1x1" ? "1" : "2");
-  terminalInstances.forEach((terminal) => terminal.dispose());
-  terminalInstances.clear();
-  terminalResizeObservers.forEach((observer) => observer.disconnect());
-  terminalResizeObservers.clear();
+  const layoutSelect = root.querySelector("[data-terminal-layout]");
+  if (layoutSelect) layoutSelect.value = terminalGridMode;
+  disposeAllTerminalInstances();
   terminalBrowserTimers.forEach((timer) => clearInterval(timer));
   terminalBrowserTimers.clear();
   grid.innerHTML = terminalPaneIds.map((id, index) => `
     <section class="terminal-pane" data-terminal-pane="${id}">
-      <header class="terminal-pane-head"><span>PowerShell-Konsole</span><span class="terminal-pane-actions"><select data-terminal-mode aria-label="Terminalansicht"><option value="shell">SHELL</option><option value="files">SHELL + FILES</option></select><button type="button" class="terminal-mode-action" data-terminal-browser>FILES</button><button type="button" class="terminal-mode-action" data-terminal-shell>SHELL</button></span></header>
+      <header class="terminal-pane-head"><span data-terminal-title>PowerShell-Konsole</span><span class="terminal-pane-actions"><select class="terminal-select" data-terminal-mode aria-label="Terminalansicht"><option value="shell">SHELL</option><option value="ssh">SSH</option></select><button type="button" class="terminal-mode-action" data-terminal-browser>FILES</button><button type="button" class="terminal-close" data-terminal-close aria-label="Grid schließen" title="Grid schließen">×</button></span></header>
       <div class="terminal-pane-body">
         <div class="terminal-output" data-terminal-output aria-label="Terminalausgabe"></div>
         <aside class="terminal-file-browser" data-terminal-file-browser hidden></aside>
-        <aside class="terminal-native-slot" data-terminal-native-slot hidden></aside>
       </div>
     </section>`).join("");
   terminalPaneIds.forEach((id) => {
     const pane = grid.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
     const output = pane?.querySelector("[data-terminal-output]");
     const fileBrowser = pane?.querySelector("[data-terminal-file-browser]");
-    const nativeSlot = pane?.querySelector("[data-terminal-native-slot]");
-    if (!pane || !output || !fileBrowser || !nativeSlot) return;
-    if (terminalNativePanes.has(id)) pane.classList.add("terminal-pane-native");
+    const modeSelect = pane?.querySelector("[data-terminal-mode]");
+    const title = pane?.querySelector("[data-terminal-title]");
+    if (!pane || !output || !fileBrowser) return;
+    const currentMode = terminalModes.get(id) || "shell";
+    if (modeSelect) modeSelect.value = currentMode;
+    if (title) title.textContent = currentMode === "ssh"
+      ? `SSH · ${terminalSshOptions.get(id)?.user || "?"}@${terminalSshOptions.get(id)?.host || "Ziel"}`
+      : "PowerShell-Konsole";
     const existing = terminalInstances.get(id);
     const terminal = existing || (window.Terminal ? new window.Terminal({
       cursorBlink: true,
@@ -4361,7 +4588,9 @@ function bindTerminal() {
     if (!existing) {
       terminalInstances.set(id, terminal);
       terminal.open(output);
-      terminal.loadAddon(new window.FitAddon.FitAddon());
+      const fitAddon = new window.FitAddon.FitAddon();
+      terminal.loadAddon(fitAddon);
+      terminalFitAddons.set(id, fitAddon);
       const bufferedOutput = terminalBuffers.get(id);
       if (bufferedOutput) {
         terminal.write(bufferedOutput, () => terminal.scrollToBottom?.());
@@ -4371,83 +4600,70 @@ function bindTerminal() {
     }
     if (!terminalResizeObservers.has(id) && window.ResizeObserver) {
       const resizeObserver = new window.ResizeObserver(() => {
-        requestAnimationFrame(() => terminal.fit?.());
+        requestAnimationFrame(() => fitTerminalPane(id, terminal, output));
       });
       resizeObserver.observe(output);
       terminalResizeObservers.set(id, resizeObserver);
     }
-    const syncNativeBounds = () => {
-      const embedded = terminalNativePanes.get(id);
-      if (!embedded) return;
-      const rect = nativeSlot.getBoundingClientRect();
-      window.edex.embedBounds({ hwnd: embedded.hwnd, kind: embedded.kind, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
-    };
     const browserButton = pane.querySelector("[data-terminal-browser]");
-    const shellButton = pane.querySelector("[data-terminal-shell]");
-    const modeSelect = pane.querySelector("[data-terminal-mode]");
     browserButton?.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const embedded = terminalNativePanes.get(id);
-      if (embedded) {
-        await window.edex.embedRelease({ hwnd: embedded.hwnd });
-        terminalNativePanes.delete(id);
-        nativeSlot.hidden = true;
-        pane.classList.remove("terminal-pane-putty");
-      }
       const browser = terminalBrowserState.get(id) || { open: false, path: "" };
       browser.open = !browser.open;
       terminalBrowserState.set(id, browser);
       fileBrowser.hidden = !browser.open;
       pane.classList.toggle("terminal-pane-files", browser.open);
-      pane.classList.remove("terminal-pane-putty");
-      if (modeSelect) modeSelect.value = browser.open ? "files" : "shell";
       browserButton.classList.toggle("on", browser.open);
       if (browser.open) refreshTerminalFileBrowser(id, pane);
     });
     modeSelect?.addEventListener("change", async () => {
-      if (modeSelect.value === "files") {
-        browserButton?.click();
+      if (modeSelect.value === "ssh") {
+        const result = await openConnectionDialog("ssh", terminalSshOptions.get(id));
+        if (!result) {
+          modeSelect.value = terminalModes.get(id) || "shell";
+          return;
+        }
+        if (result.action !== "connect") {
+          await updateConnectionProfiles(result);
+          modeSelect.value = terminalModes.get(id) || "shell";
+          return;
+        }
+        const profile = result.profile;
+        terminalSshOptions.set(id, {
+          profileId: profile.id,
+          host: profile.host,
+          user: profile.user,
+          port: profile.port,
+          identityFile: profile.identityFile
+        });
+        terminalModes.set(id, "ssh");
+        window.edex.closeTerminal(id);
+        terminalStarted.delete(id);
+        bindTerminal();
+        return;
       } else {
-        shellButton?.click();
+        terminalStarted.delete(id);
+        terminalModes.set(id, "shell");
+        terminalSshOptions.delete(id);
+        bindTerminal();
       }
     });
-    shellButton?.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const embedded = terminalNativePanes.get(id);
-      if (embedded) await window.edex.embedRelease({ hwnd: embedded.hwnd });
-      terminalNativePanes.delete(id);
-      const browserState = terminalBrowserState.get(id);
-      if (browserState) browserState.open = false;
-      nativeSlot.hidden = true;
-      pane.classList.remove("terminal-pane-putty");
-      pane.classList.remove("terminal-pane-files");
-      if (modeSelect) modeSelect.value = "shell";
-      terminalStarted.delete(id);
-      bindTerminal();
-    });
-    syncNativeBounds();
     pane.querySelector("[data-terminal-close]")?.addEventListener("click", () => {
-      const embedded = terminalNativePanes.get(id);
-      if (embedded) window.edex.embedRelease({ hwnd: embedded.hwnd });
       window.edex.closeTerminal(id);
-      terminalNativePanes.delete(id);
       terminalStarted.delete(id);
       terminalPaneIds.splice(terminalPaneIds.indexOf(id), 1);
       terminalBuffers.delete(id);
-      terminalResizeObservers.get(id)?.disconnect();
-      terminalResizeObservers.delete(id);
-      terminalInstances.get(id)?.dispose();
-      terminalInstances.delete(id);
+      disposeTerminalInstance(id);
       if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
       bindTerminal();
     });
-    terminal.fit?.();
-    requestAnimationFrame(() => terminal.fit?.());
+    fitTerminalPane(id, terminal, output);
+    requestAnimationFrame(() => fitTerminalPane(id, terminal, output));
     if (!terminalStarted.has(id) && window.edex?.createTerminal) {
       terminalStarted.add(id);
-      window.edex.createTerminal(id, terminalCwds.get(id), "powershell").then((result) => {
+      const shellType = currentMode === "ssh" ? "ssh" : "powershell";
+      window.edex.createTerminal(id, terminalCwds.get(id), shellType, terminalSshOptions.get(id)).then((result) => {
         if (!result?.cwd) return;
         terminalCwds.set(id, result.cwd);
         const browserState = terminalBrowserState.get(id);
@@ -4455,7 +4671,13 @@ function bindTerminal() {
           browserState.path = result.cwd;
           refreshTerminalFileBrowser(id, pane);
         }
-      }).catch?.(() => terminalStarted.delete(id));
+      }).catch?.((error) => {
+        terminalStarted.delete(id);
+        if (currentMode === "ssh") {
+          toast(error.message || "SSH-Sitzung konnte nicht gestartet werden");
+          terminalModes.set(id, "shell");
+        }
+      });
     }
     const browserState = terminalBrowserState.get(id);
     if (browserState?.open) {
@@ -4465,37 +4687,27 @@ function bindTerminal() {
       if (modeSelect) modeSelect.value = "files";
       refreshTerminalFileBrowser(id, pane);
     }
-    if (terminalNativePanes.has(id)) {
-      nativeSlot.hidden = false;
-      pane.classList.add("terminal-pane-putty");
-      if (modeSelect) modeSelect.value = "putty";
-      syncNativeBounds();
-    }
   });
   root.querySelector("[data-terminal-add]")?.addEventListener("click", () => {
     if (terminalPaneIds.length >= 4) return;
     terminalPaneIds.push(`terminal-${terminalNextPane++}`);
     bindTerminal();
   });
-  root.querySelector("[data-terminal-browser]")?.addEventListener("click", () => {
-    root.querySelector("[data-terminal-pane] [data-terminal-browser]")?.click();
-  });
   root.querySelector("[data-terminal-layout]")?.addEventListener("change", (event) => {
     terminalGridMode = event.target.value;
+    if (terminalGridMode === "2x2" && terminalPaneIds.length < 2) {
+      terminalPaneIds.push(`terminal-${terminalNextPane++}`);
+    }
     bindTerminal();
   });
   window.addEventListener("resize", () => {
-    terminalInstances.forEach((terminal) => terminal.fit?.());
-    terminalPaneIds.forEach((id) => {
+    terminalInstances.forEach((terminal, id) => {
       const pane = root.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
-      const embedded = terminalNativePanes.get(id);
-      const nativeSlot = pane?.querySelector("[data-terminal-native-slot]");
-      if (!pane || !nativeSlot || !embedded) return;
-      const rect = nativeSlot.getBoundingClientRect();
-      window.edex.embedBounds({ hwnd: embedded.hwnd, kind: embedded.kind, bounds: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } });
+      const output = pane?.querySelector("[data-terminal-output]");
+      fitTerminalPane(id, terminal, output);
     });
   }, { passive: true });
-  if (status) status.textContent = `${terminalPaneIds.length} PowerShell-Sitzung${terminalPaneIds.length === 1 ? "" : "en"}`;
+  if (status) status.textContent = `${terminalPaneIds.length} Terminal-Sitzung${terminalPaneIds.length === 1 ? "" : "en"}`;
 }
 
 function formatSearchEngine(status) {

@@ -48,6 +48,8 @@
 
 .terminal-grid-tools select,
 .terminal-grid-tools button,
+.terminal-pane-actions select,
+.terminal-pane-actions button,
 .terminal-command button {
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.42);
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.08);
@@ -57,13 +59,68 @@
 }
 
 .terminal-grid-tools select,
+.terminal-pane-actions select,
 .terminal-grid-tools button {
     padding: 0.15rem 0.4rem;
 }
 
-.terminal-grid-tools button[data-terminal-browser] {
+.terminal-pane-actions button {
+    padding: 0.14rem 0.38rem;
+}
+
+.terminal-select {
+    appearance: none;
+    min-width: 4.8rem;
+    border-radius: 0;
+    border-color: rgba(0, 246, 255, 0.62) !important;
+    background:
+        linear-gradient(45deg, transparent 50%, #00f6ff 50%) calc(100% - 0.65rem) 50% / 0.32rem 0.32rem no-repeat,
+        linear-gradient(135deg, #00f6ff 50%, transparent 50%) calc(100% - 0.42rem) 50% / 0.32rem 0.32rem no-repeat,
+        rgba(0, 18, 24, 0.94) !important;
+    color: #9ffcff !important;
+    text-transform: uppercase;
+}
+
+.terminal-select option {
+    background: #021218;
+    color: #9ffcff;
+}
+
+.terminal-select:focus-visible,
+.terminal-mode-action:focus-visible,
+.terminal-grid-tools button:focus-visible {
+    outline: 1px solid #00ff75;
+    outline-offset: 1px;
+    box-shadow: 0 0 0.45rem rgba(0, 255, 117, 0.35);
+}
+
+.terminal-mode-action[data-terminal-browser] {
     color: #00ff75;
     border-color: rgba(0, 255, 117, 0.42);
+}
+
+.terminal-mode-action[data-terminal-browser].on {
+    background: rgba(0, 255, 117, 0.18);
+    box-shadow: inset 0 0 0.45rem rgba(0, 255, 117, 0.2);
+}
+
+.terminal-pane-head button.terminal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2rem;
+    height: 1.2rem;
+    border: 1px solid rgba(255, 74, 100, 0.55);
+    color: #ff6b82;
+    font-size: 1.1em;
+    line-height: 1;
+}
+
+.terminal-pane-head button.terminal-close:hover,
+.terminal-pane-head button.terminal-close:focus-visible {
+    background: rgba(255, 74, 100, 0.18);
+    border-color: #ff4a64;
+    color: #ffb5c0;
 }
 
 .terminal-grid {
@@ -73,6 +130,7 @@
     min-height: 0;
     grid-template-columns: repeat(var(--terminal-columns, 2), minmax(0, 1fr));
     grid-template-rows: minmax(0, 1fr);
+    grid-auto-rows: minmax(0, 1fr);
     gap: 0.55rem;
     overflow: hidden;
 }
@@ -98,11 +156,7 @@
 }
 
 .terminal-file-browser[hidden],
-.terminal-native-slot[hidden] {
-    display: none !important;
-}
-
-.terminal-pane:not(.terminal-pane-files):not(.terminal-pane-putty) .terminal-output {
+.terminal-pane:not(.terminal-pane-files) .terminal-output {
     width: 100%;
     flex: 1 1 auto;
 }
@@ -115,18 +169,6 @@
 
 .terminal-pane-files .terminal-file-browser {
     flex: 1 1 42%;
-}
-
-.terminal-pane-putty .terminal-output {
-    display: none;
-}
-
-.terminal-native-slot {
-    flex: 1;
-    min-width: 10rem;
-    min-height: 0;
-    border-left: 1px solid rgba(0, 246, 255, 0.3);
-    background: rgba(0, 8, 11, 0.88);
 }
 
 .terminal-file-browser {
@@ -243,7 +285,19 @@
 }
 
 .terminal-pane-head button.terminal-mode-action {
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(0, 246, 255, 0.42);
+    padding: 0.1rem 0.32rem;
+    color: #9ffcff;
+}
+
+.terminal-pane-head button.terminal-mode-action:hover,
+.terminal-pane-head button.terminal-mode-action.on {
+    border-color: rgba(0, 255, 117, 0.72);
+    background: rgba(0, 255, 117, 0.14);
+    color: #00ff75;
 }
 
 .terminal-pane-actions {
@@ -258,11 +312,6 @@
     color: #00f6ff;
 }
 
-.terminal-pane-native .terminal-output,
-.terminal-pane-native .terminal-command {
-    visibility: hidden;
-}
-
 .terminal-output {
     flex: 1 1 0;
     height: 100%;
@@ -271,6 +320,7 @@
     overflow: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    background: rgba(0, 4, 7, 0.92);
     color: #00eaff;
     font: inherit;
     font-size: 0.86em;
@@ -281,6 +331,11 @@
     height: 100%;
     min-height: 100%;
     padding: 0.35rem;
+}
+
+.terminal-output .xterm-screen,
+.terminal-output .xterm-rows {
+    height: 100% !important;
 }
 
 .terminal-output .xterm-viewport {

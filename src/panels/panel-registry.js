@@ -240,7 +240,10 @@ function panelBody(id) {
         <div class="terminal-root">
           <div class="terminal-toolbar">
             <span class="terminal-status" data-terminal-status>PowerShell-Konsole bereit</span>
-            <button type="button" data-terminal-browser title="Datei-Browser ein- oder ausblenden">FILES</button>
+            <div class="terminal-grid-tools">
+              <label>GRID <select class="terminal-select" data-terminal-layout aria-label="Terminal-Grid-Größe"><option value="1x1">1×1</option><option value="2x2">2×2</option></select></label>
+              <button type="button" data-terminal-add title="Terminal-Grid hinzufügen">+</button>
+            </div>
           </div>
           <div class="terminal-grid" data-terminal-grid></div>
         </div>`;

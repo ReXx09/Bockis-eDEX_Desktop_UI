@@ -56,11 +56,16 @@ Das Grid-Terminal verwendet unter Windows eine echte interaktive PowerShell-Sitz
 
 Zusätzlich stehen im Terminal-Panel zur Verfügung:
 
-- **FILES**: Öffnet einen ausgewählten Ordner als Datei-Browser-Container.
-- **PuTTY**: Startet und bettet eine lokale PuTTY-Sitzung in eine Terminal-Pane ein.
-- **1x1, 2x1 und 2x2**: Ändert das Terminal-Raster.
+- **FILES**: Kann in jeder einzelnen Pane unabhängig zugeschaltet werden und zeigt den Datei-Browser neben SHELL oder SSH an. Bei SSH wird der entfernte Arbeitsordner über die aktive Sitzung gelesen und navigiert; bei SHELL bleibt der lokale Windows-Dateibaum aktiv.
+- **SSH**: Startet eine OpenSSH-Sitzung direkt in der xterm.js-/ConPTY-Pane. Host, Benutzer, Port und optional eine private Schlüsseldatei können beim Verbinden angegeben werden.
+- **Bis zu vier parallele Grids**: Jede Pane kann unabhängig als SHELL oder SSH betrieben werden. Das 2×2-Layout zeigt vier Sitzungen gleichzeitig; Sitzungen können über `+` hinzugefügt und einzeln geschlossen werden.
 
 Die Terminal-Ausgabe wird ereignisbasiert an den Renderer übertragen. Die übrigen HUD-Panels liefern ihre Live-Systemdaten unabhängig davon.
+
+SSH-Passwörter und Passphrasen werden nicht von Bockis-eDEX gespeichert. Die
+Host-Key-Prüfung und die Datei `known_hosts` werden von der lokalen
+OpenSSH-Installation verwaltet. Terminaldaten und Zugangsdaten werden nicht
+in das Anwendungslog geschrieben.
 
 ### Vertrauensgrenze und Windows-Sicherheit
 
@@ -70,9 +75,19 @@ Dateioperationen werden über den Electron-Main-Prozess ausgeführt. Organizer-V
 
 ## Optionale Rainmeter-Integration
 
-Der Installer enthaelt optional Rainmeter. Auf der Seite **Hinweise und Abhaengigkeiten** kann die Rainmeter-Installation aktiviert oder abgewählt werden. Danach kann in den eDEX-Einstellungen **Rainmeter-HUD** aktiviert werden. Die Anwendung erzeugt dann eine eigene `Bockis-eDEX`-Skin mit Uhr, Datum, CPU- und RAM-Anzeige. Farben und Hintergrund werden aus dem aktiven eDEX-Theme übernommen; ein Themewechsel aktualisiert die Skin automatisch.
+Der TRON-Terminal-Installer enthält optional Rainmeter. Im nativen
+Terminalmenü kann die Rainmeter-Installation mit den Pfeiltasten und der
+Leertaste aktiviert oder abgewählt werden. Die Hinweise zu den transparenten
+Overlay-Fenstern und die enthaltenen Komponenten werden dort vor der Auswahl
+angezeigt. Eine separate grafische Seite **Hinweise und Abhängigkeiten** wird
+nicht mehr verwendet.
 
-Der Build lädt dafür den offiziellen Rainmeter-Installer herunter und bettet ihn in das NSIS-Paket ein. Die Skin liegt unter `%USERPROFILE%\\Documents\\Rainmeter\\Skins\\Bockis-eDEX`. Wird die Option deaktiviert oder die Anwendung beendet, wird die Skin ausgeblendet. Ohne installierte Rainmeter-Anwendung bleibt die eDEX-Oberfläche vollständig funktionsfähig.
+Der Build lädt dafür den offiziellen Rainmeter-Installer herunter und bettet ihn
+in das NSIS-Paket ein. Die Skin liegt unter
+`%USERPROFILE%\\Documents\\Rainmeter\\Skins\\Bockis-eDEX`. Wird die Option
+deaktiviert oder die Anwendung beendet, wird die Skin ausgeblendet. Ohne
+installierte Rainmeter-Anwendung bleibt die eDEX-Oberfläche vollständig
+funktionsfähig.
 
 Der Build verwendet eine festgelegte Rainmeter-Version und prüft den SHA-256-Hash des Installers. Ein abweichendes oder unvollständiges Artefakt wird nicht in das Paket übernommen.
 
@@ -114,9 +129,12 @@ die installierte EXE möglich.
 ### TRON-Terminal-Installation
 
 Für eine retroartige Installation kann danach `install-tron.cmd` per Doppelklick
-gestartet werden. Das Script zeigt einen schwarzen PowerShell-Terminalablauf,
-findet den neuesten Installer unter `dist\` und startet anschließend den
-normalen NSIS-Installer mit Administratorrechten. Alternativ:
+gestartet werden. Das Script findet den neuesten Installer unter `dist\` und
+startet anschließend den nativen TRON-Installer mit Administratorrechten.
+Dieser zeigt zunächst Hinweise und enthaltene Komponenten an und bietet danach
+ein tastaturgesteuertes Menü für Installationspfad und Rainmeter-HUD.
+Mit Pfeil hoch/runter wird navigiert, mit der Leertaste wird Rainmeter
+aktiviert oder deaktiviert und mit Enter wird bestätigt. Alternativ:
 
 ```powershell
 .\install-tron.ps1

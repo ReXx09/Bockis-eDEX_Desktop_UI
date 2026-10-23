@@ -146,18 +146,38 @@ let tray = null;
 const terminalSessions = new Map();
 const terminalSessionShells = new Map();
 const terminalSessionStopping = new Set();
+const remoteListingRequests = new Map();
 
 function stopTerminalSession(key, session) {
   if (!session || terminalSessionStopping.has(session)) return;
   terminalSessionStopping.add(session);
   if (terminalSessions.get(key) === session) terminalSessions.delete(key);
   terminalSessionShells.delete(key);
+  const pending = remoteListingRequests.get(key);
+  if (pending) {
+    clearTimeout(pending.timer);
+    pending.resolve({ root: pending.root, items: [], error: "SSH-Sitzung wurde beendet" });
+    remoteListingRequests.delete(key);
+  }
   try {
     session.kill();
   } catch (error) {
     appLog.warn("terminal.stop", "Terminal-Sitzung konnte nicht beendet werden", {
       paneId: key,
       error: error.message
+    });
+  }
+}
+
+async function stopAllTerminalSessions() {
+  const active = [...terminalSessions.entries()];
+  active.forEach(([key, session]) => stopTerminalSession(key, session));
+  if (active.length) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (terminalSessions.size) {
+    appLog.warn("terminal.stop", "Terminal-Sitzungen wurden vor dem Beenden nicht vollständig bestätigt", {
+      count: terminalSessions.size
     });
   }
 }
@@ -688,6 +708,9 @@ if (!gotLock) {
       tray = null;
       stopZOrderDaemon();
       stopOleDragDaemon();
+      try { await stopAllTerminalSessions(); } catch (error) {
+        console.error("stop terminal sessions", error);
+      }
       try { await win32Embed.releaseAllEmbeds(); } catch { /* ignore */ }
       try { win32Embed.stopEmbedDaemon(); } catch { /* ignore */ }
       appLog.close();
@@ -1088,21 +1111,57 @@ ipcMain.handle("terminal-run", async (event, command, cwd) => {
     });
   });
 });
-ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
+function findOpenSsh() {
+  const candidates = [
+    path.join(process.env.SystemRoot || "C:\\Windows", "System32", "OpenSSH", "ssh.exe"),
+    path.join(process.env.SystemRoot || "C:\\Windows", "ssh.exe")
+  ];
+  const local = candidates.find((candidate) => fs.existsSync(candidate));
+  if (local) return local;
+  return findExecutable("ssh.exe");
+}
+
+function validateSshOptions(options = {}) {
+  const host = String(options.host || "").trim();
+  const user = String(options.user || "").trim();
+  const port = Number(options.port || 22);
+  const identityFile = String(options.identityFile || "").trim();
+  if (!host || host.length > 253 || /[\r\n\t]/.test(host)) throw new Error("SSH-Ziel ist ungültig");
+  if (!user || user.length > 100 || /[\s\r\n@]/.test(user)) throw new Error("SSH-Benutzer ist ungültig");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("SSH-Port ist ungültig");
+  if (identityFile && (!path.isAbsolute(identityFile) || !fs.existsSync(identityFile) || !fs.statSync(identityFile).isFile())) {
+    throw new Error("SSH-Schlüsseldatei wurde nicht gefunden");
+  }
+  return { host, user, port, identityFile };
+}
+
+ipcMain.handle("terminal-create", (event, paneId, cwd, shellType, options = {}) => {
   const win = requireTrustedWindow(event);
+  if (quitting) throw new Error("Die Anwendung wird bereits beendet");
   if (!nodePty) throw new Error("ConPTY ist nicht verfügbar. Bitte node-pty für Electron rebuilden.");
   const key = `${win.id}:${String(paneId || "default")}`;
   stopTerminalSession(key, terminalSessions.get(key));
   const workingDirectory = typeof cwd === "string" && fs.existsSync(cwd) && fs.statSync(cwd).isDirectory()
     ? cwd
     : os.homedir();
-  const selectedShell = shellType === "cmd" ? "cmd" : "powershell";
+  const selectedShell = shellType === "cmd" ? "cmd" : shellType === "ssh" ? "ssh" : "powershell";
+  const sshPath = selectedShell === "ssh" ? findOpenSsh() : "";
+  if (selectedShell === "ssh" && !sshPath) throw new Error("OpenSSH (ssh.exe) wurde nicht gefunden");
+  const sshOptions = selectedShell === "ssh" ? validateSshOptions(options) : null;
   const shell = selectedShell === "cmd"
     ? (process.env.ComSpec || path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe"))
+    : selectedShell === "ssh"
+      ? sshPath
     : path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
   const shellArgs = selectedShell === "cmd"
     ? []
-    : ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "RemoteSigned"];
+    : selectedShell === "ssh"
+      ? [
+        "-p", String(sshOptions.port),
+        ...(sshOptions.identityFile ? ["-i", sshOptions.identityFile] : []),
+        `${sshOptions.user}@${sshOptions.host}`
+      ]
+      : ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "RemoteSigned"];
   const session = nodePty.spawn(shell, shellArgs, {
     cwd: workingDirectory,
     name: "xterm-256color",
@@ -1114,7 +1173,12 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
   });
   terminalSessions.set(key, session);
   terminalSessionShells.set(key, selectedShell);
-  appLog.info("terminal.create", "Terminal-Sitzung gestartet", { paneId, shell: selectedShell, cwd: workingDirectory });
+  appLog.info("terminal.create", "Terminal-Sitzung gestartet", {
+    paneId,
+    shell: selectedShell,
+    cwd: workingDirectory,
+    sshHost: sshOptions?.host || ""
+  });
   let lastCwd = workingDirectory;
   let promptBuffer = "";
   const sendData = (data) => {
@@ -1122,13 +1186,55 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
     const cleanPromptBuffer = promptBuffer.replace(/\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "");
     const promptMatches = selectedShell === "cmd"
       ? [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)([A-Za-z]:\\[^\r\n>]*|\\\\[^\r\n>]+)>[ \t]*/g)]
-      : [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)PS[ \t]+([^\r\n>]+)>[ \t]*/g)];
+      : selectedShell === "powershell"
+        ? [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)PS[ \t]+([^\r\n>]+)>[ \t]*/g)]
+        : selectedShell === "ssh"
+          ? [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)[^@\r\n]+@[^:\r\n]+:([~\/][^\r\n$#]*)[#$][ \t]*/g)]
+          : [];
     const promptMatch = promptMatches[promptMatches.length - 1];
     if (promptMatch) {
       const nextCwd = String(promptMatch[1] || "").trim();
-      if (nextCwd && nextCwd !== lastCwd && fs.existsSync(nextCwd)) {
+      if (nextCwd && nextCwd !== lastCwd && (selectedShell === "ssh" || fs.existsSync(nextCwd))) {
         lastCwd = nextCwd;
         if (!win.isDestroyed()) win.webContents.send("terminal-cwd", { paneId, cwd: nextCwd });
+      }
+    }
+    const pending = remoteListingRequests.get(key);
+    if (pending) {
+      pending.buffer = `${pending.buffer}${String(data || "")}`.slice(-30000);
+      const begin = pending.buffer.lastIndexOf(pending.begin);
+      const end = pending.buffer.indexOf(pending.end, begin + pending.begin.length);
+      if (begin >= 0 && end >= 0) {
+        const body = pending.buffer.slice(begin + pending.begin.length, end)
+          .replace(/\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "")
+          .replace(/\r/g, "");
+        let items = body.split("\n")
+          .map((line) => {
+            const tabParts = line.split("\t");
+            if (tabParts.length >= 3) return tabParts;
+            const match = line.match(/^\s*([df])\s+(\d+)\s+(.+?)\s*$/);
+            return match ? [match[1], match[2], match[3]] : [];
+          })
+          .filter((parts) => parts.length >= 3 && (parts[0] === "d" || parts[0] === "f"))
+        if (!items.length) {
+          const fallback = [...body.matchAll(/(?:^|\n)\s*([df])\s+(\d+)\s+([^\r\n]+?)(?=\r?$)/gm)];
+          items = fallback.map((match) => [match[1], match[2], match[3].trim()]);
+        }
+        items = items.map(([kind, size, name]) => ({
+            name,
+            displayName: name,
+            path: `${pending.root.replace(/\/+$/, "")}/${name}`,
+            isDirectory: kind === "d",
+            sizeLabel: kind === "d" ? "Ordner" : `${Number(size) || 0} B`
+          }));
+        appLog.info("terminal.remote-list", "SSH-Verzeichnis gelesen", {
+          paneId,
+          root: pending.root,
+          itemCount: items.length
+        });
+        clearTimeout(pending.timer);
+        pending.resolve({ root: pending.root, items });
+        remoteListingRequests.delete(key);
       }
     }
     if (!win.isDestroyed()) win.webContents.send("terminal-data", { paneId, data });
@@ -1137,7 +1243,9 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType) => {
   session.onExit(({ exitCode }) => {
     terminalSessionStopping.delete(session);
     if (terminalSessions.get(key) === session) terminalSessions.delete(key);
-    terminalSessionShells.delete(key);
+    if (terminalSessions.get(key) !== session && !terminalSessions.has(key)) {
+      terminalSessionShells.delete(key);
+    }
     if (!win.isDestroyed()) win.webContents.send("terminal-exit", { paneId, exitCode: exitCode ?? 1 });
   });
   return { ok: true, paneId, cwd: workingDirectory };
@@ -1147,14 +1255,66 @@ ipcMain.on("terminal-cd", (event, paneId, target) => {
   const win = getSenderWindow(event);
   const key = `${win?.id}:${String(paneId || "default")}`;
   const session = terminalSessions.get(key);
-  if (!session || typeof target !== "string" || !fs.existsSync(target) || !fs.statSync(target).isDirectory()) return;
+  if (!session || typeof target !== "string") return;
   const selectedShell = terminalSessionShells.get(key) || "powershell";
+  if (selectedShell === "ssh") {
+    const remoteTarget = target.replace(/^~(?=\/|$)/, "$HOME");
+    const escaped = remoteTarget.replace(/(["\\])/g, "\\$1");
+    session.write(`cd -- "${escaped}"\r`);
+    return;
+  }
+  if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) return;
   if (selectedShell === "cmd") {
     session.write(`cd /d "${target.replace(/"/g, "")}"\r`);
     return;
   }
   const escaped = target.replace(/'/g, "''");
   session.write(`Set-Location -LiteralPath '${escaped}'\r`);
+});
+ipcMain.handle("terminal-list-remote", (event, paneId, target) => {
+  requireTrustedWindow(event);
+  const win = getSenderWindow(event);
+  const pane = String(paneId || "default");
+  const exactKey = `${win?.id}:${pane}`;
+  let key = exactKey;
+  let session = terminalSessions.get(key);
+  if (!session || terminalSessionShells.get(key) !== "ssh") {
+    const candidates = [...terminalSessions.keys()]
+      .filter((candidate) => candidate.endsWith(`:${pane}`))
+      .filter((candidate) => terminalSessionShells.get(candidate) === "ssh");
+    if (candidates.length === 1) {
+      key = candidates[0];
+      session = terminalSessions.get(key);
+    }
+  }
+  if (!session || terminalSessionShells.get(key) !== "ssh") {
+    const sshCandidates = [...terminalSessions.keys()]
+      .filter((candidate) => terminalSessionShells.get(candidate) === "ssh");
+    if (sshCandidates.length === 1) {
+      key = sshCandidates[0];
+      session = terminalSessions.get(key);
+    }
+  }
+  if (!session || terminalSessionShells.get(key) !== "ssh") {
+    throw new Error("Keine aktive SSH-Sitzung");
+  }
+  const root = String(target || ".").trim() || ".";
+  const token = `__EDEX_REMOTE_${Date.now()}_${Math.random().toString(36).slice(2, 8)}__`;
+  const begin = `${token}_BEGIN`;
+  const end = `${token}_END`;
+  const commandRoot = root.replace(/^~(?=\/|$)/, "$HOME");
+  const escaped = commandRoot.replace(/'/g, "'\\''");
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      if (remoteListingRequests.get(key)?.token === token) remoteListingRequests.delete(key);
+      resolve({ root, items: [], error: "SSH-Verzeichnis konnte nicht gelesen werden" });
+    }, 10000);
+    remoteListingRequests.set(key, { token, begin, end, root, buffer: "", timer, resolve });
+    const targetExpression = commandRoot.startsWith("$HOME")
+      ? `"${commandRoot.replace(/(["\\])/g, "\\$1")}"`
+      : `'${escaped}'`;
+    session.write(`cd -- ${targetExpression} 2>/dev/null && { printf '\\n${begin}\\n'; for item in ./* ./.[!.]* ./..?*; do [ -e "$item" ] || continue; if [ -d "$item" ]; then kind=d; else kind=f; fi; size=$(wc -c < "$item" 2>/dev/null || echo 0); name=\${item##*/}; printf '%s\\t%s\\t%s\\n' "$kind" "$size" "$name"; done; } || printf '\\n${begin}\\n'; printf '${end}\\n'\r`);
+  });
 });
 ipcMain.handle("terminal-admin", (event, cwd) => {
   requireTrustedWindow(event);
@@ -1885,39 +2045,6 @@ ipcMain.handle("embed-launch", async (event, payload = {}) => {
     timeoutMs: Number(payload.timeoutMs) || 15000,
     hostHwnd: parentHwndOf(event),
     processName: String(payload.processName || "")
-  });
-});
-
-ipcMain.handle("embed-putty", async (event, payload = {}) => {
-  requireTrustedWindow(event);
-  const candidates = [
-    path.join(process.env.ProgramFiles || "C:\\Program Files", "PuTTY", "putty.exe"),
-    path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "PuTTY", "putty.exe"),
-    path.join(process.env.LOCALAPPDATA || "", "Programs", "PuTTY", "putty.exe")
-  ];
-  let puttyPath = candidates.find((candidate) => candidate && fs.existsSync(candidate));
-  if (!puttyPath) {
-    puttyPath = await new Promise((resolve) => {
-      const child = spawn("where.exe", ["putty.exe"], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
-      let output = "";
-      child.stdout.on("data", (chunk) => { output += String(chunk); });
-      child.on("close", () => resolve(output.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || ""));
-      child.on("error", () => resolve(""));
-    });
-  }
-  if (!puttyPath || !fs.existsSync(puttyPath)) throw new Error("PuTTY wurde nicht gefunden");
-  const target = String(payload.target || "").trim();
-  const args = !target
-    ? []
-    : target.toLowerCase().startsWith("session:")
-      ? ["-load", target.slice(8).trim()]
-      : ["-ssh", target];
-  const screenBounds = mapCssBoundsToScreen(event, payload.bounds || {}, resolveEmbedZone({ ...payload, kind: "putty" }));
-  return win32Embed.launchAndDock(puttyPath, screenBounds, {
-    timeoutMs: 15000,
-    hostHwnd: parentHwndOf(event),
-    processName: "putty.exe",
-    args
   });
 });
 
