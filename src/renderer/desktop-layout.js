@@ -474,18 +474,20 @@
     return id && state().layout[id]?.zone === "edge" ? "edge" : "workspace";
   }
 
-  function centralZoneRect() {
+  function centralZoneRect(marginOverride = null) {
     const ws = workspaceRect();
-    const margins = state().settings.windowZoneMargins || {};
-    const left = ws.width * Math.max(0, Math.min(45, Number(margins.left) || 0)) / 100;
-    const top = ws.height * Math.max(0, Math.min(45, Number(margins.top) || 0)) / 100;
-    const right = ws.width * (1 - Math.max(0, Math.min(45, Number(margins.right) || 0)) / 100);
-    const bottom = ws.height * (1 - Math.max(0, Math.min(45, Number(margins.bottom) || 0)) / 100);
+    const margins = marginOverride || state().settings.windowZoneMargins || {};
+    const percent = (value) => Math.max(0, Math.min(45, Number(value) || 0));
+    const grid = gridSize();
+    const left = Math.ceil((ws.width * percent(margins.left) / 100) / grid) * grid;
+    const top = Math.ceil((ws.height * percent(margins.top) / 100) / grid) * grid;
+    const right = Math.floor((ws.width * (1 - percent(margins.right) / 100)) / grid) * grid;
+    const bottom = Math.floor((ws.height * (1 - percent(margins.bottom) / 100)) / grid) * grid;
     return {
       x: left,
       y: top,
-      width: Math.max(40, right - left),
-      height: Math.max(40, bottom - top)
+      width: Math.max(grid * 2, right - left),
+      height: Math.max(grid * 2, bottom - top)
     };
   }
 

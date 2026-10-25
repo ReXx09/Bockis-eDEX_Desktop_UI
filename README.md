@@ -31,7 +31,7 @@ Mehrmonitor-Ansicht.
 
 ## Hauptfunktionen
 
-- **Mehrmonitor-Unterstützung**: Eigenes Fenster pro Monitor; der **Systemdesktop wird nur auf dem Hauptmonitor angezeigt**; die Rasterdichte wird mit dem Maßstab des Hauptmonitors synchronisiert.
+- **Mehrmonitor-Unterstützung**: Eigenes Fenster pro Monitor; der **Systemdesktop wird nur auf dem Hauptmonitor angezeigt**. Die UI-Skalierung kann über F10 bzw. Ctrl+Shift+S auf jedem Monitor separat eingestellt und gespeichert werden.
 - **Per-Monitor-Layout und Wallpaper**: Layouts, Raster und Wallpaper werden pro Display berücksichtigt; beim Beenden werden Windows-Desktop und Symbolsichtbarkeit wiederhergestellt.
 - **Container-System**: Verschieben, Skalieren, Sperren und Hintergrundfarbe ändern; neue Container lassen sich nacheinander hinzufügen und suchen automatisch freie Rasterzellen.
 - **Container hinzufügen**: Panels, Desktop-Container und Ordner-Container werden über den zentralen Dialog hinzugefügt, automatisch platziert und im aktuellen Monitor-Layout gespeichert.
@@ -49,6 +49,7 @@ Mehrmonitor-Ansicht.
 - **Log-Panel**: Das JSON-Lines-Fehlerprotokoll kann als Panel mit Level-Filtern und automatischer Aktualisierung geöffnet werden.
 - **Bootloader und Branding**: Transparenter, komprimierter WebP-Bootscreen sowie ein mehrstufiges Windows-ICO für Anwendung, Installer und Verknüpfungen.
 - **Persistente Einstellungen**: Theme-, Layout-, Display-, Dock- und Desktop-Einstellungen werden gespeichert und beim Start wieder geladen.
+- **Start-Preset**: Ein gespeichertes Preset kann ausgewählt werden, das beim Programmstart automatisch geladen wird; per-Monitor-Layouts und UI-Skalierungen werden dabei berücksichtigt.
 
 ## Terminal
 

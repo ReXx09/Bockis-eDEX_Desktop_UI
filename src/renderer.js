@@ -121,6 +121,7 @@ const state = {
   displayId: null,
   displayIndex: 0,
   primary: true,
+  displayUiScale: null,
   displayDockEnabled: null,
   displayDockSettings: null,
   bounds: null,
@@ -588,7 +589,7 @@ function layoutFitScale() {
 }
 
 function displayUiScale() {
-  const raw = Number(state.settings?.uiScale);
+  const raw = Number(state.displayUiScale ?? state.settings?.uiScale);
   if (raw === 0.72 || !Number.isFinite(raw) || raw <= 0) return 1;
   return Math.max(0.4, Math.min(1.5, raw));
 }
@@ -603,6 +604,10 @@ function applyUiMetrics() {
   document.documentElement.style.setProperty("--grid-size", `${gridSize()}px`);
   document.documentElement.style.setProperty("--snap-gap", `${gridSize()}px`);
   document.documentElement.style.setProperty("--search-font", `${searchFontSize()}px`);
+  const controlUnit = (design.h / 100) * user * fit;
+  document.documentElement.style.setProperty("--ui-card-tool-size", `${Math.max(16, controlUnit * 1.7)}px`);
+  document.documentElement.style.setProperty("--ui-card-tool-gap", `${Math.max(3, controlUnit * 0.45)}px`);
+  document.documentElement.style.setProperty("--ui-card-tool-font-size", `${Math.max(10, controlUnit)}px`);
   applyClockMetrics();
 }
 
@@ -867,10 +872,24 @@ function fileBrowserIcon(item) {
   const fileName = String(item.name || name).trim();
   const normalized = name.toLocaleLowerCase();
   const normalizedFileName = fileName.toLocaleLowerCase();
+  const folderKey = normalized.replace(/[\s_-]+/g, "");
   let asset = item.isDirectory ? "ordner.png" : "";
-  if (item.isDirectory) {
-    if (normalized === "downloads" || normalized === "download") asset = "downloads.png";
-    else if (normalized === "home" || normalized === "desktop") asset = "home.png";
+  if (item.isDirectory || item.kind === "thispc" || item.kind === "drive" || item.kind === "remote") {
+    if (item.kind === "thispc" || folderKey === "dieserpc" || folderKey === "thispc") asset = "dieser_pc.png";
+    else if (folderKey === "benutzer" || folderKey === "user" || folderKey === "users") asset = "benutzer.png";
+    else if (folderKey === "bilder" || folderKey === "pictures") asset = "bilder.png";
+    else if (folderKey === "cloud") asset = "cloud.png";
+    else if (folderKey === "desktop") asset = "desktop.png";
+    else if (folderKey === "dokumente" || folderKey === "documents") asset = "dokumente.png";
+    else if (folderKey === "musik" || folderKey === "music") asset = "musik.png";
+    else if (folderKey === "netzwerk" || folderKey === "network") asset = "netzwerk.png";
+    else if (folderKey === "programme" || folderKey === "programs") asset = "programme.png";
+    else if (item.kind === "remote" || folderKey === "remote") asset = "remote.png";
+    else if (folderKey === "temp" || folderKey === "temporary") asset = "temp.png";
+    else if (folderKey === "video" || folderKey === "videos") asset = "video.png";
+    else if (folderKey === "windows") asset = "windows.png";
+    else if (normalized === "downloads" || normalized === "download") asset = "downloads.png";
+    else if (normalized === "home") asset = "home.png";
     else if (normalized.includes("favorit")) asset = "favoriten.png";
     else if (normalized.includes("papierkorb") || normalized === "recycle.bin") asset = "papierkorb.png";
     else if (normalized.includes("geschützt") || normalized.includes("protected")) asset = "geschuetzt.png";
@@ -937,17 +956,12 @@ function showWindowZonePreview(settingsModal) {
     const value = Number(settingsModal.querySelector(id)?.value);
     return Number.isFinite(value) ? Math.max(0, Math.min(45, value)) : fallback;
   };
-  const ws = workspaceRect();
-  const left = ws.width * readMargin("#set-zone-left", 18) / 100;
-  const top = ws.height * readMargin("#set-zone-top", 8) / 100;
-  const right = ws.width * (1 - readMargin("#set-zone-right", 18) / 100);
-  const bottom = ws.height * (1 - readMargin("#set-zone-bottom", 8) / 100);
-  const zone = {
-    x: left,
-    y: top,
-    width: Math.max(40, right - left),
-    height: Math.max(40, bottom - top)
-  };
+  const zone = window.edexDesktopLayout.centralZoneRect({
+    left: readMargin("#set-zone-left", 18),
+    top: readMargin("#set-zone-top", 8),
+    right: readMargin("#set-zone-right", 18),
+    bottom: readMargin("#set-zone-bottom", 8)
+  });
   overlay.classList.remove("edge");
   overlay.classList.add("on", "preview");
   overlay.style.left = `${zone.x}px`;
@@ -1966,11 +1980,10 @@ async function setClockLedColor(color) {
 
 function fabBarHtml() {
   const addBtn = `<button type="button" class="round-fab" id="add-fab" title="Container hinzufügen">+</button>`;
-  if (!state.primary) return addBtn;
   return `
     ${addBtn}
     <button type="button" class="round-fab" id="settings-fab" title="Einstellungen">⚙</button>
-    <button type="button" class="round-fab danger" id="quit-fab" title="Programm beenden">⏻</button>
+    ${state.primary ? '<button type="button" class="round-fab danger" id="quit-fab" title="Programm beenden">⏻</button>' : ""}
   `;
 }
 
@@ -5661,7 +5674,7 @@ function openSettings(focusPanel = "") {
       : "Chinesisch (traditionell)";
 
   modal.innerHTML = `
-    <h1>Einstellungen</h1>
+    <h1>Einstellungen · Monitor ${state.displayIndex + 1}${state.primary ? " (Hauptmonitor)" : ""}</h1>
     <h2>Sprache / 語言</h2>
     <table><tr><td>Sprache</td><td>UI-Sprache der Anwendung</td><td>
       <select id="set-locale">
@@ -5675,6 +5688,12 @@ function openSettings(focusPanel = "") {
       <select id="set-preset" ${presetOpts ? "" : "disabled"}>
         <option value="">Preset auswählen …</option>
         ${presetOpts}
+      </select>
+      <select id="set-startup-preset" ${presetOpts ? "" : "disabled"} title="Dieses Preset wird beim Start geladen">
+        <option value="">Kein Preset automatisch laden</option>
+        ${((state.settings.presets || []).map((preset) =>
+          `<option value="${escapeHtml(preset.name)}" ${preset.name === state.settings.startupPreset ? "selected" : ""}>Start: ${escapeHtml(preset.name)}</option>`
+        )).join("")}
       </select>
       <button type="button" id="set-preset-save">Als Preset speichern</button>
       <button type="button" id="set-preset-load" ${presetOpts ? "" : "disabled"}>Preset laden</button>
@@ -5839,8 +5858,8 @@ function openSettings(focusPanel = "") {
       </tr>
       <tr>
         <td>UI-Skalierung</td>
-        <td>Für alle Monitore synchron, zusätzlich zur Layout-Auflösung</td>
-        <td><input id="set-ui-scale" type="number" min="0.4" max="1.2" step="0.05" value="${displayUiScale()}"></td>
+        <td>Individuelle Skalierung für diesen Monitor, zusätzlich zur Layout-Auflösung</td>
+        <td><input id="set-ui-scale" type="number" min="0.4" max="1.5" step="0.05" value="${displayUiScale()}"></td>
       </tr>
     </table>
 
@@ -5981,6 +6000,8 @@ function openSettings(focusPanel = "") {
   }
 
   const presetSelect = modal.querySelector("#set-preset");
+  const startupPresetSelect = modal.querySelector("#set-startup-preset");
+  startupPresetSelect?.addEventListener("change", () => setSaveStatus("Ungespeicherte Änderungen", true));
   const updatePresetButtons = () => {
     const active = Boolean(presetSelect?.value);
     modal.querySelector("#set-preset-load")?.toggleAttribute("disabled", !active);
@@ -5991,7 +6012,7 @@ function openSettings(focusPanel = "") {
     const name = await requestPresetName(modal);
     if (!name) return;
     await persistLayout();
-    const currentLayout = currentDisplayLayout();
+    const currentLayout = { ...currentDisplayLayout(), uiScale: state.displayUiScale };
     const presetDisplayLayouts = {
       ...(state.settings.displayLayouts || {}),
       [String(state.displayId)]: currentLayout
@@ -6071,7 +6092,7 @@ function openSettings(focusPanel = "") {
   modal.querySelector("#set-ui-scale")?.addEventListener("input", (event) => {
     const next = Number(event.target.value);
     if (!Number.isFinite(next)) return;
-    state.settings = { ...state.settings, uiScale: Math.max(0.4, Math.min(1.5, next)) };
+    state.displayUiScale = Math.max(0.4, Math.min(1.5, next));
     applyUiMetrics();
   });
 
@@ -6104,7 +6125,8 @@ function openSettings(focusPanel = "") {
     }
   });
   modal.querySelector("#set-cancel").onclick = () => {
-    state.settings = { ...state.settings, layoutMode: prevLayoutMode, uiScale: prevUiScale };
+    state.settings = { ...state.settings, layoutMode: prevLayoutMode };
+    state.displayUiScale = prevUiScale;
     applyUiMetrics();
     closeSettings();
   };
@@ -6122,9 +6144,10 @@ function openSettings(focusPanel = "") {
     const wallpaper = modal.querySelector("#set-wall").value;
     const windowsWallpaper = String(modal.querySelector("#set-windows-wallpaper")?.value || "").trim();
     const uiScaleRaw = Number(modal.querySelector("#set-ui-scale").value);
-    const uiScale = Number.isFinite(uiScaleRaw) ? Math.max(0.4, Math.min(1.2, uiScaleRaw)) : 1;
+    const uiScale = Number.isFinite(uiScaleRaw) ? Math.max(0.4, Math.min(1.5, uiScaleRaw)) : 1;
     const layoutModeValue = modal.querySelector("#set-layout-mode")?.value === "4k" ? "4k" : "2k";
-    state.settings = { ...state.settings, layoutMode: layoutModeValue, uiScale };
+    state.settings = { ...state.settings, layoutMode: layoutModeValue };
+    state.displayUiScale = uiScale;
     const gridRaw = Number(modal.querySelector("#set-grid").value);
     const gridSizeValue = Number.isFinite(gridRaw) ? Math.max(12, Math.min(96, Math.round(gridRaw))) : 32;
     const clockPanelFrame = Boolean(modal.querySelector("#set-clock-panel")?.checked);
@@ -6186,7 +6209,6 @@ function openSettings(focusPanel = "") {
       rainSpeed: rainSpeedValue,
       searchFontSize: searchFontValue,
       layoutMode: layoutModeValue,
-      uiScale,
       theme: themeName,
       windowsColorMode,
       keepThemeWallpaper,
@@ -6197,13 +6219,14 @@ function openSettings(focusPanel = "") {
       iconView: state.iconView,
       windowZoneEnabled,
       windowZoneMargins,
-      locale: localeValue
+      locale: localeValue,
+      startupPreset: startupPresetSelect?.value || ""
     };
     if (!state.primary) delete settingsPatch.dockEnabled;
     snapAllLayoutToGrid();
     const result = await window.edex.saveSettings({
       ...settingsPatch,
-      displayLayout: currentDisplayLayout()
+      displayLayout: { ...currentDisplayLayout(), uiScale: state.displayUiScale }
     });
     state.settings = result.settings;
     if (!taskbarIntegrationEnabled && taskbarWindowTimer) {
@@ -6378,7 +6401,6 @@ async function runOrganize() {
 }
 
 window.addEventListener("keydown", (event) => {
-  if (!state.primary) return;
   if (event.key === "F10" || (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "s")) {
     event.preventDefault();
     openSettings();
@@ -6420,6 +6442,24 @@ window.addEventListener("keydown", (event) => {
   state.wallpapers = state.bootstrap.wallpapers || [];
   state.themeName = state.bootstrap.themeName || "tron";
   state.includeFolders = Boolean(state.settings.includeFolders);
+  let startupTheme = state.bootstrap.theme;
+  const configuredStartupPreset = String(state.settings.startupPreset || "").trim();
+  const startupPreset = (state.settings.presets || [])
+    .find((preset) => preset.name === configuredStartupPreset);
+  if (startupPreset) {
+    const preservedPresets = state.settings.presets;
+    state.settings = {
+      ...state.settings,
+      ...startupPreset.settings,
+      presets: preservedPresets,
+      startupPreset: configuredStartupPreset
+    };
+    const presetLayout = startupPreset.displayLayouts?.[String(state.displayId)] || startupPreset.layout;
+    if (presetLayout) state.bootstrap.displayLayout = presetLayout;
+    if (state.settings.theme && state.settings.theme !== state.bootstrap.themeName) {
+      startupTheme = await window.edex.getTheme(state.settings.theme);
+    }
+  }
 
   // Prefer per-display layout; migrate legacy global layout onto primary once.
   let saved = state.bootstrap.displayLayout;
@@ -6432,6 +6472,9 @@ window.addEventListener("keydown", (event) => {
       iconView: state.settings.iconView
     };
   }
+  state.displayUiScale = Number.isFinite(Number(saved?.uiScale))
+    ? Math.max(0.4, Math.min(1.5, Number(saved.uiScale)))
+    : Math.max(0.4, Math.min(1.5, Number(state.settings.uiScale) || 1));
 
   state.iconView = (saved?.iconView || state.settings.iconView) === "list" ? "list" : "grid";
   state.desktopIconScale = Math.max(0.6, Math.min(2, Number(saved?.desktopIconScale) || Number(state.settings.desktopIconScale) || 1));
@@ -6440,7 +6483,7 @@ window.addEventListener("keydown", (event) => {
   if (state.settings?.layoutMode !== "4k" && state.settings?.layoutMode !== "2k") {
     state.settings = { ...state.settings, layoutMode: defaultLayoutMode() };
   }
-  applyTheme(state.bootstrap.theme, state.settings.wallpaper || "grid");
+  applyTheme(startupTheme, state.settings.wallpaper || "grid");
 
   try {
     const fitted = await window.edex.refitDisplay();

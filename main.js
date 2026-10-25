@@ -1182,6 +1182,7 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType, options = {}) 
   let lastCwd = workingDirectory;
   let promptBuffer = "";
   const sendData = (data) => {
+    let suppressTerminalData = false;
     promptBuffer = `${promptBuffer}${String(data || "")}`.slice(-8192);
     const cleanPromptBuffer = promptBuffer.replace(/\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "");
     const promptMatches = selectedShell === "cmd"
@@ -1189,7 +1190,7 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType, options = {}) 
       : selectedShell === "powershell"
         ? [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)PS[ \t]+([^\r\n>]+)>[ \t]*/g)]
         : selectedShell === "ssh"
-          ? [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)[^@\r\n]+@[^:\r\n]+:([~\/][^\r\n$#]*)[#$][ \t]*/g)]
+          ? [...cleanPromptBuffer.matchAll(/(?:^|\r?\n)[^@\r\n]+@[^:\r\n]+:([~\/][^\r\n$#>]*?)[ \t]*[#$>][ \t]*/g)]
           : [];
     const promptMatch = promptMatches[promptMatches.length - 1];
     if (promptMatch) {
@@ -1201,6 +1202,7 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType, options = {}) 
     }
     const pending = remoteListingRequests.get(key);
     if (pending) {
+      suppressTerminalData = true;
       pending.buffer = `${pending.buffer}${String(data || "")}`.slice(-30000);
       const begin = pending.buffer.lastIndexOf(pending.begin);
       const end = pending.buffer.indexOf(pending.end, begin + pending.begin.length);
@@ -1235,9 +1237,15 @@ ipcMain.handle("terminal-create", (event, paneId, cwd, shellType, options = {}) 
         clearTimeout(pending.timer);
         pending.resolve({ root: pending.root, items });
         remoteListingRequests.delete(key);
+        const visibleData = `${pending.buffer.slice(0, begin)}${pending.buffer.slice(end + pending.end.length)}`;
+        if (!win.isDestroyed() && visibleData) {
+          win.webContents.send("terminal-data", { paneId, data: visibleData });
+        }
       }
     }
-    if (!win.isDestroyed()) win.webContents.send("terminal-data", { paneId, data });
+    if (!suppressTerminalData && !win.isDestroyed()) {
+      win.webContents.send("terminal-data", { paneId, data });
+    }
   };
   session.onData(sendData);
   session.onExit(({ exitCode }) => {
@@ -1306,7 +1314,13 @@ ipcMain.handle("terminal-list-remote", (event, paneId, target) => {
   const escaped = commandRoot.replace(/'/g, "'\\''");
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      if (remoteListingRequests.get(key)?.token === token) remoteListingRequests.delete(key);
+      const pending = remoteListingRequests.get(key);
+      if (pending?.token === token) {
+        remoteListingRequests.delete(key);
+        if (!win.isDestroyed() && pending.buffer) {
+          win.webContents.send("terminal-data", { paneId, data: pending.buffer });
+        }
+      }
       resolve({ root, items: [], error: "SSH-Verzeichnis konnte nicht gelesen werden" });
     }, 10000);
     remoteListingRequests.set(key, { token, begin, end, root, buffer: "", timer, resolve });

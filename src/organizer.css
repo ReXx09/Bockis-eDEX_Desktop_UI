@@ -26,6 +26,12 @@
     --fs: 1.12rem;
     --ctrl: 1.8rem;
     --fab: 2.05rem;
+    --ui-control-scale: var(--ui-scale);
+    --ui-control-height: 2.6rem;
+    --ui-control-padding-x: 0.9rem;
+    --ui-card-tool-size: 1.7rem;
+    --ui-card-tool-gap: 0.45rem;
+    --ui-card-tool-font-size: 1rem;
 }
 
 html, body {
@@ -387,7 +393,7 @@ body.desktop-shell #workspace {
     position: absolute;
     top: 0.4rem;
     left: 0.35rem;
-    font-size: 1rem;
+    font-size: var(--ui-card-tool-font-size);
     padding: 0.1rem 0.35rem;
     background: rgba(5, 8, 13, 0.85);
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.55);
@@ -414,8 +420,8 @@ body.desktop-shell #workspace {
 }
 
 .card-tool.more-btn {
-    min-width: var(--ctrl);
-    font-size: 1.4rem;
+    min-width: var(--ui-card-tool-size);
+    font-size: calc(var(--ui-card-tool-font-size) * 1.4);
     letter-spacing: 0;
 }
 
@@ -458,7 +464,7 @@ body.desktop-shell #workspace {
     z-index: 120;
     display: grid;
     grid-template-columns: repeat(2, minmax(7rem, 1fr));
-    gap: 0.45rem;
+    gap: var(--ui-card-tool-gap);
     width: 16rem;
     padding: 0.55rem;
     background: rgba(22, 24, 30, 0.98);
@@ -873,8 +879,8 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 }
 
 .card-tool {
-    width: 1.7rem;
-    height: 1.7rem;
+    width: var(--ui-card-tool-size);
+    height: var(--ui-card-tool-size);
     padding: 0;
     line-height: 1;
     text-align: center;
@@ -1691,9 +1697,9 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     color: rgb(var(--color_r), var(--color_g), var(--color_b));
     font-family: var(--font_main);
     font-size: var(--fs);
-    padding: 0 0.9rem;
-    min-height: 2.6rem;
-    height: 2.6rem;
+    padding: 0 var(--ui-control-padding-x);
+    min-height: var(--ui-control-height);
+    height: var(--ui-control-height);
     cursor: pointer;
 }
 

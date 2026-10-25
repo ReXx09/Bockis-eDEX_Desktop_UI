@@ -8,6 +8,8 @@
 - GPL-3.0 license text in the repository.
 - OpenSSH sessions directly inside terminal panes through the existing ConPTY/xterm.js bridge.
 - OpenSSH-only terminal mode with saved SSH profiles.
+- Per-monitor UI scaling in the settings dialog, including independently scaling modal and action controls.
+- Optional startup preset selection with per-monitor layout and UI-scale restoration.
 
 ### Improved
 
