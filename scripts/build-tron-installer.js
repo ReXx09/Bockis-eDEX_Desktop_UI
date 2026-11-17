@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
@@ -8,6 +9,7 @@ const version = require(path.join(root, 'package.json')).version;
 const installer = path.join(dist, `Bockis-eDEX-Desktop-UI-Setup-${version}.exe`);
 const payload = `${installer}.payload.exe`;
 const blockmap = `${installer}.blockmap`;
+const latest = path.join(dist, 'latest.yml');
 const bootstrapSource = path.join(root, 'build', 'tron_bootstrap.cs');
 const bootstrapManifest = path.join(root, 'build', 'tron_bootstrap.manifest');
 const icon = path.join(root, 'assets', 'icons', 'branding', 'app.ico');
@@ -37,6 +39,22 @@ try {
   const result = spawnSync(csc, args, { stdio: 'inherit' });
   if (result.status !== 0) throw new Error(`csc failed with exit code ${result.status}`);
   if (fs.existsSync(blockmap)) fs.unlinkSync(blockmap);
+  const installerBuffer = fs.readFileSync(installer);
+  const sha512 = crypto.createHash('sha512').update(installerBuffer).digest('base64');
+  const latestContent = [
+    `version: ${version}`,
+    'files:',
+    `  - url: ${path.basename(installer)}`,
+    `    sha512: ${sha512}`,
+    `    size: ${installerBuffer.length}`,
+    `path: ${path.basename(installer)}`,
+    `sha512: ${sha512}`,
+    `releaseDate: '${new Date().toISOString()}'`,
+    ''
+  ].join('\n');
+  const latestTemp = `${latest}.tmp`;
+  fs.writeFileSync(latestTemp, latestContent, 'utf8');
+  fs.renameSync(latestTemp, latest);
   fs.unlinkSync(payload);
   console.log(`[tron-bootstrap] created ${installer}`);
 } catch (error) {
