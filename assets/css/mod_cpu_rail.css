@@ -5,6 +5,8 @@
 
 #mod_cpu_rail.cpu-rail-root {
     --rail: var(--color_r), var(--color_g), var(--color_b);
+    --cpu-load: 0;
+    --cpu-intensity: 1;
     height: 100%;
     min-height: 0;
     display: flex;
@@ -36,7 +38,7 @@
     width: 100%;
     height: 100%;
     transform: translateZ(0);
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .cpu-rail-fx {
@@ -48,9 +50,20 @@
     z-index: 2;
     transform: translateZ(0);
     will-change: contents;
+    opacity: var(--cpu-intensity);
 }
 
 .cpu-rail-paused .cpu-rail-fx {
+    visibility: hidden;
+}
+
+.cpu-rail-flow-off .cpu-rail-fx {
+    visibility: hidden;
+}
+
+.cpu-rail-wave-off .cpu-rail-wave,
+.cpu-rail-temperature-off [data-cpu-rail-temp],
+.cpu-rail-hover-off [data-cpu-core] {
     visibility: hidden;
 }
 
@@ -158,6 +171,18 @@
     stroke: rgb(var(--rail));
     stroke-width: 0.75;
     opacity: 0.75;
+    cursor: pointer;
+    transition: opacity 0.2s ease, fill 0.2s ease, stroke-width 0.2s ease;
+}
+
+.cpu-die-core.is-active {
+    fill: rgba(var(--rail), calc(0.12 + var(--core-load) * 0.55));
+    stroke-width: calc(0.75px + var(--core-load) * 1.1px);
+}
+
+.cpu-die-core:hover {
+    fill: rgba(var(--rail), 0.75);
+    stroke-width: 1.6;
 }
 
 .cpu-die-core-x {
@@ -227,6 +252,73 @@
     contain: layout paint;
 }
 
+.cpu-rail-root[data-load-level="medium"] .cpu-rail-chip-face {
+    filter: drop-shadow(0 0 calc(4px + var(--cpu-load) * 8px) rgba(var(--rail), 0.45));
+}
+
+.cpu-rail-root[data-load-level="high"] .cpu-rail-chip-face {
+    filter: drop-shadow(0 0 calc(8px + var(--cpu-load) * 12px) rgba(var(--rail), 0.72));
+}
+
+.cpu-rail-glow-off .cpu-rail-chip-face {
+    filter: none !important;
+}
+
+.cpu-rail-scanline {
+    position: absolute;
+    left: 37%;
+    width: 26%;
+    height: 1px;
+    top: 35%;
+    background: rgb(var(--rail));
+    box-shadow: 0 0 8px rgba(var(--rail), 0.8);
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: 4;
+    animation: cpu-rail-scan 3.8s linear infinite;
+}
+
+.cpu-rail-scan-off .cpu-rail-scanline {
+    display: none;
+}
+
+.cpu-rail-root[data-temp-level="warning"] {
+    --rail: 255, 190, 64;
+}
+
+.cpu-rail-root[data-temp-level="critical"] {
+    --rail: 255, 82, 82;
+}
+
+.cpu-rail-detail {
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.35rem;
+    padding: 0.25rem 0.4rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.78);
+    border: 1px solid rgba(var(--rail), 0.45);
+    color: rgb(var(--rail));
+    font-size: 0.65rem;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.cpu-rail-wave {
+    position: absolute;
+    left: 7%;
+    right: 7%;
+    bottom: 0.4rem;
+    width: 86%;
+    height: 30px;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0.8;
+}
+
 .cpu-rail-logo {
     width: 42%;
     max-width: 5.5rem;
@@ -273,6 +365,27 @@
     font-weight: 600;
     opacity: 1;
     margin-left: 0.2rem;
+}
+
+.cpu-rail-action {
+    border: 1px solid rgba(var(--rail), 0.45);
+    background: rgba(var(--rail), 0.08);
+    color: rgb(var(--rail));
+    font: inherit;
+    font-size: 0.62rem;
+    padding: 0.05rem 0.3rem;
+    cursor: pointer;
+}
+
+.cpu-rail-action:hover {
+    background: rgba(var(--rail), 0.25);
+}
+
+@keyframes cpu-rail-scan {
+    0% { transform: translateY(0); opacity: 0; }
+    12% { opacity: 0.7; }
+    88% { opacity: 0.7; }
+    100% { transform: translateY(190px); opacity: 0; }
 }
 
 /*

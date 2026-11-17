@@ -624,6 +624,15 @@
     const canEdit = item && !isVirtualPath(item.path) && item.kind !== "drive" && !isDriveRoot(item.path);
     if (!canEdit) return items;
     items.push(
+      ...(isDesktopStage && ctx.onFavoriteToggle
+        ? [
+          {
+            label: ctx.isFavorite?.(item) ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen",
+            action: () => ctx.onFavoriteToggle(item)
+          },
+          { sep: true }
+        ]
+        : []),
       { label: "Vorschau", action: () => window.edexFilePreview?.showFilePreview(item) },
       { label: "Kopieren", action: () => copyFileItem(item) },
       { label: "Ausschneiden", action: () => copyFileItem(item, true) },

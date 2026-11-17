@@ -450,7 +450,7 @@ body.desktop-shell #workspace {
 
 .card-menu button:hover {
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.22);
-    color: var(--color_light_black);
+    color: var(--panel-text, #d7f8ff);
 }
 
 .card-menu-sep {
@@ -1706,7 +1706,7 @@ body.is-card-dragging .desktop-card:not(.dragging) {
 .modal_popup button:hover,
 .path-card .card-actions button:hover {
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
-    color: var(--color_light_black);
+    color: var(--panel-text, #d7f8ff);
 }
 
 .path-card.active-path {
@@ -1804,6 +1804,18 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.desk-icon.favorite::after {
+    content: "★";
+    position: absolute;
+    top: 0.18rem;
+    right: 0.28rem;
+    color: #ffd23c;
+    font-size: 0.9rem;
+    line-height: 1;
+    text-shadow: 0 0 0.35rem rgba(255, 210, 60, 0.75);
+    pointer-events: none;
 }
 
 .desk-icon:active,
@@ -2559,7 +2571,7 @@ div.modal_popup button:hover,
 .modal_popup button:hover,
 .path-card .card-actions button:hover {
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.35) !important;
-    color: var(--color_light_black) !important;
+    color: var(--panel-text, #d7f8ff) !important;
 }
 
 .modal_popup .settings-footer,

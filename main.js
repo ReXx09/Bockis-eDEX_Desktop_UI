@@ -2003,16 +2003,38 @@ function mapCssBoundsToScreen(event, bounds = {}, zone = "workspace") {
   }
   const zoom = win.webContents.getZoomFactor() || 1;
   const content = win.getContentBounds();
+  const display = screen.getDisplayMatching(win.getBounds());
+  const primaryDisplay = screen.getPrimaryDisplay();
   let cssX = Number(bounds.x) || 0;
   let cssY = Number(bounds.y) || 0;
   let cssW = Math.max(40, Number(bounds.w) || 400);
   let cssH = Math.max(40, Number(bounds.h) || 300);
   if (zone === "workspace" && settings.windowZoneEnabled !== false) {
     const margins = settings.windowZoneMargins || {};
-    const left = content.width * Math.max(0, Math.min(45, Number(margins.left) || 0)) / 100;
-    const top = content.height * Math.max(0, Math.min(45, Number(margins.top) || 0)) / 100;
-    const right = content.width * (1 - Math.max(0, Math.min(45, Number(margins.right) || 0)) / 100);
-    const bottom = content.height * (1 - Math.max(0, Math.min(45, Number(margins.bottom) || 0)) / 100);
+    const physicalSize = (item) => ({
+      width: Math.round(item.bounds.width * (item.scaleFactor || 1)),
+      height: Math.round(item.bounds.height * (item.scaleFactor || 1))
+    });
+    const currentPhysical = physicalSize(display);
+    const primaryPhysical = physicalSize(primaryDisplay);
+    const currentShort = Math.min(currentPhysical.width, currentPhysical.height);
+    const currentLong = Math.max(currentPhysical.width, currentPhysical.height);
+    const primaryShort = Math.min(primaryPhysical.width, primaryPhysical.height);
+    const primaryLong = Math.max(primaryPhysical.width, primaryPhysical.height);
+    const fitScale = primaryShort > 4 && primaryLong > 4
+      ? Math.min(currentShort / primaryShort, currentLong / primaryLong)
+      : 1;
+    const grid = Math.max(4, Math.round(
+      Math.max(12, Math.min(96, Math.round(Number(settings.gridSize) || 32)))
+      * Math.min(1, Math.max(0.1, fitScale))
+    ));
+    const cssWidth = content.width / zoom;
+    const cssHeight = content.height / zoom;
+    const raster = (value) => Math.max(0, Math.min(45, Math.round(Number(value) || 0)));
+    const left = raster(margins.left) * grid;
+    const top = raster(margins.top) * grid;
+    const right = cssWidth - raster(margins.right) * grid;
+    const bottom = cssHeight - raster(margins.bottom) * grid;
     const zoneWidth = Math.max(40, right - left);
     const zoneHeight = Math.max(40, bottom - top);
     cssW = Math.min(cssW, zoneWidth);
@@ -2026,7 +2048,6 @@ function mapCssBoundsToScreen(event, bounds = {}, zone = "workspace") {
     width: Math.max(40, Math.round(cssW * zoom)),
     height: Math.max(40, Math.round(cssH * zoom))
   };
-  const display = screen.getDisplayMatching(win.getBounds());
   try {
     const physical = screen.dipToScreenRect(display, dipRect);
     return {

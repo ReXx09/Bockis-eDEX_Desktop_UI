@@ -20,6 +20,7 @@ const FILE_FORMAT_FILTERS = [
 
 const DESK_FILTERS = [
   { id: "all", label: "Alle" },
+  { id: "favorites", label: "Favoriten" },
   { id: "folders", label: "Ordner" },
   { id: "icons", label: "Symbole" },
   ...FILE_FORMAT_FILTERS
@@ -146,6 +147,7 @@ const state = {
   desktopLocked: false,
   desktopFilter: "all",
   desktopGrouped: false,
+  desktopFavorites: [],
   desktopIconScale: 1,
   desktopFontScale: 1,
   desktopTabId: "classify",
@@ -2223,6 +2225,37 @@ function menuItemsForCard(kind, ctx) {
       action: () => openAddPicker()
     }
   ];
+  if (kind === "panel" && ctx.widgetId === "cpuRail") {
+    const effectLabels = {
+      flow: "Lichtpunkte / Leiterbahnen",
+      cores: "Kernlast-Pulsieren",
+      glow: "Chip-Glow",
+      waveforms: "Live-Wellenformen",
+      scan: "Diagnose-Scanlinie",
+      temperature: "Temperaturwarnung",
+      hover: "Mouseover-Details"
+    };
+    items.push({ sep: true });
+    Object.entries(effectLabels).forEach(([key, label]) => {
+      items.push({
+        label: `${state.settings?.cpuRailEffects?.[key] === false ? "Aktivieren" : "Deaktivieren"}: ${label}`,
+        action: async () => {
+          const nextEffects = {
+            ...(state.settings?.cpuRailEffects || {}),
+            [key]: state.settings?.cpuRailEffects?.[key] === false
+          };
+          state.settings = { ...state.settings, cpuRailEffects: nextEffects };
+          window.cpuRailPanel?.setEffects?.(nextEffects);
+          const result = await window.edex?.saveSettings?.({ cpuRailEffects: nextEffects });
+          if (result?.settings) state.settings = result.settings;
+        }
+      });
+    });
+    items.push({
+      label: "CPU-Panel aktualisieren",
+      action: () => window.cpuRailPanel?.refresh?.()
+    });
+  }
   if (kind === "panel" || kind === "desktop" || kind === "path") {
     items.push(
       { sep: true },
@@ -2893,9 +2926,17 @@ function closePanel(id) {
     }
     try { state.cpuRailResizeObs?.disconnect?.(); } catch { /* ignore */ }
     state.cpuRailResizeObs = null;
+    if (state.cpuRailResizeHandler) {
+      window.removeEventListener("resize", state.cpuRailResizeHandler);
+      state.cpuRailResizeHandler = null;
+    }
     if (state.cpuRailVisHandler) {
       document.removeEventListener("visibilitychange", state.cpuRailVisHandler);
       state.cpuRailVisHandler = null;
+    }
+    if (window.cpuRailPanel) {
+      window.cpuRailPanel.setEffects = () => {};
+      window.cpuRailPanel.refresh = () => {};
     }
   }
   if (id === "dock") {
@@ -3286,9 +3327,17 @@ function stopPluginRuntimes() {
   }
   try { state.cpuRailResizeObs?.disconnect?.(); } catch { /* ignore */ }
   state.cpuRailResizeObs = null;
+  if (state.cpuRailResizeHandler) {
+    window.removeEventListener("resize", state.cpuRailResizeHandler);
+    state.cpuRailResizeHandler = null;
+  }
   if (state.cpuRailVisHandler) {
     document.removeEventListener("visibilitychange", state.cpuRailVisHandler);
     state.cpuRailVisHandler = null;
+  }
+  if (window.cpuRailPanel) {
+    window.cpuRailPanel.setEffects = () => {};
+    window.cpuRailPanel.refresh = () => {};
   }
   window.dockPanel?.unbind?.(state);
   if (state.weatherTimer) {
@@ -5304,6 +5353,7 @@ function fillIconStage(stage, items, opts = {}) {
   items.forEach((item) => {
     const node = document.createElement("div");
     node.className = "desk-icon";
+    if (isDesktopFavorite(item)) node.classList.add("favorite");
     node.dataset.path = item.path;
     node.dataset.name = item.name || "";
     node.dataset.dir = item.isDirectory ? "1" : "0";
@@ -5398,6 +5448,26 @@ function itemKindBucket(item) {
   return item.category || "other";
 }
 
+function desktopFavoritePath(itemOrPath) {
+  return String(typeof itemOrPath === "string" ? itemOrPath : itemOrPath?.path || "").trim();
+}
+
+function isDesktopFavorite(itemOrPath) {
+  const path = desktopFavoritePath(itemOrPath);
+  return Boolean(path) && state.desktopFavorites.includes(path);
+}
+
+function toggleDesktopFavorite(item) {
+  const path = desktopFavoritePath(item);
+  if (!path) return;
+  const favorites = new Set(state.desktopFavorites);
+  if (favorites.has(path)) favorites.delete(path);
+  else favorites.add(path);
+  state.desktopFavorites = [...favorites];
+  persistLayout();
+  arrangeDesktop();
+}
+
 function deskFilterBuckets() {
   return [
     { id: "folders", label: "文件夾" },
@@ -5407,6 +5477,7 @@ function deskFilterBuckets() {
 }
 
 function matchesDeskFilter(item, filter) {
+  if (filter === "favorites") return isDesktopFavorite(item);
   const bucket = itemKindBucket(item);
   if (!filter || filter === "all") return true;
   if (filter === "files") return !["folders", "icons"].includes(bucket);
@@ -5540,6 +5611,8 @@ async function arrangeDesktop() {
   const fileOpts = {
     destDir,
     desktopActions: true,
+    isFavorite: isDesktopFavorite,
+    onFavoriteToggle: toggleDesktopFavorite,
     onRefresh: async () => {
       await loadDesktopListing();
       arrangeDesktop();
@@ -5889,13 +5962,13 @@ function openSettings(focusPanel = "") {
       </tr>
       <tr>
         <td>Skalierzone-Ränder</td>
-        <td>Abstand der Zone vom linken, oberen, rechten und unteren Bildschirmrand in Prozent</td>
+        <td>Abstand der Zone vom linken, oberen, rechten und unteren Bildschirmrand in Rasterzellen</td>
         <td>
-          <div class="zone-margin-fields" aria-label="Skalierzone-Ränder in Prozent">
-            <label>L <input id="set-zone-left" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.left ?? 18)}">%</label>
-            <label>O <input id="set-zone-top" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.top ?? 8)}">%</label>
-            <label>R <input id="set-zone-right" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.right ?? 18)}">%</label>
-            <label>U <input id="set-zone-bottom" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.bottom ?? 8)}">%</label>
+          <div class="zone-margin-fields" aria-label="Skalierzone-Ränder in Rasterzellen">
+            <label>L <input id="set-zone-left" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.left ?? 18)}"> Raster</label>
+            <label>O <input id="set-zone-top" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.top ?? 8)}"> Raster</label>
+            <label>R <input id="set-zone-right" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.right ?? 18)}"> Raster</label>
+            <label>U <input id="set-zone-bottom" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.bottom ?? 8)}"> Raster</label>
           </div>
         </td>
       </tr>
@@ -6250,16 +6323,16 @@ function openSettings(focusPanel = "") {
       ? dockLabelColorInput.toLowerCase()
       : "theme";
     const startWithWindows = Boolean(modal.querySelector("#set-start-with-windows")?.checked);
-    const zonePercent = (selector, fallback) => {
+    const zoneRaster = (selector, fallback) => {
       const value = Number(modal.querySelector(selector)?.value);
       return Number.isFinite(value) ? Math.max(0, Math.min(45, Math.round(value))) : fallback;
     };
     const windowZoneEnabled = Boolean(modal.querySelector("#set-window-zone-enabled")?.checked);
     const windowZoneMargins = {
-      left: zonePercent("#set-zone-left", 18),
-      top: zonePercent("#set-zone-top", 8),
-      right: zonePercent("#set-zone-right", 18),
-      bottom: zonePercent("#set-zone-bottom", 8)
+      left: zoneRaster("#set-zone-left", 18),
+      top: zoneRaster("#set-zone-top", 8),
+      right: zoneRaster("#set-zone-right", 18),
+      bottom: zoneRaster("#set-zone-bottom", 8)
     };
     const localeValue = window.edexI18n?.normalize?.(modal.querySelector("#set-locale")?.value) || "zh-Hant";
     state.settings = {
@@ -6641,6 +6714,9 @@ window.addEventListener("keydown", (event) => {
   }
   state.desktopLocked = Boolean(saved?.desktopLocked);
   state.desktopGrouped = Boolean(saved?.desktopGrouped);
+  state.desktopFavorites = Array.isArray(saved?.desktopFavorites)
+    ? [...new Set(saved.desktopFavorites.map((path) => String(path || "").trim()).filter(Boolean))]
+    : [];
   state.desktopFilter = saved?.desktopFilter || "all";
   state.desktopTabId = saved?.desktopTabId || "classify";
   state.desktopFolderTabs = Array.isArray(saved?.desktopFolderTabs)

@@ -105,7 +105,7 @@
         const cy = iy + 6 + r * (cellH + gap);
         const delay = ((r * cols + c) * 0.18).toFixed(2);
         parts.push(`<rect class="cpu-die-core" x="${cx}" y="${cy}" width="${cellW}" height="${cellH}"
-          style="animation-delay:-${delay}s"/>`);
+          data-cpu-core="${r * cols + c}" style="animation-delay:-${delay}s"/>`);
         // Mini crosshair inside each core
         const mx = cx + cellW / 2;
         const my = cy + cellH / 2;
@@ -487,7 +487,7 @@
 
     const { x, y, w, h } = CHIP;
     return `
-      <svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="xMidYMid meet" aria-label="CPU-Kernüberwachung">
         ${tracePaths}
         ${compEls}
         ${padEls}
@@ -512,11 +512,26 @@
             <div class="cpu-rail-model" data-cpu-rail-model>DETECTING…</div>
             <div class="cpu-rail-brand" data-cpu-rail-brand>—</div>
           </div>
+          <div class="cpu-rail-scanline" data-cpu-rail-scanline aria-hidden="true"></div>
+          <div class="cpu-rail-detail" data-cpu-rail-detail hidden>
+            <b data-cpu-rail-detail-title>CPU-Kern</b>
+            <span data-cpu-rail-detail-value>Hover über einen Kern</span>
+          </div>
+          <canvas class="cpu-rail-wave" data-cpu-rail-wave aria-label="Live CPU-Wellenformen"></canvas>
         </div>
         <div class="cpu-rail-meta">
           <span>RAIL <b data-cpu-rail-load>—%</b></span>
           <span>CORES <b data-cpu-rail-cores>—</b></span>
           <span>CLK <b data-cpu-rail-clk>—</b></span>
+          <span>TEMP <b data-cpu-rail-temp>—</b></span>
+          <span>CACHE <b data-cpu-rail-cache>—</b></span>
+          <span>SPEED <b data-cpu-rail-speed>1.00x</b></span>
+          <button type="button" class="cpu-rail-action" data-cpu-rail-action="pause">PAUSE</button>
+          <button type="button" class="cpu-rail-action" data-cpu-rail-action="speed-down">SPEED−</button>
+          <button type="button" class="cpu-rail-action" data-cpu-rail-action="speed-up">SPEED+</button>
+          <button type="button" class="cpu-rail-action" data-cpu-rail-action="intensity">INTENSITY</button>
+          <button type="button" class="cpu-rail-action" data-cpu-rail-action="refresh">↻</button>
+          <button type="button" class="cpu-rail-action" data-cpu-rail-action="processes">PROCESSES</button>
         </div>
       </div>`;
   }
@@ -577,6 +592,21 @@
 
     const svgHost = root.querySelector("[data-cpu-rail-svg]");
     const fxCanvas = root.querySelector("[data-cpu-rail-fx]");
+    const waveCanvas = root.querySelector("[data-cpu-rail-wave]");
+    const effects = {
+      flow: true,
+      cores: true,
+      glow: true,
+      waveforms: true,
+      scan: true,
+      temperature: true,
+      hover: true,
+      ...(state.settings?.cpuRailEffects || {})
+    };
+    const history = { load: [], speed: [] };
+    let latestCpu = null;
+    let speedMultiplier = Number(state.cpuRailSpeed) || 1;
+    let intensity = Number(state.cpuRailIntensity) || 1;
     // v6: static SVG + canvas FX overlay (desynchronized 2D → GPU compositing).
     if (svgHost && svgHost.dataset.drawn !== "v6") {
       const data = buildSchematic(13);
@@ -602,6 +632,9 @@
     let fxDpr = 1;
     let lastFx = 0;
     const FRAME_MS = 1000 / 12;
+    let waveCtx = null;
+    let waveW = 0;
+    let waveH = 0;
 
     const fitFx = () => {
       if (!fxCanvas) return;
@@ -630,6 +663,47 @@
       }
     };
 
+    const fitWave = () => {
+      if (!waveCanvas) return;
+      const rect = waveCanvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const w = Math.max(1, Math.round(rect.width));
+      const h = Math.max(1, Math.round(rect.height));
+      if (waveCanvas.width !== Math.round(w * dpr) || waveCanvas.height !== Math.round(h * dpr)) {
+        waveCanvas.width = Math.round(w * dpr);
+        waveCanvas.height = Math.round(h * dpr);
+        waveCtx = null;
+      }
+      waveW = w;
+      waveH = h;
+      if (!waveCtx) waveCtx = waveCanvas.getContext("2d", { alpha: true });
+    };
+
+    const paintWave = () => {
+      if (!waveCanvas || !waveCtx || !effects.waveforms) return;
+      waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+      waveCtx.save();
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      waveCtx.scale(dpr, dpr);
+      const draw = (values, color, offset) => {
+        if (values.length < 2) return;
+        waveCtx.beginPath();
+        values.forEach((value, i) => {
+          const x = (i / (values.length - 1)) * waveW;
+          const y = offset + 8 - (value / 100) * 14;
+          if (i === 0) waveCtx.moveTo(x, y);
+          else waveCtx.lineTo(x, y);
+        });
+        waveCtx.strokeStyle = color;
+        waveCtx.lineWidth = 1;
+        waveCtx.stroke();
+      };
+      const c = themeRailRgb();
+      draw(history.load, `rgba(${c.r},${c.g},${c.b},0.9)`, 4);
+      draw(history.speed, `rgba(${c.r},${c.g},${c.b},0.42)`, 22);
+      waveCtx.restore();
+    };
+
     const paintFx = (ts) => {
       if (!fxCanvas || !pulseTraces.length) return;
       fitFx();
@@ -647,13 +721,13 @@
       fxCtx.scale(scale, scale);
 
       // Flow dashes along pulsed rails
-      pulseTraces.forEach((tr, i) => {
+      if (effects.flow) pulseTraces.forEach((tr, i) => {
         const pts = tr.pts;
         if (!pts || pts.length < 2) return;
         const dashLen = tr.ring ? 14 : 10;
         const gap = tr.ring ? 18 : 14;
         const period = dashLen + gap;
-        const speed = tr.slow ? 28 : 48;
+        const speed = (tr.slow ? 28 : 48) * speedMultiplier;
         const offset = ((t * speed + (tr.delay || 0) * 20 + i * 7) % period + period) % period;
 
         fxCtx.beginPath();
@@ -670,9 +744,9 @@
       });
 
       // Energy beads
-      pulseTraces.forEach((tr) => {
+      if (effects.flow) pulseTraces.forEach((tr) => {
         (tr._beads || []).forEach((b) => {
-          const u = (t * b.speed + b.phase) % 1;
+          const u = (t * b.speed * speedMultiplier + b.phase) % 1;
           const [x, y] = pointAt(tr.pts, u);
           fxCtx.beginPath();
           fxCtx.arc(x, y, tr.ring ? 2.6 : 2.1, 0, Math.PI * 2);
@@ -687,6 +761,8 @@
       });
 
       fxCtx.restore();
+      fitWave();
+      paintWave();
     };
 
     const fxTick = (ts) => {
@@ -694,7 +770,9 @@
         state.cpuRailRaf = null;
         return;
       }
-      if (document.visibilityState === "hidden" || root.classList.contains("cpu-rail-paused")) {
+      if (document.visibilityState === "hidden"
+        || root.classList.contains("cpu-rail-paused")
+        || root.classList.contains("cpu-rail-manual-paused")) {
         state.cpuRailRaf = null;
         return;
       }
@@ -707,7 +785,7 @@
     const syncPause = () => {
       const paused = document.visibilityState === "hidden";
       root.classList.toggle("cpu-rail-paused", paused);
-      if (paused) {
+      if (paused || root.classList.contains("cpu-rail-manual-paused")) {
         if (state.cpuRailRaf) {
           cancelAnimationFrame(state.cpuRailRaf);
           state.cpuRailRaf = null;
@@ -721,16 +799,76 @@
     const layout = () => {
       placeChipFace(root);
       fitFx();
+      fitWave();
     };
     layout();
     if (!root.dataset.bound) {
       root.dataset.bound = "1";
+      const detail = root.querySelector("[data-cpu-rail-detail]");
+      const detailTitle = root.querySelector("[data-cpu-rail-detail-title]");
+      const detailValue = root.querySelector("[data-cpu-rail-detail-value]");
+      const showCore = (index) => {
+        const load = Number(latestCpu?.percents?.[index]);
+        if (!Number.isFinite(load)) return;
+        if (detail) detail.hidden = false;
+        if (detailTitle) detailTitle.textContent = `CORE ${index + 1}`;
+        if (detailValue) detailValue.textContent = `${Math.round(load)}% LOAD · ${Number(latestCpu?.speedMax || 0).toFixed(2)}GHz MAX`;
+      };
+      const hideCore = () => {
+        if (detail) detail.hidden = true;
+      };
+      svgHost?.addEventListener("pointerover", (event) => {
+        const core = event.target.closest?.("[data-cpu-core]");
+        if (core && effects.hover) showCore(Number(core.dataset.cpuCore));
+      });
+      svgHost?.addEventListener("pointerout", (event) => {
+        if (event.target.closest?.("[data-cpu-core]")) hideCore();
+      });
+      svgHost?.addEventListener("click", (event) => {
+        const core = event.target.closest?.("[data-cpu-core]");
+        if (core) showCore(Number(core.dataset.cpuCore));
+      });
+      root.querySelectorAll("[data-cpu-rail-action]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const action = button.dataset.cpuRailAction;
+          if (action === "pause") {
+            root.classList.toggle("cpu-rail-manual-paused");
+            button.textContent = root.classList.contains("cpu-rail-manual-paused") ? "PLAY" : "PAUSE";
+            syncPause();
+          } else if (action === "speed-down" || action === "speed-up") {
+            speedMultiplier = Math.max(0.25, Math.min(3, speedMultiplier + (action === "speed-up" ? 0.25 : -0.25)));
+            state.cpuRailSpeed = speedMultiplier;
+            button.closest(".cpu-rail-meta")?.querySelector("[data-cpu-rail-speed]")?.replaceChildren(
+              document.createTextNode(`${speedMultiplier.toFixed(2)}x`)
+            );
+          } else if (action === "intensity") {
+            intensity = intensity >= 1.5 ? 0.5 : intensity + 0.5;
+            state.cpuRailIntensity = intensity;
+            root.style.setProperty("--cpu-intensity", String(intensity));
+          } else if (action === "refresh") {
+            await refresh();
+          } else if (action === "processes") {
+            const processes = await window.edex?.getTopProcesses?.();
+            if (detail) detail.hidden = false;
+            if (detailTitle) detailTitle.textContent = "TOP PROCESSES";
+            if (detailValue) {
+              const rows = Array.isArray(processes?.list)
+                ? processes.list.slice(0, 3)
+                : Array.isArray(processes) ? processes.slice(0, 3) : [];
+              detailValue.textContent = rows.length
+                ? rows.map((item) => `${item.name || item.process || "PROCESS"} ${Math.round(Number(item.cpu) || 0)}%`).join(" · ")
+                : "Keine Prozessdaten verfügbar";
+            }
+          }
+        });
+      });
       if (typeof ResizeObserver !== "undefined") {
         const ro = new ResizeObserver(() => layout());
         ro.observe(root.querySelector("[data-cpu-rail-stage]") || root);
         state.cpuRailResizeObs = ro;
       }
       window.addEventListener("resize", layout);
+      state.cpuRailResizeHandler = layout;
       document.addEventListener("visibilitychange", syncPause);
       state.cpuRailVisHandler = syncPause;
     }
@@ -743,6 +881,7 @@
     const refresh = async () => {
       if (!document.getElementById("mod_cpu_rail") || !window.edex?.getCpuMetrics) return;
       const cpu = await window.edex.getCpuMetrics();
+      latestCpu = cpu || {};
       const full = cpu.fullName || cpu.name || "CPU";
       const brand = detectBrand(full);
       const model = shortModel(full, brand);
@@ -752,6 +891,8 @@
       const loadEl = root.querySelector("[data-cpu-rail-load]");
       const coresEl = root.querySelector("[data-cpu-rail-cores]");
       const clkEl = root.querySelector("[data-cpu-rail-clk]");
+      const tempEl = root.querySelector("[data-cpu-rail-temp]");
+      const cacheEl = root.querySelector("[data-cpu-rail-cache]");
       if (logo && logo.dataset.brand !== brand) {
         logo.innerHTML = logoSvg(brand);
         logo.dataset.brand = brand;
@@ -766,7 +907,46 @@
         const mx = Number(cpu.speedMax) || 0;
         clkEl.textContent = mx ? `${mx.toFixed(2)}GHz` : "—";
       }
+      if (tempEl) {
+        const temp = Number(cpu.temperature);
+        tempEl.textContent = effects.temperature && Number.isFinite(temp) ? `${Math.round(temp)}°C` : "—";
+      }
+      if (cacheEl) {
+        const cache = [cpu.cacheL2 && `L2 ${cpu.cacheL2}KB`, cpu.cacheL3 && `L3 ${cpu.cacheL3}KB`].filter(Boolean);
+        cacheEl.textContent = cache.length ? cache.join("/") : "—";
+      }
+      const avg = Math.max(0, Math.min(100, Number(cpu.avg) || 0));
+      root.style.setProperty("--cpu-load", `${avg / 100}`);
+      root.dataset.loadLevel = avg >= 85 ? "high" : avg >= 60 ? "medium" : "low";
+      const temperature = Number(cpu.temperature);
+      root.dataset.tempLevel = Number.isFinite(temperature)
+        ? (temperature >= 90 ? "critical" : temperature >= 75 ? "warning" : "normal")
+        : "unknown";
+      root.classList.toggle("cpu-rail-temperature-off", !effects.temperature);
+      root.classList.toggle("cpu-rail-scan-off", !effects.scan);
+      root.classList.toggle("cpu-rail-glow-off", !effects.glow);
+      const cores = root.querySelectorAll("[data-cpu-core]");
+      cores.forEach((core) => {
+        const load = Math.max(0, Math.min(100, Number(cpu.percents?.[Number(core.dataset.cpuCore)]) || 0));
+        core.style.setProperty("--core-load", `${load / 100}`);
+        core.classList.toggle("is-active", effects.cores && load >= 15);
+      });
+      history.load.push(avg);
+      history.speed.push(Math.max(0, Math.min(100, ((Number(cpu.speedMax) || 0) / 5) * 100)));
+      if (history.load.length > 48) history.load.shift();
+      if (history.speed.length > 48) history.speed.shift();
     };
+    const applyEffects = (next) => {
+      Object.assign(effects, next || {});
+      root.classList.toggle("cpu-rail-flow-off", !effects.flow);
+      root.classList.toggle("cpu-rail-wave-off", !effects.waveforms);
+      root.classList.toggle("cpu-rail-hover-off", !effects.hover);
+      if (!effects.waveforms && waveCtx) waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+    };
+    applyEffects(effects);
+    state.cpuRailApplyEffects = applyEffects;
+    window.cpuRailPanel.setEffects = applyEffects;
+    window.cpuRailPanel.refresh = refresh;
 
     refresh();
     if (state.cpuRailTimer) clearInterval(state.cpuRailTimer);
@@ -777,5 +957,5 @@
     }, 15000);
   }
 
-  window.cpuRailPanel = { bodyHtml, bind };
+  window.cpuRailPanel = { bodyHtml, bind, setEffects: () => {}, refresh: () => {} };
 })();

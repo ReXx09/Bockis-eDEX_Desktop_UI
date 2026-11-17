@@ -201,6 +201,7 @@
       desktopLocked: Boolean(current.desktopLocked),
       desktopFilter: current.desktopFilter || "all",
       desktopGrouped: Boolean(current.desktopGrouped),
+      desktopFavorites: [...new Set((current.desktopFavorites || []).map((path) => String(path || "").trim()).filter(Boolean))],
       desktopIconScale: Math.max(0.6, Math.min(2, Number(current.desktopIconScale) || Number(current.settings.desktopIconScale) || 1)),
       desktopFontScale: Math.max(0.7, Math.min(1.8, Number(current.desktopFontScale) || Number(current.settings.desktopFontScale) || 1)),
       desktopTabId: current.desktopTabId || "classify",
@@ -477,12 +478,12 @@
   function centralZoneRect(marginOverride = null) {
     const ws = workspaceRect();
     const margins = marginOverride || state().settings.windowZoneMargins || {};
-    const percent = (value) => Math.max(0, Math.min(45, Number(value) || 0));
+    const raster = (value) => Math.max(0, Math.min(45, Math.round(Number(value) || 0)));
     const grid = gridSize();
-    const left = Math.ceil((ws.width * percent(margins.left) / 100) / grid) * grid;
-    const top = Math.ceil((ws.height * percent(margins.top) / 100) / grid) * grid;
-    const right = Math.floor((ws.width * (1 - percent(margins.right) / 100)) / grid) * grid;
-    const bottom = Math.floor((ws.height * (1 - percent(margins.bottom) / 100)) / grid) * grid;
+    const left = raster(margins.left) * grid;
+    const top = raster(margins.top) * grid;
+    const right = ws.width - raster(margins.right) * grid;
+    const bottom = ws.height - raster(margins.bottom) * grid;
     return {
       x: left,
       y: top,
