@@ -472,14 +472,22 @@ function occupiedLayoutRects(exclude = {}) {
   const rects = [];
   Object.keys(state.layout).forEach((id) => {
     if (id === "status" || !state.layout[id]) return;
+    if (exclude.unplaced?.has(`panel:${id}`)) return;
     if (state.layout[id].minimized) return;
     if (exclude.panelId === id) return;
     rects.push(pxFromBox(state.layout[id]));
   });
-  if (state.desktopEnabled !== false && state.desktopStage && !state.desktopStage.minimized && !exclude.desktop) {
+  if (
+    state.desktopEnabled !== false
+    && state.desktopStage
+    && !state.desktopStage.minimized
+    && !exclude.desktop
+    && !exclude.unplaced?.has("desktop")
+  ) {
     rects.push(pxFromBox(state.desktopStage));
   }
   (state.pathCards || []).forEach((card) => {
+    if (exclude.unplaced?.has(`path:${card.id}`)) return;
     if (card.minimized) return;
     if (exclude.pathId === card.id) return;
     rects.push(pxFromBox(card));
@@ -491,7 +499,7 @@ function occupiedLayoutRects(exclude = {}) {
  * Place a new card in the first free grid slot (row-major), preferring the
  * suggested box when it does not overlap existing containers/plugins.
  */
-function findEmptyBox(preferredBox, exclude = {}) {
+function findEmptyBox(preferredBox, exclude = {}, options = {}) {
   const g = gridSize();
   const ws = workspaceRect();
   const base = snapBoxVwVh({ ...(preferredBox || {}) });
@@ -519,14 +527,42 @@ function findEmptyBox(preferredBox, exclude = {}) {
     }
   }
   // Workspace full — keep preferred snapped position (user can drag later).
+  if (options.strict) return null;
   return snapBoxVwVh({ ...base, ...pxToGridFields(x, y, w, h) });
 }
 
 function normalizeSavedLayout() {
   let changed = false;
-  const place = (box, exclude) => {
+  const targets = [];
+  if (state.desktopEnabled !== false && state.desktopStage) {
+    targets.push({ key: "desktop", box: state.desktopStage, exclude: { desktop: true } });
+  }
+  Object.keys(state.layout).forEach((id) => {
+    if (id !== "status" && state.layout[id]) {
+      targets.push({ key: `panel:${id}`, box: state.layout[id], exclude: { panelId: id } });
+    }
+  });
+  state.pathCards.forEach((card) => {
+    targets.push({ key: `path:${card.id}`, box: card, exclude: { pathId: card.id } });
+  });
+  const unplaced = new Set(targets.map((target) => target.key));
+  const place = (target) => {
+    const { box, exclude } = target;
     if (!box || box.minimized) return;
-    const placed = findEmptyBox(box, exclude);
+    unplaced.delete(target.key);
+    let placed = findEmptyBox(box, { ...exclude, unplaced }, { strict: true });
+    if (!placed) {
+      placed = findEmptyBox(
+        { ...box, gx: 0, gy: 0, gw: 2, gh: 2 },
+        { ...exclude, unplaced },
+        { strict: true }
+      );
+    }
+    if (!placed) {
+      box.minimized = true;
+      changed = true;
+      return;
+    }
     if (
       placed.gx !== box.gx
       || placed.gy !== box.gy
@@ -538,15 +574,7 @@ function normalizeSavedLayout() {
     }
   };
 
-  Object.keys(state.layout).forEach((id) => {
-    place(state.layout[id], { panelId: id });
-  });
-  if (state.desktopEnabled !== false) {
-    place(state.desktopStage, { desktop: true });
-  }
-  state.pathCards.forEach((card) => {
-    place(card, { pathId: card.id });
-  });
+  targets.forEach(place);
   return changed;
 }
 

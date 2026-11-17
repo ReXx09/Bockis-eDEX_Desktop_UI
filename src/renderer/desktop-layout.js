@@ -588,13 +588,7 @@
       }
     }
     if (best) return best;
-    const fallbackRegion = largestRegion;
-    return {
-      x: Math.max(fallbackRegion.x, Math.min(fallbackRegion.x + fallbackRegion.width - safeW, currentPosition.x)),
-      y: Math.max(fallbackRegion.y, Math.min(fallbackRegion.y + fallbackRegion.height - safeH, currentPosition.y)),
-      w: safeW,
-      h: safeH
-    };
+    return null;
   }
 
   function repositionPanelInZone(el) {

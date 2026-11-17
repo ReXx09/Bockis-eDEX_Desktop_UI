@@ -636,36 +636,36 @@ function broadcast(channel, payload) {
   for (const win of windows.values()) {
     if (!win.isDestroyed()) win.webContents.send(channel, payload);
   }
+}
 
-  async function checkForUpdates(source = "manual") {
-    if (updateCheckInFlight) return updateCheckInFlight;
-    updateCheckInFlight = (async () => {
-      try {
-        const currentVersion = app.getVersion();
-        const release = await fetchLatestRelease("ReXx09", "Bockis-eDEX_Desktop_UI");
-        const comparison = compareVersions(release.version, currentVersion);
-        if (comparison == null) throw new Error("Versionsformat konnte nicht verglichen werden");
-        const result = {
-          ok: true,
-          source,
-          currentVersion,
-          latestVersion: release.version,
-          updateAvailable: comparison > 0,
-          release
-        };
-        broadcast("update-check-result", result);
-        if (result.updateAvailable) broadcast("update-available", result);
-        return result;
-      } catch (error) {
-        const result = { ok: false, source, currentVersion: app.getVersion(), error: error.message };
-        broadcast("update-check-result", result);
-        return result;
-      } finally {
-        updateCheckInFlight = null;
-      }
-    })();
-    return updateCheckInFlight;
-  }
+async function checkForUpdates(source = "manual") {
+  if (updateCheckInFlight) return updateCheckInFlight;
+  updateCheckInFlight = (async () => {
+    try {
+      const currentVersion = app.getVersion();
+      const release = await fetchLatestRelease("ReXx09", "Bockis-eDEX_Desktop_UI");
+      const comparison = compareVersions(release.version, currentVersion);
+      if (comparison == null) throw new Error("Versionsformat konnte nicht verglichen werden");
+      const result = {
+        ok: true,
+        source,
+        currentVersion,
+        latestVersion: release.version,
+        updateAvailable: comparison > 0,
+        release
+      };
+      broadcast("update-check-result", result);
+      if (result.updateAvailable) broadcast("update-available", result);
+      return result;
+    } catch (error) {
+      const result = { ok: false, source, currentVersion: app.getVersion(), error: error.message };
+      broadcast("update-check-result", result);
+      return result;
+    } finally {
+      updateCheckInFlight = null;
+    }
+  })();
+  return updateCheckInFlight;
 }
 
 function rezoomAllWindows() {
