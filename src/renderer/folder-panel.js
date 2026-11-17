@@ -653,7 +653,7 @@
         else promptRename(item, ctx.onRefresh);
       } }
     );
-    if (item.isDirectory) {
+    if (item.isDirectory || item.targetIsDirectory) {
       items.push({ sep: true, kind: "tags", tags: item.tags || [], onChange: async (tags) => {
         await window.edex.setItemTags(item.path, tags);
         const node = [...stage.querySelectorAll(".desk-icon")].find((el) => el.dataset.path === item.path);
