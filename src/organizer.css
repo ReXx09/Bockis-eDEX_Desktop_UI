@@ -1869,6 +1869,23 @@ body.is-card-dragging .desktop-card:not(.dragging) {
     text-overflow: ellipsis;
 }
 
+.file-browser-tooltip {
+    position: fixed;
+    z-index: 1000;
+    max-width: min(38rem, 72vw);
+    padding: 0.65rem 0.8rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.8);
+    background: rgba(3, 8, 13, 0.96);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.55);
+    font-family: var(--font_mono);
+    font-size: clamp(0.72rem, calc(var(--fs) * 0.72), 1rem);
+    line-height: 1.35;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+}
+
 .path-stage.view-grid .desk-icon h3 {
     font-size: var(--path-label-size, 0.78rem);
 }

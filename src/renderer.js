@@ -218,14 +218,6 @@ function bindDesktopIconClicks() {
     pairCtrl = false;
     runActivate(icon, ctrl);
   }, true);
-  document.addEventListener("dblclick", (event) => {
-    const icon = event.target?.closest?.(".desk-icon[data-path]") || deskIconAt(event.clientX, event.clientY);
-    if (!icon) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    runActivate(icon, event.ctrlKey || event.metaKey || pairCtrl);
-    pairCtrl = false;
-  }, true);
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     const selected = document.querySelector(
@@ -257,6 +249,19 @@ function activateDesktopItem(item, { ctrl = false } = {}) {
   window.edex?.cancelFileDragPrepare?.();
   hideFileDragGhost();
   holdOverlayHits(500);
+  if (item.kind === "thispc") {
+    if (!state.layout.drives) {
+      addPanel("drives").catch((err) => toast(err?.message || "Laufwerke konnten nicht geöffnet werden"));
+    } else {
+      state.layout.drives = { ...state.layout.drives, minimized: false };
+      rebuildWorkspace();
+    }
+    return;
+  }
+  if (item.kind === "recycle") {
+    toast("Der Papierkorb ist derzeit nicht als integrierter Ordner verfügbar");
+    return;
+  }
   const folder = resolveFolderForTab(item);
   if (ctrl) {
     if (folder) {
@@ -511,6 +516,34 @@ function findEmptyBox(preferredBox, exclude = {}) {
   }
   // Workspace full — keep preferred snapped position (user can drag later).
   return snapBoxVwVh({ ...base, ...pxToGridFields(x, y, w, h) });
+}
+
+function normalizeSavedLayout() {
+  let changed = false;
+  const place = (box, exclude) => {
+    if (!box || box.minimized) return;
+    const placed = findEmptyBox(box, exclude);
+    if (
+      placed.gx !== box.gx
+      || placed.gy !== box.gy
+      || placed.gw !== box.gw
+      || placed.gh !== box.gh
+    ) {
+      Object.assign(box, placed);
+      changed = true;
+    }
+  };
+
+  Object.keys(state.layout).forEach((id) => {
+    place(state.layout[id], { panelId: id });
+  });
+  if (state.desktopEnabled !== false) {
+    place(state.desktopStage, { desktop: true });
+  }
+  state.pathCards.forEach((card) => {
+    place(card, { pathId: card.id });
+  });
+  return changed;
 }
 
 const workspaceRect = (...args) => window.edexDesktopLayout.workspaceRect(...args);
@@ -912,6 +945,55 @@ function fileBrowserTreeIcon(name, root = false) {
 
 function itemLabel(item) {
   return item?.displayName || item?.name || "";
+}
+
+function fileBrowserTooltipText(item) {
+  const name = itemLabel(item) || "Unbenannt";
+  const type = item?.isDirectory ? "Ordner" : item?.kind === "shortcut" ? "Verknüpfung" : "Datei";
+  const size = item?.isDirectory ? "Ordner" : String(item?.sizeLabel || "Nicht verfügbar");
+  const modified = Number(item?.mtime) > 0
+    ? new Date(item.mtime).toLocaleString()
+    : "Nicht verfügbar";
+  const category = item?.category ? String(item.category) : "Nicht verfügbar";
+  const target = item?.targetPath ? String(item.targetPath) : "";
+  return [
+    `Name: ${name}`,
+    `Typ: ${type}`,
+    `Größe: ${size}`,
+    `Geändert: ${modified}`,
+    `Kategorie: ${category}`,
+    `Pfad: ${String(item?.path || "Nicht verfügbar")}`,
+    target ? `Ziel: ${target}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function ensureFileBrowserTooltip() {
+  let tooltip = document.getElementById("file-browser-tooltip");
+  if (tooltip) return tooltip;
+  tooltip = document.createElement("div");
+  tooltip.id = "file-browser-tooltip";
+  tooltip.className = "file-browser-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+  return tooltip;
+}
+
+function showFileBrowserTooltip(item, event) {
+  const tooltip = ensureFileBrowserTooltip();
+  tooltip.textContent = fileBrowserTooltipText(item);
+  tooltip.hidden = false;
+  const margin = 14;
+  const rect = tooltip.getBoundingClientRect();
+  const left = Math.min(event.clientX + margin, window.innerWidth - rect.width - margin);
+  const top = Math.min(event.clientY + margin, window.innerHeight - rect.height - margin);
+  tooltip.style.left = `${Math.max(margin, left)}px`;
+  tooltip.style.top = `${Math.max(margin, top)}px`;
+}
+
+function hideFileBrowserTooltip() {
+  const tooltip = document.getElementById("file-browser-tooltip");
+  if (tooltip) tooltip.hidden = true;
 }
 
 const currentDisplayLayout = (...args) => window.edexDesktopLayout.currentDisplayLayout(...args);
@@ -5242,28 +5324,24 @@ function fillIconStage(stage, items, opts = {}) {
         size: Number(item.size) || 0,
         sizeLabel: item.sizeLabel || "",
         mtime: Number(item.mtime) || 0,
+        category: item.category || "",
         tags: item.tags || []
       });
     } catch {
       // ignore
     }
     const label = itemLabel(item);
-    node.innerHTML = `<span class="desk-icon-face">${fileBrowserIcon(item)}${tagDotsHtml(item.tags)}</span><h3 title="${escapeHtml(item.name || label)}">${escapeHtml(label)}</h3><span class="meta">${escapeHtml(item.sizeLabel || "")}</span>`;
+    node.title = "";
+    node.innerHTML = `<span class="desk-icon-face">${fileBrowserIcon(item)}${tagDotsHtml(item.tags)}</span><h3>${escapeHtml(label)}</h3><span class="meta">${escapeHtml(item.sizeLabel || "")}</span>`;
+    node.addEventListener("pointerenter", (event) => showFileBrowserTooltip(item, event));
+    node.addEventListener("pointermove", (event) => showFileBrowserTooltip(item, event));
+    node.addEventListener("pointerleave", hideFileBrowserTooltip);
     node.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       holdOverlayHits(1500);
     }, true);
     // OS file drag — only after a real drag; do not steal double-clicks.
     bindNativeFileDrag(node, item, dragRoot);
-    if (opts.pathCardId && item.isDirectory) {
-      node.addEventListener("dblclick", (event) => {
-        if (event.ctrlKey || event.metaKey) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const card = state.pathCards.find((entry) => entry.id === opts.pathCardId);
-        if (card) navigatePathCard(card, item.path, item.name);
-      });
-    }
     if (opts.draggable && !listMode) bindIconDrag(node, item, gap);
     stage.appendChild(node);
   });
@@ -6616,6 +6694,10 @@ window.addEventListener("keydown", (event) => {
   state.activePathId = state.pathCards[0]?.id || null;
 
   snapAllLayoutToGrid();
+  const savedLayoutChanged = normalizeSavedLayout();
+  if (savedLayoutChanged) {
+    queueMicrotask(() => persistLayout());
+  }
   buildLayout();
   bindTerminal();
   window.edexI18n?.translatePage?.();
