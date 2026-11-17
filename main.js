@@ -19,7 +19,8 @@ for (const stream of [process.stdout, process.stderr]) {
 const { scanRoot, listFolder, importFiles, buildPlan, executePlan, undoLast } = require("./lib/organizer");
 const { dirIcon } = require("./lib/icons");
 const { loadSettings, saveSettings } = require("./lib/settings-store");
-const { WALLPAPERS, listThemes, loadTheme, resolveThemeName } = require("./lib/themes");
+const { WALLPAPERS, listThemes, loadTheme, resolveThemeName, themesDir, configureThemeStore } = require("./lib/themes");
+const { createStore: createThemeStudioStore } = require("./lib/theme-studio-store");
 const {
   applyAppWallpaper,
   restoreWallpaper,
@@ -48,6 +49,7 @@ const { loadNotes, addNote, updateNote, removeNote } = require("./lib/calendar-s
 const { getNetStatus, getLiveConnections, getTrafficSample, getCpuMetrics, getMemMetrics, getSysMetrics, loadGlobeGrid, getHardwareInfo, getTopProcesses, getWeather } = require("./lib/net-info");
 const fileOps = require("./lib/file-ops");
 const { PathPolicy } = require("./lib/path-policy");
+const { compareVersions, fetchLatestRelease } = require("./lib/update-checker");
 const clipboardFiles = require("./lib/clipboard-files");
 const win32Embed = require("./lib/win32-embed");
 const taskbarDock = require("./lib/taskbar-dock");
@@ -117,10 +119,14 @@ app.commandLine.appendSwitch("enable-transparent-visuals");
 
 /** @type {Map<number, BrowserWindow>} */
 const windows = new Map();
+let themeStudioWindow = null;
+let themeStudioStore = null;
 let currentRoot;
 let settings;
 let syncing = false;
 let syncTimer = null;
+let updateTimer = null;
+let updateCheckInFlight = null;
 let quitting = false;
 let exitDesktopRestore = null;
 let desktopOverlayReady = false;
@@ -299,6 +305,7 @@ function listDisplays() {
     const physW = Math.round(width * scale);
     const physH = Math.round(height * scale);
     return {
+      appVersion: app.getVersion(),
       index,
       id: display.id,
       primary: display.id === primaryId,
@@ -334,7 +341,7 @@ function getSenderWindow(event) {
 
 function requireTrustedWindow(event) {
   const win = getSenderWindow(event);
-  if (!win || win.isDestroyed() || ![...windows.values()].includes(win)) {
+  if (!win || win.isDestroyed() || ![...windows.values(), themeStudioWindow].includes(win)) {
     throw new Error("Nicht autorisierter IPC-Absender");
   }
   return win;
@@ -629,6 +636,36 @@ function broadcast(channel, payload) {
   for (const win of windows.values()) {
     if (!win.isDestroyed()) win.webContents.send(channel, payload);
   }
+
+  async function checkForUpdates(source = "manual") {
+    if (updateCheckInFlight) return updateCheckInFlight;
+    updateCheckInFlight = (async () => {
+      try {
+        const currentVersion = app.getVersion();
+        const release = await fetchLatestRelease("ReXx09", "Bockis-eDEX_Desktop_UI");
+        const comparison = compareVersions(release.version, currentVersion);
+        if (comparison == null) throw new Error("Versionsformat konnte nicht verglichen werden");
+        const result = {
+          ok: true,
+          source,
+          currentVersion,
+          latestVersion: release.version,
+          updateAvailable: comparison > 0,
+          release
+        };
+        broadcast("update-check-result", result);
+        if (result.updateAvailable) broadcast("update-available", result);
+        return result;
+      } catch (error) {
+        const result = { ok: false, source, currentVersion: app.getVersion(), error: error.message };
+        broadcast("update-check-result", result);
+        return result;
+      } finally {
+        updateCheckInFlight = null;
+      }
+    })();
+    return updateCheckInFlight;
+  }
 }
 
 function rezoomAllWindows() {
@@ -653,6 +690,8 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     appLog.init(app.getPath("userData"));
+    themeStudioStore = createThemeStudioStore(app.getPath("userData"), themesDir);
+    configureThemeStore(themeStudioStore);
     settings = loadSettings(app.getPath("userData"));
     if (process.platform === "win32") app.setLoginItemSettings(loginItemOptions(settings.startWithWindows));
     try {
@@ -686,6 +725,8 @@ if (!gotLock) {
         });
       }
     }, 12000);
+    setTimeout(() => { checkForUpdates("startup"); }, 5000);
+    updateTimer = setInterval(() => { checkForUpdates("interval"); }, 6 * 60 * 60 * 1000);
 
     screen.on("display-added", () => scheduleSync("added"));
     screen.on("display-removed", () => scheduleSync("removed"));
@@ -704,6 +745,7 @@ if (!gotLock) {
       quitting = true;
       clearTimeout(syncTimer);
       clearTimeout(scheduleWallpaper.timer);
+      clearInterval(updateTimer);
       try { tray?.destroy(); } catch { /* ignore */ }
       tray = null;
       stopZOrderDaemon();
@@ -1020,9 +1062,112 @@ ipcMain.handle("transfer-widget", (event, payload) => {
   return { ok: true };
 });
 
+function showThemeStudio() {
+  if (themeStudioWindow && !themeStudioWindow.isDestroyed()) {
+    themeStudioWindow.show();
+    themeStudioWindow.focus();
+    return;
+  }
+  themeStudioWindow = new BrowserWindow({
+    title: "Bockis Theme Studio",
+    width: 1080,
+    height: 780,
+    minWidth: 760,
+    minHeight: 560,
+    backgroundColor: "#07121b",
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
+    }
+  });
+  themeStudioWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  themeStudioWindow.webContents.on("will-navigate", (event) => event.preventDefault());
+  themeStudioWindow.loadFile(path.join(__dirname, "src", "theme-studio.html"));
+  themeStudioWindow.on("closed", () => {
+    themeStudioWindow = null;
+    broadcast("theme-preview-reset", {});
+  });
+}
+
+ipcMain.handle("theme-studio-open", (event) => {
+  requireTrustedWindow(event);
+  showThemeStudio();
+  return true;
+});
+
+ipcMain.handle("theme-studio-list", (event) => {
+  requireTrustedWindow(event);
+  return { themes: listThemes(), active: settings.theme };
+});
+
+ipcMain.handle("theme-studio-save", (event, payload) => {
+  requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  return themeStudioStore.save(payload?.name, payload?.theme);
+});
+
+ipcMain.handle("theme-studio-delete", (event, name) => {
+  requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  const names = themeStudioStore.remove(name);
+  if (settings.theme === name) {
+    settings = saveSettings(app.getPath("userData"), { theme: "tron" });
+    broadcast("settings-updated", {
+      settings,
+      theme: loadTheme("tron"),
+      themeName: "tron",
+      displays: listDisplays()
+    });
+  }
+  return names;
+});
+
+ipcMain.handle("theme-studio-preview", (event, theme) => {
+  requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  broadcast("theme-preview", themeStudioStore.normalizeTheme(theme));
+  return true;
+});
+
+ipcMain.handle("theme-studio-preview-reset", (event) => {
+  requireTrustedWindow(event);
+  broadcast("theme-preview-reset", {});
+  return true;
+});
+
+ipcMain.handle("theme-studio-activate", (event, name) => {
+  requireTrustedWindow(event);
+  const resolved = resolveThemeName(name);
+  if (resolved !== name) throw new Error("Theme nicht gefunden");
+  settings = saveSettings(app.getPath("userData"), { theme: resolved });
+  const payload = {
+    settings,
+    theme: loadTheme(resolved),
+    themeName: resolved,
+    displays: listDisplays()
+  };
+  broadcast("settings-updated", payload);
+  scheduleWallpaper();
+  return payload;
+});
+
 ipcMain.handle("get-theme", (event, name) => {
   requireTrustedWindow(event);
   return loadTheme(name || settings.theme || "tron");
+});
+
+ipcMain.handle("get-app-version", (event) => {
+  requireTrustedWindow(event);
+  return app.getVersion();
+});
+
+ipcMain.handle("check-for-updates", (event) => {
+  requireTrustedWindow(event);
+  return checkForUpdates("manual");
 });
 
 ipcMain.handle("pick-folder", async (event) => {

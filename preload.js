@@ -33,6 +33,17 @@ contextBridge.exposeInMainWorld("edex", {
   transferWidget: (targetDisplayId, widget) =>
     ipcRenderer.invoke("transfer-widget", { targetDisplayId, widget }),
   getTheme: (name) => ipcRenderer.invoke("get-theme", name),
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  themeStudioOpen: () => ipcRenderer.invoke("theme-studio-open"),
+  themeStudioList: () => ipcRenderer.invoke("theme-studio-list"),
+  themeStudioSave: (name, theme) => ipcRenderer.invoke("theme-studio-save", { name, theme }),
+  themeStudioDelete: (name) => ipcRenderer.invoke("theme-studio-delete", name),
+  themeStudioActivate: (name) => ipcRenderer.invoke("theme-studio-activate", name),
+  themeStudioPreview: (theme) => ipcRenderer.invoke("theme-studio-preview", theme),
+  themeStudioResetPreview: () => ipcRenderer.invoke("theme-studio-preview-reset"),
+  onThemePreview: (fn) => ipcRenderer.on("theme-preview", (_event, theme) => fn(theme)),
+  onThemePreviewReset: (fn) => ipcRenderer.on("theme-preview-reset", () => fn()),
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
   pickWindowsWallpaper: () => ipcRenderer.invoke("pick-windows-wallpaper"),
   scan: (root) => ipcRenderer.invoke("scan", root),
@@ -145,6 +156,12 @@ contextBridge.exposeInMainWorld("edex", {
   },
   onSettingsUpdated: (fn) => {
     ipcRenderer.on("settings-updated", (_e, payload) => fn(payload));
+  },
+  onUpdateCheckResult: (fn) => {
+    ipcRenderer.on("update-check-result", (_e, payload) => fn(payload));
+  },
+  onUpdateAvailable: (fn) => {
+    ipcRenderer.on("update-available", (_e, payload) => fn(payload));
   },
   onReceiveWidget: (fn) => {
     ipcRenderer.on("receive-widget", (_e, widget) => fn(widget));

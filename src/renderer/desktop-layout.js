@@ -698,9 +698,9 @@
     return true;
   }
 
-  function applyTheme(theme, wallpaperId) {
+  function applyTheme(theme, wallpaperId, options = {}) {
     const current = state();
-    current.theme = theme;
+    if (!options.preview) current.theme = theme;
     const c = theme.colors || {};
     const mode = current.settings.windowsColorMode || "subtle";
     const rawAccent = current.windowsColors?.accent || "#00eaff";
@@ -739,11 +739,13 @@
 
     const wp = wallpaperId || current.settings.wallpaper || "grid";
     document.body.className = `desktop-shell wp-${wp}`;
-    const windowsThemeSync = window.edex?.applyWindowsTheme?.({
-      mode,
-      rgb: { r: c.r ?? 170, g: c.g ?? 207, b: c.b ?? 209 }
-    });
-    windowsThemeSync?.catch?.(() => {});
+    if (!options.preview) {
+      const windowsThemeSync = window.edex?.applyWindowsTheme?.({
+        mode,
+        rgb: { r: c.r ?? 170, g: c.g ?? 207, b: c.b ?? 209 }
+      });
+      windowsThemeSync?.catch?.(() => {});
+    }
   }
 
   window.edexDesktopLayout = {

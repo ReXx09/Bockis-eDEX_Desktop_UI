@@ -132,6 +132,8 @@ const state = {
   wallpapers: [],
   themeName: "tron",
   theme: null,
+  appVersion: "",
+  updateResult: null,
   windowsColors: null,
   scan: null,
   plan: null,
@@ -5708,6 +5710,9 @@ async function doScan() {
 }
 
 function closeSettings() {
+  if (document.querySelector(".theme-studio-in-settings")) {
+    window.edex?.themeStudioResetPreview?.().catch?.(() => {});
+  }
   clearSnapGuides();
   document.getElementById("settingsEditor")?.closest(".modal_popup")?.remove();
 }
@@ -5894,6 +5899,11 @@ function openSettings(focusPanel = "") {
         <td><select id="set-theme">${themeOpts}</select></td>
       </tr>
       <tr>
+        <td>版本 / Updates</td>
+        <td>Installierte Version und Prüfung auf neue GitHub-Releases</td>
+        <td><span id="set-app-version">${escapeHtml(state.appVersion || "unbekannt")}</span> <button type="button" id="set-check-updates">Jetzt prüfen</button> <span id="set-update-status" class="settings-inline-status" aria-live="polite"></span></td>
+      </tr>
+      <tr>
         <td>Windows-Farben</td>
         <td>Akzentfarbe anwenden; bei „Stark“ zusätzlich den Windows-Dunkelmodus setzen</td>
         <td>
@@ -6076,25 +6086,32 @@ function openSettings(focusPanel = "") {
       ["panels", "Panels"],
       ["themes", "Themes"],
       ["extensions", "Erweiterungen"],
-      ["start", "Start"]
+      ["start", "Start"],
+      ["studio", "Theme Studio"]
     ];
     const fragment = document.createDocumentFragment();
     sections.forEach(([id, title], index) => {
-      const table = settingsTable.cloneNode(false);
-      table.removeAttribute("id");
-      table.classList.add("settings-section-table");
-      if (index === 0) table.id = "settingsEditor";
-      const body = document.createElement("tbody");
-      if (header) body.appendChild(header.cloneNode(true));
-      rows.filter((row) => sectionForRow(row) === id).forEach((row) => body.appendChild(row));
-      table.appendChild(body);
       const details = document.createElement("details");
       details.className = "settings-section";
       details.dataset.settingsTab = id;
       details.open = index === 0;
       const summary = document.createElement("summary");
       summary.textContent = title;
-      details.append(summary, table);
+      if (id === "studio") {
+        const host = document.createElement("div");
+        host.className = "theme-studio-in-settings";
+        details.append(summary, host);
+      } else {
+        const table = settingsTable.cloneNode(false);
+        table.removeAttribute("id");
+        table.classList.add("settings-section-table");
+        if (index === 0) table.id = "settingsEditor";
+        const body = document.createElement("tbody");
+        if (header) body.appendChild(header.cloneNode(true));
+        rows.filter((row) => sectionForRow(row) === id).forEach((row) => body.appendChild(row));
+        table.appendChild(body);
+        details.append(summary, table);
+      }
       fragment.appendChild(details);
     });
     const nav = document.createElement("nav");
@@ -6122,8 +6139,26 @@ function openSettings(focusPanel = "") {
     modal.querySelectorAll(".settings-section").forEach((section, index) => {
       section.hidden = index !== 0;
     });
+    const studioHost = modal.querySelector(".theme-studio-in-settings");
+    if (studioHost) window.BockisThemeStudio?.mount(studioHost, { embedded: true });
   }
   document.body.appendChild(modal);
+  modal.querySelector("#set-check-updates")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const status = modal.querySelector("#set-update-status");
+    button.disabled = true;
+    if (status) status.textContent = "Prüfe …";
+    try {
+      const result = await window.edex.checkForUpdates();
+      if (status) {
+        status.textContent = result.ok
+          ? (result.updateAvailable ? `Neue Version ${result.latestVersion} verfügbar` : "Keine neue Version verfügbar")
+          : `Prüfung fehlgeschlagen: ${result.error}`;
+      }
+    } finally {
+      button.disabled = false;
+    }
+  });
   const saveStatus = modal.querySelector("#settings-save-status");
   const setSaveStatus = (message, dirty = false) => {
     if (!saveStatus) return;
@@ -6614,6 +6649,7 @@ window.addEventListener("keydown", (event) => {
   };
   state.scaleFactor = state.bootstrap.scaleFactor || window.edex.launchScale || 1;
   state.physicalSize = state.bootstrap.physicalSize || null;
+  state.appVersion = state.bootstrap.appVersion || "";
   state.themes = state.bootstrap.themes || [];
   state.wallpapers = state.bootstrap.wallpapers || [];
   state.themeName = state.bootstrap.themeName || "tron";
@@ -6820,6 +6856,28 @@ window.addEventListener("keydown", (event) => {
       if (payload.physicalSize) state.physicalSize = payload.physicalSize;
     }
     updateDisplayChip();
+  });
+
+  window.edex.onUpdateCheckResult?.((result) => {
+    state.updateResult = result;
+    const status = document.querySelector("#set-update-status");
+    if (status && result.ok) {
+      status.textContent = result.updateAvailable
+        ? `Neue Version ${result.latestVersion} verfügbar`
+        : "Keine neue Version verfügbar";
+    } else if (status && !result.ok) {
+      status.textContent = `Prüfung fehlgeschlagen: ${result.error}`;
+    }
+  });
+  window.edex.onUpdateAvailable?.((result) => {
+    toast(`Neue Version ${result.latestVersion} verfügbar (aktuell ${result.currentVersion})`);
+  });
+
+  window.edex.onThemePreview?.((theme) => {
+    applyTheme(theme, state.settings.wallpaper || "grid", { preview: true });
+  });
+  window.edex.onThemePreviewReset?.(() => {
+    if (state.theme) applyTheme(state.theme, state.settings.wallpaper || "grid");
   });
 
   window.edex.onSettingsUpdated((payload) => {
