@@ -621,18 +621,22 @@
         });
       }
     }
+    const canFavorite = item && item.path && item.kind !== "drive" && item.kind !== "thispc"
+      && item.kind !== "recycle" && !isDriveRoot(item.path);
+    const favoriteToggle = ctx.onFavoriteToggle || current.toggleDesktopFavorite;
+    const favoriteCheck = ctx.isFavorite || current.isDesktopFavorite;
+    if (canFavorite && favoriteToggle) {
+      items.push(
+        {
+          label: favoriteCheck?.(item) ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen",
+          action: () => favoriteToggle(item)
+        },
+        { sep: true }
+      );
+    }
     const canEdit = item && !isVirtualPath(item.path) && item.kind !== "drive" && !isDriveRoot(item.path);
     if (!canEdit) return items;
     items.push(
-      ...(isDesktopStage && ctx.onFavoriteToggle
-        ? [
-          {
-            label: ctx.isFavorite?.(item) ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen",
-            action: () => ctx.onFavoriteToggle(item)
-          },
-          { sep: true }
-        ]
-        : []),
       { label: "Vorschau", action: () => window.edexFilePreview?.showFilePreview(item) },
       { label: "Kopieren", action: () => copyFileItem(item) },
       { label: "Ausschneiden", action: () => copyFileItem(item, true) },

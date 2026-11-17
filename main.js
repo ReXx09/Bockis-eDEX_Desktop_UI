@@ -2031,10 +2031,20 @@ function mapCssBoundsToScreen(event, bounds = {}, zone = "workspace") {
     const cssWidth = content.width / zoom;
     const cssHeight = content.height / zoom;
     const raster = (value) => Math.max(0, Math.min(45, Math.round(Number(value) || 0)));
-    const left = raster(margins.left) * grid;
-    const top = raster(margins.top) * grid;
-    const right = cssWidth - raster(margins.right) * grid;
-    const bottom = cssHeight - raster(margins.bottom) * grid;
+    const percent = (value) => Math.max(0, Math.min(45, Number(value) || 0));
+    const marginPixels = (value, span) => settings.windowZoneUnit === "raster"
+      ? raster(value) * grid
+      : span * percent(value) / 100;
+    const gridWidth = Math.floor(cssWidth / grid) * grid;
+    const gridHeight = Math.floor(cssHeight / grid) * grid;
+    const left = marginPixels(margins.left, cssWidth);
+    const top = marginPixels(margins.top, cssHeight);
+    const right = settings.windowZoneUnit === "raster"
+      ? gridWidth - marginPixels(margins.right, cssWidth)
+      : cssWidth - marginPixels(margins.right, cssWidth);
+    const bottom = settings.windowZoneUnit === "raster"
+      ? gridHeight - marginPixels(margins.bottom, cssHeight)
+      : cssHeight - marginPixels(margins.bottom, cssHeight);
     const zoneWidth = Math.max(40, right - left);
     const zoneHeight = Math.max(40, bottom - top);
     cssW = Math.min(cssW, zoneWidth);

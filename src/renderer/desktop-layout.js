@@ -480,10 +480,12 @@
     const margins = marginOverride || state().settings.windowZoneMargins || {};
     const raster = (value) => Math.max(0, Math.min(45, Math.round(Number(value) || 0)));
     const grid = gridSize();
+    const gridWidth = Math.floor(ws.width / grid) * grid;
+    const gridHeight = Math.floor(ws.height / grid) * grid;
     const left = raster(margins.left) * grid;
     const top = raster(margins.top) * grid;
-    const right = ws.width - raster(margins.right) * grid;
-    const bottom = ws.height - raster(margins.bottom) * grid;
+    const right = gridWidth - raster(margins.right) * grid;
+    const bottom = gridHeight - raster(margins.bottom) * grid;
     return {
       x: left,
       y: top,

@@ -629,6 +629,28 @@ function displayUiScale() {
   return Math.max(0.4, Math.min(1.5, raw));
 }
 
+async function migrateWindowZoneToRaster() {
+  if (state.settings?.windowZoneUnit === "raster") return;
+  const margins = state.settings?.windowZoneMargins || {};
+  const grid = gridSize();
+  const width = Math.max(1, document.getElementById("workspace")?.clientWidth || window.innerWidth);
+  const height = Math.max(1, document.getElementById("workspace")?.clientHeight || window.innerHeight);
+  const percent = (value) => Math.max(0, Math.min(45, Number(value) || 0));
+  const toRaster = (value, span) => Math.max(0, Math.min(45, Math.round((span * percent(value) / 100) / grid)));
+  const windowZoneMargins = {
+    left: toRaster(margins.left, width),
+    top: toRaster(margins.top, height),
+    right: toRaster(margins.right, width),
+    bottom: toRaster(margins.bottom, height)
+  };
+  state.settings = { ...state.settings, windowZoneMargins, windowZoneUnit: "raster" };
+  try {
+    await window.edex.saveSettings({ windowZoneMargins, windowZoneUnit: "raster" });
+  } catch {
+    // Keep the in-memory migration; it will be retried on the next save.
+  }
+}
+
 function applyUiMetrics() {
   const user = displayUiScale();
   const design = layoutProfile();
@@ -5468,6 +5490,9 @@ function toggleDesktopFavorite(item) {
   arrangeDesktop();
 }
 
+state.isDesktopFavorite = isDesktopFavorite;
+state.toggleDesktopFavorite = toggleDesktopFavorite;
+
 function deskFilterBuckets() {
   return [
     { id: "folders", label: "文件夾" },
@@ -6647,6 +6672,7 @@ window.addEventListener("keydown", (event) => {
     // Keep launch bounds if refit is unavailable.
   }
   applyUiMetrics();
+  await migrateWindowZoneToRaster();
 
   await boot();
 
