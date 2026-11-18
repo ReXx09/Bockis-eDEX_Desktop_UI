@@ -15,7 +15,7 @@
 .dock-shell {
     position: absolute;
     inset: 0;
-    background: rgb(8, 12, 14);
+    background: var(--dock-surface, var(--panel-surface, var(--color_light_black, #05080d)));
     border: none;
     pointer-events: none;
     transform: translateZ(0);
@@ -325,6 +325,11 @@
 /* Trapezoid — wide base flush to screen bottom (symmetric inset) */
 #mod_dock.is-trap .dock-shell {
     border-radius: 0;
+    clip-path: polygon(7% 0%, 93% 0%, 100% 100%, 0% 100%);
+}
+
+#mod_dock.is-trap.dock-root,
+.hud-card.dock-bare.dock-trapezoid {
     clip-path: polygon(7% 0%, 93% 0%, 100% 100%, 0% 100%);
 }
 

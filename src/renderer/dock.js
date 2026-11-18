@@ -187,6 +187,7 @@
     root.classList.toggle("is-rect", style === "rect");
     root.classList.toggle("is-rounded", style === "rounded");
     root.classList.toggle("is-top", dockPosition(state) === "top");
+    document.getElementById("card_dock")?.classList.toggle("dock-trapezoid", style === "trapezoid");
   }
 
   function paintBorderFx(state, ts) {
