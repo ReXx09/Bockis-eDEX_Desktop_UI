@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, screen, Tray, Menu, nativeImage, clipboard, desktopCapturer, systemPreferences, nativeTheme } = require("electron");
+const APP_VERSION = String(require("./package.json").displayVersion || app.getVersion());
 const { execFile, spawn } = require("child_process");
 const path = require("path");
 const os = require("os");
@@ -305,7 +306,7 @@ function listDisplays() {
     const physW = Math.round(width * scale);
     const physH = Math.round(height * scale);
     return {
-      appVersion: app.getVersion(),
+      appVersion: APP_VERSION,
       index,
       id: display.id,
       primary: display.id === primaryId,
@@ -642,7 +643,7 @@ async function checkForUpdates(source = "manual") {
   if (updateCheckInFlight) return updateCheckInFlight;
   updateCheckInFlight = (async () => {
     try {
-      const currentVersion = app.getVersion();
+      const currentVersion = APP_VERSION;
       const release = await fetchLatestRelease("ReXx09", "Bockis-eDEX_Desktop_UI");
       const comparison = compareVersions(release.version, currentVersion);
       if (comparison == null) throw new Error("Versionsformat konnte nicht verglichen werden");
@@ -658,7 +659,7 @@ async function checkForUpdates(source = "manual") {
       if (result.updateAvailable) broadcast("update-available", result);
       return result;
     } catch (error) {
-      const result = { ok: false, source, currentVersion: app.getVersion(), error: error.message };
+      const result = { ok: false, source, currentVersion: APP_VERSION, error: error.message };
       broadcast("update-check-result", result);
       return result;
     } finally {
@@ -794,6 +795,7 @@ ipcMain.handle("get-bootstrap", (event) => {
   approveLayoutRoots(layout);
 
   return {
+    appVersion: APP_VERSION,
     username: os.userInfo().username,
     desktop: resolveDesktop(),
     root: currentRoot,
@@ -1162,7 +1164,7 @@ ipcMain.handle("get-theme", (event, name) => {
 
 ipcMain.handle("get-app-version", (event) => {
   requireTrustedWindow(event);
-  return app.getVersion();
+  return APP_VERSION;
 });
 
 ipcMain.handle("check-for-updates", (event) => {
@@ -2449,7 +2451,7 @@ ipcMain.handle("get-boot-diagnostics", async (event) => {
   ]);
 
   return {
-    versions: { app: app.getVersion(), electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
+    versions: { app: APP_VERSION, electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
     system: {
       hostname: os.hostname(),
       arch: os.arch(),

@@ -1,7 +1,9 @@
 {
   "name": "bockis-edex-desktop-ui",
   "productName": "Bockis-eDEX Desktop UI",
-  "version": "1.2.7",
+  "version": "1.2.7+1",
+  "displayVersion": "1.2.7.1",
+  "shortVersionWindows": "1.2.7.1",
   "description": "Desktop UI using the eDEX-UI sci-fi HUD layout",
   "main": "main.js",
   "author": "bananamax9113",
@@ -10,7 +12,7 @@
     "url": "https://github.com/ReXx09/Bockis-eDEX_Desktop_UI.git"
   },
   "scripts": {
-    "test": "node --test test/organizer.test.js test/i18n.test.js test/theme-studio.test.js test/update-checker.test.js",
+    "test": "node --test test/organizer.test.js test/i18n.test.js test/theme-studio.test.js test/update-checker.test.js test/desktop-layout.test.js",
     "prepare-assets": "node scripts/prepare-assets.js",
     "prepare-rainmeter": "node scripts/prepare-rainmeter.js",
     "prestart": "node scripts/prepare-assets.js",
@@ -28,6 +30,7 @@
     "electron-builder": "^26.15.3"
   },
   "build": {
+    "buildVersion": "1.2.7.1",
     "appId": "com.bockis.edex-desktop-ui",
     "productName": "Bockis-eDEX Desktop UI",
     "copyright": "Copyright © Bockis-eDEX Desktop UI",
@@ -59,7 +62,7 @@
     "asar": true,
     "npmRebuild": true,
     "forceCodeSigning": false,
-    "artifactName": "Bockis-eDEX-Desktop-UI-Setup-${version}.${ext}",
+    "artifactName": "Bockis-eDEX-Desktop-UI-Setup-${buildVersion}.${ext}",
     "win": {
       "target": [
         {

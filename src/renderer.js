@@ -39,7 +39,7 @@ const DEFAULT_WIDGETS_PRIMARY = {
   drives: { x: 66, y: 42, w: 15, h: 38 },
   filesearch: { x: 18, y: 82, w: 47, h: 16 },
   dock: { x: 25, y: 94, w: 50, h: 6, locked: true },
-  taskdock: { x: 25, y: 86, w: 50, h: 7 }
+  taskdock: { x: 25, y: 86, w: 50, h: 7, zone: "edge" }
 };
 
 // Plugins only default on primary — secondary starts empty.
@@ -69,7 +69,7 @@ const PANEL_META = {
   autostart: { title: "Autostart", icon: "processes", box: { x: 20, y: 28, w: 42, h: 36 } },
   log: { title: "Log", box: { x: 52, y: 42, w: 29, h: 38 } },
   dock: { title: "Dock", box: { x: 25, y: 94, w: 50, h: 6 } },
-  taskdock: { title: "Task-Panel", box: { x: 25, y: 86, w: 50, h: 7 } }
+  taskdock: { title: "Task-Panel", box: { x: 25, y: 86, w: 50, h: 7, zone: "edge" } }
 };
 
 let MACOS_TAGS = [];
@@ -92,6 +92,7 @@ const terminalBrowserTimers = new Map();
 let terminalBridgeBound = false;
 let taskbarDockItems = [];
 let taskbarWindowItems = [];
+const taskbarWindowIconCache = new Map();
 let taskbarWindowTimer = null;
 let taskbarDockLoaded = false;
 let taskbarDockLoadPromise = null;
@@ -1951,7 +1952,7 @@ function renderTaskDockItems() {
     </button>`).join("");
   const runningHtml = taskbarWindowItems.map((item) => `
     <button type="button" class="dock-item taskbar-window-item${item.active ? " active" : ""}${item.minimized ? " minimized" : ""}" data-task-window-hwnd="${escapeHtml(item.hwnd)}" title="${escapeHtml(item.title)}">
-      <span class="dock-item-icon dock-item-icon-fallback" aria-hidden="true"></span>
+      ${item.iconDataUrl ? `<img class="dock-item-icon dock-item-icon-image" src="${escapeHtml(item.iconDataUrl)}" alt="" draggable="false">` : '<span class="dock-item-icon dock-item-icon-fallback" aria-hidden="true"></span>'}
       <span class="dock-item-label">${escapeHtml(item.title)}</span>
     </button>`).join("");
   host.innerHTML = `${pinnedHtml}${runningHtml || (!pinnedHtml ? '<span class="task-dock-empty">Keine Windows-Fenster erkannt</span>' : "")}`;
@@ -2041,14 +2042,35 @@ function loadTaskbarDockItems() {
 
 function startTaskbarWindowSync() {
   if (state.settings?.taskbarIntegrationEnabled !== true || taskbarWindowTimer || !window.edex?.listTaskbarWindows) return;
+  const loadWindowIcon = async (item) => {
+    const path = String(item.processPath || "").trim();
+    if (!path || !window.edex?.getPathIcon) return "";
+    const key = path.toLowerCase();
+    if (!taskbarWindowIconCache.has(key)) {
+      taskbarWindowIconCache.set(
+        key,
+        window.edex.getPathIcon(path)
+          .then((result) => result?.dataUrl || "")
+          .catch((error) => {
+            logUiAction("taskbar.icon_failed", "Fenster-Icon konnte nicht geladen werden", {
+              process: item.process || "",
+              message: error?.message || String(error)
+            });
+            return "";
+          })
+      );
+    }
+    return taskbarWindowIconCache.get(key);
+  };
   const refresh = async () => {
     try {
       const result = await window.edex.listTaskbarWindows();
       const foreground = String(result?.foreground || "");
-      const next = (Array.isArray(result?.items) ? result.items : []).map((item) => ({
+      const next = await Promise.all((Array.isArray(result?.items) ? result.items : []).map(async (item) => ({
         ...item,
-        active: String(item.hwnd) === foreground
-      }));
+        active: String(item.hwnd) === foreground,
+        iconDataUrl: await loadWindowIcon(item)
+      })));
       const changed = JSON.stringify(next) !== JSON.stringify(taskbarWindowItems);
       taskbarWindowItems = next;
       if (changed) renderTaskDockItems();
@@ -3541,6 +3563,7 @@ function buildLayout() {
       ${panels}
     </div>
     <div id="fab-bar">${fabBarHtml()}</div>
+    <div id="app-version-badge" title="Installierte App-Version">v${escapeHtml(state.appVersion || "unbekannt")}</div>
   `;
   renderDockItems();
 
@@ -3653,8 +3676,8 @@ function buildLayout() {
   }
 
   document.getElementById("add-fab")?.addEventListener("click", () => openAddPicker());
+  document.getElementById("settings-fab")?.addEventListener("click", () => openSettings());
   if (state.primary) {
-    document.getElementById("settings-fab")?.addEventListener("click", () => openSettings());
     document.getElementById("quit-fab")?.addEventListener("click", () => {
       if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?")) shutdown();
     });

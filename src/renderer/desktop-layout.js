@@ -555,11 +555,19 @@
     const g = gridSize();
     const usableRegions = regions.filter((region) => region.width >= g * 2 && region.height >= g * 2);
     if (!usableRegions.length) return null;
-    const largestRegion = usableRegions.slice().sort(
-      (a, b) => (b.width * b.height) - (a.width * a.height)
+    const centerX = box.x + box.w / 2;
+    const centerY = box.y + box.h / 2;
+    const regionDistance = (region) => {
+      const dx = Math.max(region.x - centerX, 0, centerX - (region.x + region.width));
+      const dy = Math.max(region.y - centerY, 0, centerY - (region.y + region.height));
+      return dx * dx + dy * dy;
+    };
+    const preferredRegion = usableRegions.slice().sort(
+      (a, b) => regionDistance(a) - regionDistance(b)
+        || (b.width * b.height) - (a.width * a.height)
     )[0];
-    const safeW = Math.max(g * 2, Math.min(box.w, Math.floor(largestRegion.width / g) * g));
-    const safeH = Math.max(g * 2, Math.min(box.h, Math.floor(largestRegion.height / g) * g));
+    const safeW = Math.max(g * 2, Math.min(box.w, Math.floor(preferredRegion.width / g) * g));
+    const safeH = Math.max(g * 2, Math.min(box.h, Math.floor(preferredRegion.height / g) * g));
     const fitsZone = (x, y, w = safeW, h = safeH) => regions.some((region) => (
       x >= region.x && y >= region.y
       && x + w <= region.x + region.width + g
