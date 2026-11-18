@@ -61,6 +61,15 @@
     visibility: hidden;
 }
 
+.cpu-rail-meter-off .cpu-rail-meter {
+    display: none;
+}
+
+.cpu-rail-pins-off .cpu-rail-pin.io-active {
+    animation: none;
+    filter: none;
+}
+
 .cpu-rail-wave-off .cpu-rail-wave,
 .cpu-rail-temperature-off [data-cpu-rail-temp],
 .cpu-rail-hover-off [data-cpu-core] {
@@ -157,6 +166,13 @@
 
 .cpu-rail-pin {
     fill: rgb(var(--rail));
+    transition: opacity 0.18s ease, filter 0.18s ease;
+}
+
+.cpu-rail-pin.io-active {
+    opacity: 1;
+    filter: drop-shadow(0 0 3px rgb(var(--rail)));
+    animation: cpu-rail-pin-pulse 0.45s ease-in-out infinite alternate;
 }
 
 .cpu-die-outline {
@@ -176,7 +192,8 @@
 }
 
 .cpu-die-core.is-active {
-    fill: rgba(var(--rail), calc(0.12 + var(--core-load) * 0.55));
+    fill: rgba(var(--core-color), calc(0.18 + var(--core-load) * 0.55));
+    stroke: rgb(var(--core-color));
     stroke-width: calc(0.75px + var(--core-load) * 1.1px);
 }
 
@@ -282,12 +299,16 @@
     display: none;
 }
 
-.cpu-rail-root[data-temp-level="warning"] {
+.cpu-rail-root:not(.cpu-rail-temperature-off)[data-temp-level="warning"] {
     --rail: 255, 190, 64;
 }
 
-.cpu-rail-root[data-temp-level="critical"] {
+.cpu-rail-root:not(.cpu-rail-temperature-off)[data-temp-level="critical"] {
     --rail: 255, 82, 82;
+}
+
+.cpu-rail-root:not(.cpu-rail-temperature-off)[data-temp-level="critical"] .cpu-rail-chip-body {
+    animation: cpu-rail-temp-flash 0.7s steps(2, end) infinite;
 }
 
 .cpu-rail-detail {
@@ -367,6 +388,54 @@
     margin-left: 0.2rem;
 }
 
+.cpu-rail-load-metric,
+.cpu-rail-clock-metric {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.12rem;
+}
+
+.cpu-rail-meter {
+    display: inline-block;
+    width: 2.4rem;
+    height: 0.22rem;
+    overflow: hidden;
+    border: 1px solid rgba(var(--rail), 0.6);
+    background: rgba(var(--rail), 0.12);
+    vertical-align: middle;
+}
+
+.cpu-rail-meter i {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: rgb(var(--rail));
+    box-shadow: 0 0 4px rgba(var(--rail), 0.85);
+    transition: width 0.35s ease;
+}
+
+.cpu-rail-clk-wave {
+    display: block;
+    width: 2.5rem;
+    height: 0.55rem;
+    overflow: hidden;
+    color: rgb(var(--rail));
+}
+
+.cpu-rail-clk-wave[hidden] {
+    display: none;
+}
+
+.cpu-rail-clk-wave path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1;
+    stroke-dasharray: 9 10;
+    animation: cpu-rail-clock-shift var(--clk-period, 0.5s) linear infinite;
+}
+
 .cpu-rail-action {
     border: 1px solid rgba(var(--rail), 0.45);
     background: rgba(var(--rail), 0.08);
@@ -386,6 +455,19 @@
     12% { opacity: 0.7; }
     88% { opacity: 0.7; }
     100% { transform: translateY(190px); opacity: 0; }
+}
+
+@keyframes cpu-rail-clock-shift {
+    to { stroke-dashoffset: -19; }
+}
+
+@keyframes cpu-rail-pin-pulse {
+    from { opacity: 0.45; }
+    to { opacity: 1; }
+}
+
+@keyframes cpu-rail-temp-flash {
+    50% { opacity: 0.35; }
 }
 
 /*

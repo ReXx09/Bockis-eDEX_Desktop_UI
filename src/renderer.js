@@ -553,6 +553,7 @@ function normalizeSavedLayout() {
     unplaced.delete(target.key);
     let placed = findEmptyBox(box, { ...exclude, unplaced }, { strict: true });
     if (!placed) {
+      if (target.key === "panel:taskdock") return;
       placed = findEmptyBox(
         { ...box, gx: 0, gy: 0, gw: 2, gh: 2 },
         { ...exclude, unplaced },
@@ -1936,6 +1937,98 @@ function renderDockItems() {
   loadTaskbarDockItems();
 }
 
+function applyTaskDockSizing(host) {
+  const card = host.closest("#card_taskdock");
+  const savedBox = state.layout.taskdock;
+  if (!card || !savedBox) return;
+
+  const autoGrow = state.settings?.taskDockAutoGrow !== false;
+  const tileSize = ["compact", "standard", "large"].includes(state.settings?.taskDockTileSize)
+    ? state.settings.taskDockTileSize
+    : "standard";
+  card.classList.toggle("taskdock-auto-grow", autoGrow);
+  card.classList.toggle("taskdock-fixed-size", !autoGrow);
+  card.classList.toggle("taskdock-labels-off", state.settings?.taskDockShowLabels === false);
+  card.dataset.taskdockTileSize = tileSize;
+
+  const current = boxToPx(savedBox);
+  if (!autoGrow) {
+    card.style.left = `${current.x}px`;
+    card.style.top = `${current.y}px`;
+    card.style.width = `${current.w}px`;
+    card.style.height = `${current.h}px`;
+    return;
+  }
+
+  const workspace = workspaceRect();
+  const grid = gridSize();
+  const defaults = boxToPx(PANEL_META.taskdock.box);
+  const collapsed = current.w < defaults.w * 0.35 || current.h < defaults.h * 0.45;
+  const anchor = collapsed ? defaults : current;
+  const maxWidthPercent = Math.max(50, Math.min(100, Number(state.settings?.taskDockMaxWidth) || 90));
+  const maxWidth = Math.max(grid * 4, Math.min(workspace.width, Math.floor(workspace.width * maxWidthPercent / 100)));
+  const items = [...host.querySelectorAll(":scope > .dock-item")];
+  const hostStyle = getComputedStyle(host);
+  const cardStyle = getComputedStyle(card);
+  const bodyStyle = getComputedStyle(card.querySelector(".card-body"));
+  const gap = parseFloat(hostStyle.columnGap || hostStyle.gap) || 0;
+  const horizontalPadding = (style) => (
+    (parseFloat(style.paddingLeft) || 0)
+    + (parseFloat(style.paddingRight) || 0)
+    + (parseFloat(style.borderLeftWidth) || 0)
+    + (parseFloat(style.borderRightWidth) || 0)
+  );
+  const contentWidth = items.reduce((total, item) => total + item.getBoundingClientRect().width, 0)
+    + gap * Math.max(0, items.length - 1)
+    + horizontalPadding(hostStyle)
+    + horizontalPadding(bodyStyle)
+    + horizontalPadding(cardStyle);
+  const maxWidthGrid = Math.max(4, Math.floor(maxWidth / grid));
+  const maxGridWidth = maxWidthGrid * grid;
+  const targetWidth = Math.min(
+    maxGridWidth,
+    Math.ceil(Math.max(anchor.w, defaults.w, contentWidth) / grid) * grid
+  );
+  card.style.width = `${targetWidth}px`;
+  card.style.height = "auto";
+  const contentHeight = card.getBoundingClientRect().height;
+  const maxGridHeight = Math.max(2, Math.floor(workspace.height / grid)) * grid;
+  const targetHeight = Math.min(
+    maxGridHeight,
+    Math.ceil(Math.max(anchor.h, contentHeight) / grid) * grid
+  );
+  const centerX = anchor.x + anchor.w / 2;
+  const bottom = anchor.y + anchor.h;
+  const left = Math.max(0, Math.min(workspace.width - targetWidth, centerX - targetWidth / 2));
+  const top = Math.max(0, Math.min(workspace.height - targetHeight, bottom - targetHeight));
+  const rawBox = pxToGridFields(left, top, targetWidth, targetHeight);
+  const maxGridX = Math.max(0, Math.floor(workspace.width / grid) - rawBox.gw);
+  const maxGridY = Math.max(0, Math.floor(workspace.height / grid) - rawBox.gh);
+  const next = pxToGridFields(
+    Math.max(0, Math.min(maxGridX, rawBox.gx)) * grid,
+    Math.max(0, Math.min(maxGridY, rawBox.gy)) * grid,
+    targetWidth,
+    targetHeight
+  );
+  const placed = boxToPx(next);
+  const changed = next.gx !== savedBox.gx || next.gy !== savedBox.gy
+    || next.gw !== savedBox.gw || next.gh !== savedBox.gh;
+
+  card.style.left = `${placed.x}px`;
+  card.style.top = `${placed.y}px`;
+  card.style.width = `${placed.w}px`;
+  card.style.height = `${placed.h}px`;
+  if (!changed) return;
+
+  state.layout.taskdock = { ...savedBox, ...next };
+  persistLayout().catch((error) => {
+    logUiAction("taskdock.layout_save_failed", "Task-Panel-Größe konnte nicht gespeichert werden", {
+      message: error?.message || String(error)
+    });
+    toast("Task-Panel-Größe konnte nicht gespeichert werden");
+  });
+}
+
 function renderTaskDockItems() {
   const host = document.querySelector("[data-task-dock-items]");
   if (!host) return;
@@ -1956,6 +2049,7 @@ function renderTaskDockItems() {
       <span class="dock-item-label">${escapeHtml(item.title)}</span>
     </button>`).join("");
   host.innerHTML = `${pinnedHtml}${runningHtml || (!pinnedHtml ? '<span class="task-dock-empty">Keine Windows-Fenster erkannt</span>' : "")}`;
+  applyTaskDockSizing(host);
   window.edexI18n?.translatePage?.(host);
   host.querySelectorAll("[data-task-dock-path]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -2307,7 +2401,9 @@ function menuItemsForCard(kind, ctx) {
       waveforms: "Live-Wellenformen",
       scan: "Diagnose-Scanlinie",
       temperature: "Temperaturwarnung",
-      hover: "Mouseover-Details"
+      hover: "Mouseover-Details",
+      railMeter: "CPU-Lastbalken",
+      pins: "I/O-Pin-Aktivität"
     };
     items.push({ sep: true });
     Object.entries(effectLabels).forEach(([key, label]) => {
@@ -2606,6 +2702,15 @@ function openPanelSetup(el) {
       <tr><td>Schriftgröße</td><td><input id="panel-path-font-scale" type="number" min="0.7" max="1.8" step="0.1"></td></tr>`
       : id === "filesearch"
         ? `<tr><td>Schriftgröße</td><td><input id="panel-search-font" type="number" min="8" max="72" step="1"></td></tr>`
+        : id === "taskdock"
+          ? `<tr><td>Automatisch wachsen</td><td><input id="panel-taskdock-auto-grow" type="checkbox"> Inhalt vergrößern, nicht automatisch verkleinern</td></tr>
+      <tr><td>Maximale Breite</td><td><input id="panel-taskdock-max-width" type="number" min="50" max="100" step="5"> % der Arbeitsfläche</td></tr>
+      <tr><td>Kachelgröße</td><td><select id="panel-taskdock-tile-size">
+        <option value="compact">Kompakt</option>
+        <option value="standard">Standard</option>
+        <option value="large">Groß</option>
+      </select></td></tr>
+      <tr><td>Beschriftungen</td><td><input id="panel-taskdock-show-labels" type="checkbox"> Namen unter den Icons anzeigen</td></tr>`
         : `<tr><td>Panel-Einstellungen</td><td>Für dieses Panel sind derzeit keine individuellen Optionen vorhanden.</td></tr>`;
   const panelFontScale = id === "desktop"
     ? state.desktopFontScale || state.settings.desktopFontScale || 1
@@ -2652,6 +2757,14 @@ function openPanelSetup(el) {
   if (ramMode) ramMode.value = state.settings.ramGaugeMode || "used";
   const searchFont = modal.querySelector("#panel-search-font");
   if (searchFont) searchFont.value = String(state.settings.searchFontSize || 12);
+  const taskDockAutoGrow = modal.querySelector("#panel-taskdock-auto-grow");
+  const taskDockMaxWidth = modal.querySelector("#panel-taskdock-max-width");
+  const taskDockTileSize = modal.querySelector("#panel-taskdock-tile-size");
+  const taskDockShowLabels = modal.querySelector("#panel-taskdock-show-labels");
+  if (taskDockAutoGrow) taskDockAutoGrow.checked = state.settings.taskDockAutoGrow !== false;
+  if (taskDockMaxWidth) taskDockMaxWidth.value = String(state.settings.taskDockMaxWidth || 90);
+  if (taskDockTileSize) taskDockTileSize.value = state.settings.taskDockTileSize || "standard";
+  if (taskDockShowLabels) taskDockShowLabels.checked = state.settings.taskDockShowLabels !== false;
   const pathIconScale = modal.querySelector("#panel-path-icon-scale");
   const pathFontScale = modal.querySelector("#panel-path-font-scale");
   if (pathIconScale) pathIconScale.value = String(pathCard?.fileIconScale || state.settings.pathIconScale || 1);
@@ -2771,6 +2884,13 @@ function openPanelSetup(el) {
         : "used";
     } else if (id === "filesearch") {
       patch.searchFontSize = Math.max(8, Math.min(72, Math.round(Number(searchFont?.value) || 12)));
+    } else if (id === "taskdock") {
+      patch.taskDockAutoGrow = Boolean(taskDockAutoGrow?.checked);
+      patch.taskDockMaxWidth = Math.max(50, Math.min(100, Math.round(Number(taskDockMaxWidth?.value) || 90)));
+      patch.taskDockTileSize = ["compact", "standard", "large"].includes(taskDockTileSize?.value)
+        ? taskDockTileSize.value
+        : "standard";
+      patch.taskDockShowLabels = Boolean(taskDockShowLabels?.checked);
     } else if (id === "desktop") {
       state.iconView = desktopView?.value === "list" ? "list" : "grid";
       state.desktopFilter = desktopFilter?.value || "all";
@@ -3608,6 +3728,7 @@ function buildLayout() {
     makeInteractive(el, {
       widgetType: "panel",
       widgetId: id,
+      resizable: id !== "taskdock" || state.settings?.taskDockAutoGrow === false,
       minW: id === "clock" && clockDisplayMode() === "analog" ? analogClockMinimum().px : undefined,
       minH: id === "clock" && clockDisplayMode() === "analog" ? analogClockMinimum().px : undefined,
       widgetData: () => ({ panelId: id, box: state.layout[id] }),

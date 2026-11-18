@@ -45,6 +45,52 @@
     pointer-events: auto;
 }
 
+#card_taskdock.taskdock-auto-grow {
+    max-width: 100vw;
+    overflow: visible;
+}
+
+#card_taskdock.taskdock-auto-grow .card-body {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+}
+
+#card_taskdock.taskdock-auto-grow #task-dock-panel {
+    height: auto;
+    min-height: 0;
+}
+
+#card_taskdock.taskdock-auto-grow .task-dock-items {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: center;
+    height: auto;
+    overflow: visible;
+}
+
+#card_taskdock.taskdock-auto-grow .dock-item {
+    flex: 0 0 auto;
+}
+
+#card_taskdock.taskdock-auto-grow .resize-handle {
+    display: none;
+}
+
+#card_taskdock.taskdock-fixed-size .task-dock-items {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+#card_taskdock.taskdock-labels-off .dock-item-label {
+    display: none;
+}
+
 .task-dock-shell {
     display: none;
 }
@@ -69,6 +115,38 @@
 .task-dock-panel .dock-item-icon {
     width: 2.7rem;
     height: 2.7rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="compact"] .dock-item {
+    min-width: 3.8rem;
+    min-height: 3.6rem;
+    max-width: 5.6rem;
+    padding: 0.15rem 0.25rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="compact"] .dock-item-icon {
+    width: 2rem;
+    height: 2rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="compact"] .dock-item-label {
+    font-size: 0.68rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="large"] .dock-item {
+    min-width: 5.5rem;
+    min-height: 5.2rem;
+    max-width: 8rem;
+    padding: 0.25rem 0.4rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="large"] .dock-item-icon {
+    width: 3.3rem;
+    height: 3.3rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="large"] .dock-item-label {
+    font-size: 0.85rem;
 }
 
 .task-dock-panel .taskbar-window-item.active {

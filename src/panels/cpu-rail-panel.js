@@ -79,15 +79,16 @@
   }
 
   /** Die floorplan inside chip package — cores, cache, mesh with flow */
-  function chipDieMarkup() {
+  function chipDieMarkup(threadCount = 24) {
     const { x, y, w, h } = CHIP;
     const pad = 14;
     const ix = x + pad;
     const iy = y + pad;
     const iw = w - pad * 2;
     const ih = h - pad * 2;
-    const cols = 4;
-    const rows = 3;
+    const displayedThreads = Math.max(1, Math.min(64, Math.floor(Number(threadCount) || 24)));
+    const cols = 8;
+    const rows = Math.ceil(displayedThreads / cols);
     const gap = 4;
     const cacheH = 18;
     const coreAreaH = ih - cacheH - gap * 2 - 8;
@@ -101,11 +102,13 @@
     // Core grid
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
+        const index = r * cols + c;
+        if (index >= displayedThreads) break;
         const cx = ix + c * (cellW + gap);
         const cy = iy + 6 + r * (cellH + gap);
-        const delay = ((r * cols + c) * 0.18).toFixed(2);
+        const delay = (index * 0.18).toFixed(2);
         parts.push(`<rect class="cpu-die-core" x="${cx}" y="${cy}" width="${cellW}" height="${cellH}"
-          data-cpu-core="${r * cols + c}" style="animation-delay:-${delay}s"/>`);
+          data-cpu-core="${index}" style="animation-delay:-${delay}s"/>`);
         // Mini crosshair inside each core
         const mx = cx + cellW / 2;
         const my = cy + cellH / 2;
@@ -429,15 +432,15 @@
     return { pins, traces, vias, pads, comps, nodes };
   }
 
-  function schematicSvg(data) {
+  function schematicSvg(data, threadCount = 24) {
     // No SVG feGaussianBlur — those force CPU rasterization every frame.
-    const pinRects = data.pins.map((p) => {
+    const pinRects = data.pins.map((p, index) => {
       if (p.ox !== 0) {
         const x = Math.min(p.x, p.x + p.ox);
-        return `<rect class="cpu-rail-pin" x="${x}" y="${p.y - 1.5}" width="${Math.abs(p.ox)}" height="3"/>`;
+        return `<rect class="cpu-rail-pin" data-cpu-rail-pin="${index}" x="${x}" y="${p.y - 1.5}" width="${Math.abs(p.ox)}" height="3"/>`;
       }
       const y = Math.min(p.y, p.y + p.oy);
-      return `<rect class="cpu-rail-pin" x="${p.x - 1.5}" y="${y}" width="3" height="${Math.abs(p.oy)}"/>`;
+      return `<rect class="cpu-rail-pin" data-cpu-rail-pin="${index}" x="${p.x - 1.5}" y="${y}" width="3" height="${Math.abs(p.oy)}"/>`;
     }).join("");
 
     const tracePaths = data.traces.map((t, i) => {
@@ -496,7 +499,7 @@
         ${beadsFixed}
         ${pinRects}
         <rect class="cpu-rail-chip-body" x="${x}" y="${y}" width="${w}" height="${h}"/>
-        ${chipDieMarkup()}
+        ${chipDieMarkup(threadCount)}
         <rect class="cpu-rail-chip-inner" x="${x + 8}" y="${y + 8}" width="${w - 16}" height="${h - 16}"/>
       </svg>`;
   }
@@ -520,10 +523,19 @@
           <canvas class="cpu-rail-wave" data-cpu-rail-wave aria-label="Live CPU-Wellenformen"></canvas>
         </div>
         <div class="cpu-rail-meta">
-          <span>RAIL <b data-cpu-rail-load>—%</b></span>
-          <span>CORES <b data-cpu-rail-cores>—</b></span>
-          <span>CLK <b data-cpu-rail-clk>—</b></span>
-          <span>TEMP <b data-cpu-rail-temp>—</b></span>
+          <span class="cpu-rail-load-metric">RAIL <b data-cpu-rail-load>—%</b>
+            <span class="cpu-rail-meter" role="meter" aria-label="CPU-Last, keine Spannungsmessung" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <i data-cpu-rail-meter-fill></i>
+            </span>
+          </span>
+          <span>THREADS <b data-cpu-rail-cores>—</b></span>
+          <span class="cpu-rail-clock-metric" title="Live-Takt aus dem Windows-Prozessorzähler">
+            CLK <b data-cpu-rail-clk>—</b>
+            <svg class="cpu-rail-clk-wave" data-cpu-rail-clk-wave viewBox="0 0 42 10" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M0 7 H5 V2 H10 V7 H15 V2 H20 V7 H25 V2 H30 V7 H35 V2 H40 V7 H42"/>
+            </svg>
+          </span>
+          <span title="ACPI-Zonentemperatur als Proxy; kein Throttling-Nachweis">TEMP <b data-cpu-rail-temp>—</b></span>
           <span>CACHE <b data-cpu-rail-cache>—</b></span>
           <span>SPEED <b data-cpu-rail-speed>1.00x</b></span>
           <button type="button" class="cpu-rail-action" data-cpu-rail-action="pause">PAUSE</button>
@@ -570,6 +582,17 @@
     };
   }
 
+  function coreLoadRgb(load, accent) {
+    const warm = { r: 255, g: 205, b: 72 };
+    const hot = { r: 255, g: 74, b: 74 };
+    const from = load < 55 ? accent : warm;
+    const to = load < 55 ? warm : hot;
+    const amount = load < 55 ? load / 55 : (load - 55) / 45;
+    return ["r", "g", "b"].map((key) => (
+      Math.round(from[key] + (to[key] - from[key]) * amount)
+    )).join(", ");
+  }
+
   function placeChipFace(root) {
     const stage = root.querySelector("[data-cpu-rail-stage]");
     const face = root.querySelector("[data-cpu-rail-face]");
@@ -593,6 +616,7 @@
     const svgHost = root.querySelector("[data-cpu-rail-svg]");
     const fxCanvas = root.querySelector("[data-cpu-rail-fx]");
     const waveCanvas = root.querySelector("[data-cpu-rail-wave]");
+    const clkWave = root.querySelector("[data-cpu-rail-clk-wave]");
     const effects = {
       flow: true,
       cores: true,
@@ -601,18 +625,21 @@
       scan: true,
       temperature: true,
       hover: true,
+      railMeter: true,
+      pins: true,
       ...(state.settings?.cpuRailEffects || {})
     };
     const history = { load: [], speed: [] };
     let latestCpu = null;
     let speedMultiplier = Number(state.cpuRailSpeed) || 1;
     let intensity = Number(state.cpuRailIntensity) || 1;
-    // v6: static SVG + canvas FX overlay (desynchronized 2D → GPU compositing).
-    if (svgHost && svgHost.dataset.drawn !== "v6") {
+    let pinPulseOffset = 0;
+    // Static SVG + canvas FX overlay (desynchronized 2D → GPU compositing).
+    if (svgHost && svgHost.dataset.drawn !== "v7-24") {
       const data = buildSchematic(13);
       root._cpuRailData = data;
-      svgHost.innerHTML = schematicSvg(data);
-      svgHost.dataset.drawn = "v6";
+      svgHost.innerHTML = schematicSvg(data, 24);
+      svgHost.dataset.drawn = "v7-24";
     }
 
     const pulseTraces = (root._cpuRailData?.traces || []).filter((t) => t.pulse && t.pts?.length);
@@ -713,6 +740,9 @@
       const oy = (fxH - VIEW_H * scale) / 2;
       const c = themeRailRgb();
       const t = ts / 1000;
+      const cpuLoad = Math.max(0, Math.min(100, Number(latestCpu?.avg) || 0));
+      const loadMultiplier = 0.25 + (cpuLoad / 100) * 2.75;
+      const flowSpeed = Math.max(0.25, Math.min(3, speedMultiplier * loadMultiplier));
 
       fxCtx.setTransform(fxDpr, 0, 0, fxDpr, 0, 0);
       fxCtx.clearRect(0, 0, fxW, fxH);
@@ -727,7 +757,7 @@
         const dashLen = tr.ring ? 14 : 10;
         const gap = tr.ring ? 18 : 14;
         const period = dashLen + gap;
-        const speed = (tr.slow ? 28 : 48) * speedMultiplier;
+        const speed = (tr.slow ? 28 : 48) * flowSpeed;
         const offset = ((t * speed + (tr.delay || 0) * 20 + i * 7) % period + period) % period;
 
         fxCtx.beginPath();
@@ -746,7 +776,7 @@
       // Energy beads
       if (effects.flow) pulseTraces.forEach((tr) => {
         (tr._beads || []).forEach((b) => {
-          const u = (t * b.speed * speedMultiplier + b.phase) % 1;
+          const u = (t * b.speed * flowSpeed + b.phase) % 1;
           const [x, y] = pointAt(tr.pts, u);
           fxCtx.beginPath();
           fxCtx.arc(x, y, tr.ring ? 2.6 : 2.1, 0, Math.PI * 2);
@@ -811,8 +841,8 @@
         const load = Number(latestCpu?.percents?.[index]);
         if (!Number.isFinite(load)) return;
         if (detail) detail.hidden = false;
-        if (detailTitle) detailTitle.textContent = `CORE ${index + 1}`;
-        if (detailValue) detailValue.textContent = `${Math.round(load)}% LOAD · ${Number(latestCpu?.speedMax || 0).toFixed(2)}GHz MAX`;
+        if (detailTitle) detailTitle.textContent = `THREAD ${index + 1}`;
+        if (detailValue) detailValue.textContent = `${Math.round(load)}% LOAD`;
       };
       const hideCore = () => {
         if (detail) detail.hidden = true;
@@ -893,19 +923,38 @@
       const clkEl = root.querySelector("[data-cpu-rail-clk]");
       const tempEl = root.querySelector("[data-cpu-rail-temp]");
       const cacheEl = root.querySelector("[data-cpu-rail-cache]");
+      const meter = root.querySelector(".cpu-rail-meter");
+      const meterFill = root.querySelector("[data-cpu-rail-meter-fill]");
       if (logo && logo.dataset.brand !== brand) {
         logo.innerHTML = logoSvg(brand);
         logo.dataset.brand = brand;
+      }
+      const threadCount = Math.max(1, Number(cpu.cores) || cpu.percents?.length || 24);
+      const displayedThreads = Math.min(64, threadCount);
+      if (svgHost && svgHost.dataset.drawn !== `v7-${displayedThreads}`) {
+        svgHost.innerHTML = schematicSvg(root._cpuRailData, displayedThreads);
+        svgHost.dataset.drawn = `v7-${displayedThreads}`;
       }
       const face = root.querySelector("[data-cpu-rail-face]");
       if (face) face.dataset.brand = brand;
       if (brandEl) brandEl.textContent = brandLabel(brand);
       if (modelEl) modelEl.textContent = model;
       if (loadEl) loadEl.textContent = `${Math.round(Number(cpu.avg) || 0)}%`;
-      if (coresEl) coresEl.textContent = String(cpu.cores || "—");
+      if (coresEl) coresEl.textContent = threadCount > displayedThreads
+        ? `${displayedThreads}/${threadCount}`
+        : String(threadCount);
       if (clkEl) {
-        const mx = Number(cpu.speedMax) || 0;
-        clkEl.textContent = mx ? `${mx.toFixed(2)}GHz` : "—";
+        const currentGHz = Number(cpu.currentGHz);
+        clkEl.textContent = Number.isFinite(currentGHz) && currentGHz > 0
+          ? `${currentGHz.toFixed(2)}GHz`
+          : "—";
+        if (clkWave) {
+          const hasLiveClock = Number.isFinite(currentGHz) && currentGHz > 0;
+          clkWave.hidden = !hasLiveClock || !effects.waveforms;
+          if (hasLiveClock) {
+            clkWave.style.setProperty("--clk-period", `${Math.max(0.2, Math.min(1.2, 1.8 / currentGHz))}s`);
+          }
+        }
       }
       if (tempEl) {
         const temp = Number(cpu.temperature);
@@ -918,21 +967,38 @@
       const avg = Math.max(0, Math.min(100, Number(cpu.avg) || 0));
       root.style.setProperty("--cpu-load", `${avg / 100}`);
       root.dataset.loadLevel = avg >= 85 ? "high" : avg >= 60 ? "medium" : "low";
+      if (meter) meter.setAttribute("aria-valuenow", String(Math.round(avg)));
+      if (meterFill) meterFill.style.width = `${avg}%`;
       const temperature = Number(cpu.temperature);
-      root.dataset.tempLevel = Number.isFinite(temperature)
+      root.dataset.tempLevel = effects.temperature && Number.isFinite(temperature)
         ? (temperature >= 90 ? "critical" : temperature >= 75 ? "warning" : "normal")
         : "unknown";
       root.classList.toggle("cpu-rail-temperature-off", !effects.temperature);
       root.classList.toggle("cpu-rail-scan-off", !effects.scan);
       root.classList.toggle("cpu-rail-glow-off", !effects.glow);
       const cores = root.querySelectorAll("[data-cpu-core]");
+      const accent = themeRailRgb();
       cores.forEach((core) => {
         const load = Math.max(0, Math.min(100, Number(cpu.percents?.[Number(core.dataset.cpuCore)]) || 0));
         core.style.setProperty("--core-load", `${load / 100}`);
+        core.style.setProperty("--core-color", coreLoadRgb(load, accent));
         core.classList.toggle("is-active", effects.cores && load >= 15);
       });
+      const pins = svgHost?.querySelectorAll("[data-cpu-rail-pin]") || [];
+      const ioBps = Math.max(0, Number(cpu.netRxBps) || 0)
+        + Math.max(0, Number(cpu.netTxBps) || 0)
+        + Math.max(0, Number(cpu.diskReadBps) || 0)
+        + Math.max(0, Number(cpu.diskWriteBps) || 0);
+      const activePinCount = effects.pins && cpu.ioAvailable && ioBps >= 1024
+        ? Math.max(1, Math.ceil(Math.min(1, Math.log1p(ioBps / 1024) / Math.log1p(10000)) * pins.length))
+        : 0;
+      pins.forEach((pin, index) => {
+        const relative = (index - pinPulseOffset + pins.length) % pins.length;
+        pin.classList.toggle("io-active", relative < activePinCount);
+      });
+      if (activePinCount && pins.length) pinPulseOffset = (pinPulseOffset + activePinCount) % pins.length;
       history.load.push(avg);
-      history.speed.push(Math.max(0, Math.min(100, ((Number(cpu.speedMax) || 0) / 5) * 100)));
+      history.speed.push(Math.max(0, Math.min(100, ((Number(cpu.currentGHz) || 0) / 5) * 100)));
       if (history.load.length > 48) history.load.shift();
       if (history.speed.length > 48) history.speed.shift();
     };
@@ -941,6 +1007,9 @@
       root.classList.toggle("cpu-rail-flow-off", !effects.flow);
       root.classList.toggle("cpu-rail-wave-off", !effects.waveforms);
       root.classList.toggle("cpu-rail-hover-off", !effects.hover);
+      root.classList.toggle("cpu-rail-meter-off", !effects.railMeter);
+      root.classList.toggle("cpu-rail-pins-off", !effects.pins);
+      if (clkWave) clkWave.hidden = !effects.waveforms || !(Number(latestCpu?.currentGHz) > 0);
       if (!effects.waveforms && waveCtx) waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
     };
     applyEffects(effects);
@@ -954,7 +1023,7 @@
       if (document.visibilityState === "hidden") return;
       if (!document.getElementById("mod_cpu_rail")) return;
       refresh();
-    }, 15000);
+    }, 1000);
   }
 
   window.cpuRailPanel = { bodyHtml, bind, setEffects: () => {}, refresh: () => {} };

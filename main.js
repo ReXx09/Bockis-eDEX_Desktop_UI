@@ -51,6 +51,7 @@ const { getNetStatus, getLiveConnections, getTrafficSample, getCpuMetrics, getMe
 const fileOps = require("./lib/file-ops");
 const { PathPolicy } = require("./lib/path-policy");
 const { compareVersions, fetchLatestRelease } = require("./lib/update-checker");
+const { remotePathExpression } = require("./lib/ssh-path");
 const clipboardFiles = require("./lib/clipboard-files");
 const win32Embed = require("./lib/win32-embed");
 const taskbarDock = require("./lib/taskbar-dock");
@@ -1413,9 +1414,7 @@ ipcMain.on("terminal-cd", (event, paneId, target) => {
   if (!session || typeof target !== "string") return;
   const selectedShell = terminalSessionShells.get(key) || "powershell";
   if (selectedShell === "ssh") {
-    const remoteTarget = target.replace(/^~(?=\/|$)/, "$HOME");
-    const escaped = remoteTarget.replace(/(["\\])/g, "\\$1");
-    session.write(`cd -- "${escaped}"\r`);
+    session.write(`cd -- ${remotePathExpression(target)}\r`);
     return;
   }
   if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) return;
@@ -1453,12 +1452,10 @@ ipcMain.handle("terminal-list-remote", (event, paneId, target) => {
   if (!session || terminalSessionShells.get(key) !== "ssh") {
     throw new Error("Keine aktive SSH-Sitzung");
   }
-  const root = String(target || ".").trim() || ".";
+  const root = typeof target === "string" && target ? target : ".";
   const token = `__EDEX_REMOTE_${Date.now()}_${Math.random().toString(36).slice(2, 8)}__`;
   const begin = `${token}_BEGIN`;
   const end = `${token}_END`;
-  const commandRoot = root.replace(/^~(?=\/|$)/, "$HOME");
-  const escaped = commandRoot.replace(/'/g, "'\\''");
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       const pending = remoteListingRequests.get(key);
@@ -1471,9 +1468,7 @@ ipcMain.handle("terminal-list-remote", (event, paneId, target) => {
       resolve({ root, items: [], error: "SSH-Verzeichnis konnte nicht gelesen werden" });
     }, 10000);
     remoteListingRequests.set(key, { token, begin, end, root, buffer: "", timer, resolve });
-    const targetExpression = commandRoot.startsWith("$HOME")
-      ? `"${commandRoot.replace(/(["\\])/g, "\\$1")}"`
-      : `'${escaped}'`;
+    const targetExpression = remotePathExpression(root);
     session.write(`cd -- ${targetExpression} 2>/dev/null && { printf '\\n${begin}\\n'; for item in ./* ./.[!.]* ./..?*; do [ -e "$item" ] || continue; if [ -d "$item" ]; then kind=d; else kind=f; fi; size=$(wc -c < "$item" 2>/dev/null || echo 0); name=\${item##*/}; printf '%s\\t%s\\t%s\\n' "$kind" "$size" "$name"; done; } || printf '\\n${begin}\\n'; printf '${end}\\n'\r`);
   });
 });
@@ -2333,7 +2328,7 @@ ipcMain.handle("embed-capture", async (event, payload = {}) => {
 });
 
 ipcMain.handle("refit-display", (event) => {
-  const win = getSenderWindow(event);
+  const win = requireTrustedWindow(event);
   const displayId = getWindowDisplayId(win);
   const display = findDisplay(displayId);
   fitWindowToDisplay(win, display);
@@ -2388,14 +2383,38 @@ ipcMain.on("get-cursor-client-point", (event) => {
   }
 });
 
-ipcMain.handle("get-net-status", async () => getNetStatus());
-ipcMain.handle("get-live-connections", async () => getLiveConnections());
-ipcMain.handle("get-net-traffic", async () => getTrafficSample());
-ipcMain.handle("get-cpu-metrics", () => getCpuMetrics());
-ipcMain.handle("get-mem-metrics", () => getMemMetrics());
-ipcMain.handle("get-sys-metrics", () => getSysMetrics());
-ipcMain.handle("get-hardware-info", async () => getHardwareInfo());
-ipcMain.handle("get-top-processes", async () => getTopProcesses());
+ipcMain.handle("get-net-status", async (event) => {
+  requireTrustedWindow(event);
+  return getNetStatus();
+});
+ipcMain.handle("get-live-connections", async (event) => {
+  requireTrustedWindow(event);
+  return getLiveConnections();
+});
+ipcMain.handle("get-net-traffic", async (event) => {
+  requireTrustedWindow(event);
+  return getTrafficSample();
+});
+ipcMain.handle("get-cpu-metrics", (event) => {
+  requireTrustedWindow(event);
+  return getCpuMetrics();
+});
+ipcMain.handle("get-mem-metrics", (event) => {
+  requireTrustedWindow(event);
+  return getMemMetrics();
+});
+ipcMain.handle("get-sys-metrics", (event) => {
+  requireTrustedWindow(event);
+  return getSysMetrics();
+});
+ipcMain.handle("get-hardware-info", async (event) => {
+  requireTrustedWindow(event);
+  return getHardwareInfo();
+});
+ipcMain.handle("get-top-processes", async (event) => {
+  requireTrustedWindow(event);
+  return getTopProcesses();
+});
 
 const BOOT_COMPONENTS = [
   ["bockis-core", "main.js"],
@@ -2479,7 +2498,8 @@ ipcMain.handle("get-weather", async (event, location) => {
   requireTrustedWindow(event);
   return getWeather(location);
 });
-ipcMain.handle("get-globe-grid", () => {
+ipcMain.handle("get-globe-grid", (event) => {
+  requireTrustedWindow(event);
   try {
     return loadGlobeGrid();
   } catch (err) {

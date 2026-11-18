@@ -553,7 +553,11 @@
       : [central];
     const others = occupiedLayoutRects({ panelId: id });
     const g = gridSize();
-    const usableRegions = regions.filter((region) => region.width >= g * 2 && region.height >= g * 2);
+    const keepSize = id === "taskdock";
+    const placementRegions = keepSize
+      ? regions.filter((region) => region.width >= box.w && region.height >= box.h)
+      : regions;
+    const usableRegions = placementRegions.filter((region) => region.width >= g * 2 && region.height >= g * 2);
     if (!usableRegions.length) return null;
     const centerX = box.x + box.w / 2;
     const centerY = box.y + box.h / 2;
@@ -566,8 +570,8 @@
       (a, b) => regionDistance(a) - regionDistance(b)
         || (b.width * b.height) - (a.width * a.height)
     )[0];
-    const safeW = Math.max(g * 2, Math.min(box.w, Math.floor(preferredRegion.width / g) * g));
-    const safeH = Math.max(g * 2, Math.min(box.h, Math.floor(preferredRegion.height / g) * g));
+    const safeW = keepSize ? box.w : Math.max(g * 2, Math.min(box.w, Math.floor(preferredRegion.width / g) * g));
+    const safeH = keepSize ? box.h : Math.max(g * 2, Math.min(box.h, Math.floor(preferredRegion.height / g) * g));
     const fitsZone = (x, y, w = safeW, h = safeH) => regions.some((region) => (
       x >= region.x && y >= region.y
       && x + w <= region.x + region.width + g
@@ -579,7 +583,7 @@
 
     let best = null;
     let bestDistance = Infinity;
-    for (const region of regions) {
+    for (const region of placementRegions) {
       if (region.width < safeW || region.height < safeH) continue;
       const maxX = Math.max(region.x, region.x + region.width - safeW);
       const maxY = Math.max(region.y, region.y + region.height - safeH);
