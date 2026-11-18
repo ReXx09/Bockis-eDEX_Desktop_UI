@@ -5509,14 +5509,20 @@ function isDesktopFavorite(itemOrPath) {
   return Boolean(path) && state.desktopFavorites.includes(path);
 }
 
-function toggleDesktopFavorite(item) {
+async function toggleDesktopFavorite(item) {
   const path = desktopFavoritePath(item);
   if (!path) return;
   const favorites = new Set(state.desktopFavorites);
   if (favorites.has(path)) favorites.delete(path);
   else favorites.add(path);
   state.desktopFavorites = [...favorites];
-  persistLayout();
+  try {
+    await window.edex.saveSettings({ desktopFavorites: state.desktopFavorites });
+    await persistLayout();
+  } catch (error) {
+    toast(error?.message || "Favorit konnte nicht gespeichert werden");
+    return;
+  }
   arrangeDesktop();
 }
 
@@ -6804,9 +6810,19 @@ window.addEventListener("keydown", (event) => {
   }
   state.desktopLocked = Boolean(saved?.desktopLocked);
   state.desktopGrouped = Boolean(saved?.desktopGrouped);
-  state.desktopFavorites = Array.isArray(saved?.desktopFavorites)
-    ? [...new Set(saved.desktopFavorites.map((path) => String(path || "").trim()).filter(Boolean))]
+  const savedFavorites = Array.isArray(saved?.desktopFavorites)
+    ? saved.desktopFavorites
     : [];
+  const hasGlobalFavorites = Array.isArray(state.settings?.desktopFavorites);
+  const globalFavorites = hasGlobalFavorites ? state.settings.desktopFavorites : [];
+  state.desktopFavorites = [...new Set(
+    (hasGlobalFavorites ? globalFavorites : savedFavorites)
+      .map((path) => String(path || "").trim())
+      .filter(Boolean)
+  )];
+  if (!hasGlobalFavorites && savedFavorites.length) {
+    queueMicrotask(() => window.edex.saveSettings({ desktopFavorites: state.desktopFavorites }));
+  }
   state.desktopFilter = saved?.desktopFilter || "all";
   state.desktopTabId = saved?.desktopTabId || "classify";
   state.desktopFolderTabs = Array.isArray(saved?.desktopFolderTabs)
