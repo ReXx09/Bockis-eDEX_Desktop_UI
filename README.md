@@ -160,7 +160,7 @@ Mit einem expliziten Installer-Pfad kann auch eine Release-Datei außerhalb des
 Projekts verwendet werden:
 
 ```powershell
-.\install-tron.ps1 -InstallerPath "C:\Downloads\Bockis-eDEX-Desktop-UI-Setup-1.2.7.exe"
+.\install-tron.ps1 -InstallerPath "C:\Downloads\Bockis-eDEX-Desktop-UI-Setup-1.2.7.5.exe"
 ```
 
 Für einen entpackten Test-Build:
@@ -179,7 +179,7 @@ npm test
 
 - Repository: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI
 - Releases: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases
-- Aktueller Release: `v1.2.7`
+- Aktueller Release: `v1.2.7.5`
 
 ## Lizenz und Quellen
 

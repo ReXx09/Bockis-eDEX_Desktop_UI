@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.7.5] - 2026-11-19
+
+### Added
+
+- LibreHardwareMonitor/PawnIO sensor panel and an installer prerequisite check.
+
 ## [1.2.7] - 2026-10-22
 
 ### Added
