@@ -46,6 +46,7 @@ Mehrmonitor-Ansicht.
 - **Theme-Hintergründe**: eDEX-Theme-JSON-Dateien sowie Raster-, Scanline- und weitere Hintergrundstile.
 - **Task-Dock**: Angeheftete Windows-Taskleisten-Apps werden dynamisch mit ihren Original-Icons übernommen und können direkt aus dem Dock gestartet werden.
 - **Autostart-Panel**: Windows-Autostart-Einträge werden dynamisch aus der Startup-Konfiguration gelesen und mit Name, Quelle, Benutzer und Startbefehl angezeigt.
+- **Hardware-Monitor**: Live-Sensorwerte kommen direkt aus LibreHardwareMonitor; HWiNFO und CSV-Logging sind nicht erforderlich. Für erweiterte Sensorzugriffe muss PawnIO separat installiert sein.
 - **Log-Panel**: Das JSON-Lines-Fehlerprotokoll kann als Panel mit Level-Filtern und automatischer Aktualisierung geöffnet werden.
 - **Bootloader und Branding**: Transparenter, komprimierter WebP-Bootscreen sowie ein mehrstufiges Windows-ICO für Anwendung, Installer und Verknüpfungen.
 - **Persistente Einstellungen**: Theme-, Layout-, Display-, Dock- und Desktop-Einstellungen werden gespeichert und beim Start wieder geladen.
@@ -67,6 +68,20 @@ SSH-Passwörter und Passphrasen werden nicht von Bockis-eDEX gespeichert. Die
 Host-Key-Prüfung und die Datei `known_hosts` werden von der lokalen
 OpenSSH-Installation verwaltet. Terminaldaten und Zugangsdaten werden nicht
 in das Anwendungslog geschrieben.
+
+### Hardware-Monitor und PawnIO
+
+Das Hardware-Monitor-Panel liest Sensoren über LibreHardwareMonitor in einem
+gebündelten, eigenständigen .NET-Helferprozess. Es prüft den PawnIO-Status und
+zeigt verfügbare Werte direkt an; HWiNFO und ein CSV-Protokoll werden nicht
+benötigt. Der PawnIO-Kerneltreiber wird nicht automatisch installiert. Falls
+er fehlt, installiere ihn über das [offizielle PawnIO-Projekt](https://github.com/namazso/PawnIO)
+und starte das Panel erneut. Der NSIS-Installer prüft PawnIO und kann bei
+fehlender Installation die offizielle Downloadseite öffnen; installiert wird
+der Treiber nur durch dich. Welche Sensoren verfügbar sind, hängt von CPU,
+Grafikkarte und Mainboard ab; einzelne Sensoren können erhöhte Rechte erfordern.
+Die LibreHardwareMonitor-Lizenz und Drittanbieterhinweise liegen im
+Installationsordner unter `resources\hardware-monitor`.
 
 ### Vertrauensgrenze und Windows-Sicherheit
 

@@ -76,20 +76,33 @@ function panelBody(id) {
             </div>
             <section class="hwinfo-prereq">
               <div>
-                <h1>HWiNFO SENSOR CONNECTOR</h1>
-                <p id="mod_hardwareInspector_hwinfo" data-state="checking" role="status">Voraussetzungen werden geprüft …</p>
-                <small>Für Livewerte HWiNFO-Sensor-Logging als CSV aktivieren.</small>
+                <h1>HARDWARE SENSOR CONNECTOR</h1>
+                <p id="mod_hardwareInspector_hwinfo" data-hardware-status data-state="checking" role="status">Voraussetzungen werden geprüft …</p>
+                <small>Livewerte über LibreHardwareMonitor und den PawnIO-Treiber.</small>
               </div>
               <div class="hwinfo-prereq-actions">
-                <button type="button" data-hwinfo-scan>Prüfen</button>
-                <button type="button" data-hwinfo-log-pick>CSV wählen</button>
+                <button type="button" data-hardware-scan>Prüfen</button>
               </div>
             </section>
             <section class="hwinfo-log">
-              <p id="mod_hardwareInspector_csv" data-state="not-configured" role="status">Kein Sensor-CSV ausgewählt.</p>
-              <div id="mod_hardwareInspector_sensors" aria-live="polite"></div>
+              <div id="mod_hardwareInspector_sensors" data-hardware-sensors aria-live="polite"></div>
             </section>
           </div>
+        </div>`;
+    case "hwinfo":
+      return `
+        <div class="hwinfo-panel" data-hardware-panel>
+          <div class="hwinfo-panel-heading">
+            <h1>HARDWARE SENSOR TELEMETRY</h1>
+            <p data-hardware-status data-state="checking" role="status">Voraussetzungen werden geprüft …</p>
+          </div>
+          <small class="hwinfo-panel-hint">Livewerte über LibreHardwareMonitor · PawnIO-Treiber erforderlich.</small>
+          <div class="hwinfo-prereq-actions">
+            <button type="button" data-hardware-scan>Prüfen</button>
+          </div>
+          <section class="hwinfo-log">
+            <div data-hardware-sensors aria-live="polite"></div>
+          </section>
         </div>`;
     case "toplist":
       return `

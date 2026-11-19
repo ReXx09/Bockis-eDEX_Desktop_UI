@@ -81,18 +81,14 @@ div#mod_hardwareInspector_inner > .hwinfo-prereq {
     opacity: 1 !important;
 }
 
-.hwinfo-prereq p[data-state="running"] {
+.hwinfo-prereq p[data-state="ready"] {
     color: #72e6a3;
 }
 
-.hwinfo-prereq p[data-state="installed"] {
-    color: rgb(var(--color_yellow));
-}
-
-.hwinfo-prereq p[data-state="not-found"],
+.hwinfo-prereq p[data-state="missing-driver"],
 .hwinfo-prereq p[data-state="unsupported"],
 .hwinfo-prereq p[data-state="error"] {
-    color: rgb(var(--color_red));
+    color: var(--color_red);
 }
 
 .hwinfo-prereq small {
@@ -126,22 +122,6 @@ div#mod_hardwareInspector_inner > .hwinfo-prereq {
     padding-top: 0.35rem;
 }
 
-.hwinfo-log > p {
-    font-size: 1.05vh;
-    margin: 0 0 0.25rem;
-    opacity: 0.7;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.hwinfo-log > p[data-state="error"],
-.hwinfo-log > p[data-state="invalid"],
-.hwinfo-log > p[data-state="missing"] {
-    color: rgb(var(--color_red));
-    opacity: 1;
-}
-
 .hwinfo-sensor-reading {
     display: flex;
     font-size: 1.05vh;
@@ -161,4 +141,83 @@ div#mod_hardwareInspector_inner > .hwinfo-prereq {
     flex: 0 0 auto;
     font-variant-numeric: tabular-nums;
     text-align: right;
+}
+
+.hwinfo-panel {
+    box-sizing: border-box;
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.35rem;
+    width: 100%;
+}
+
+.hwinfo-panel-heading h1,
+.hwinfo-panel-heading p,
+.hwinfo-panel-hint {
+    display: block;
+    font-size: 0.78em;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.hwinfo-panel-heading h1 {
+    border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
+    font-size: 0.9em;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.25rem;
+    padding-bottom: 0.25rem;
+}
+
+.hwinfo-panel-heading p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hwinfo-panel-heading p[data-state="ready"] {
+    color: #72e6a3;
+}
+
+.hwinfo-panel-heading p[data-state="missing-driver"],
+.hwinfo-panel-heading p[data-state="unsupported"],
+.hwinfo-panel-heading p[data-state="error"] {
+    color: var(--color_red);
+}
+
+.hwinfo-panel-hint {
+    opacity: 0.65;
+}
+
+.hwinfo-panel .hwinfo-prereq-actions {
+    flex-wrap: wrap;
+}
+
+.hwinfo-panel .hwinfo-prereq-actions button {
+    background: transparent;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72em;
+    padding: 0.25rem 0.5rem;
+}
+
+.hwinfo-panel .hwinfo-prereq-actions button:hover:not(:disabled) {
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.2);
+}
+
+.hwinfo-panel .hwinfo-log {
+    flex: 1 1 auto;
+    overflow: auto;
+}
+
+.hwinfo-panel .hwinfo-sensor-reading {
+    font-size: 0.78em;
+    gap: 0.4rem;
+    padding: 0.18rem 0;
 }

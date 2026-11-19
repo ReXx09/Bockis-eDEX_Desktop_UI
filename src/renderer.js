@@ -61,6 +61,7 @@ const PANEL_META = {
   filesearch: { title: "Schnellsuche", box: { x: 18, y: 82, w: 47, h: 16 } },
   terminal: { title: "Terminal", box: { x: 19, y: 42, w: 31, h: 36 } },
   weather: { title: "Wetter", box: { x: 52, y: 42, w: 13, h: 28 } },
+  hwinfo: { title: "Hardware-Monitor", icon: "cpu", box: { x: 66, y: 44, w: 18, h: 28 } },
   cockpit: { title: "Cockpit", box: { x: 20, y: 22, w: 38, h: 54 } },
   cassette: { title: "Musikkassette", box: { x: 28, y: 28, w: 36, h: 38 } },
   ddj: { title: "DDJ-1000", box: { x: 8, y: 6, w: 84, h: 86 } },
@@ -1882,8 +1883,8 @@ function dockIcon(kind, id) {
     desktop: "desktop",
     clock: "clock", cpu: "cpu", ram: "ram", toplist: "processes", globe: "world", conninfo: "network",
     calendar: "clock", drives: "drive", filesearch: "search", terminal: "terminal", weather: "weather", log: "log",
-    cockpit: "world", cassette: "drive", ddj: "cpu", cpuRail: "cpu", calculator: "terminal"
-    , autostart: "processes"
+    cockpit: "world", cassette: "drive", ddj: "cpu", cpuRail: "cpu", calculator: "terminal",
+    hwinfo: "cpu", autostart: "processes"
   };
   return state.layout[id]?.icon || PANEL_META[id]?.icon || icons[id] || "fallback";
 }

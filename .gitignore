@@ -7,6 +7,9 @@ dist/
 dist-rainmeter/
 build/*.exe
 build/*.exe.download
+build/hardware-monitor/
+hardware-monitor/bin/
+hardware-monitor/obj/
 
 # Local manual-test installers and screen recordings (keep test sources)
 /test/*.exe

@@ -34,14 +34,14 @@ test("Persists and validates task-panel sizing options", (t) => {
   assert.equal(settings.taskDockShowLabels, false);
 });
 
-test("Persists the selected HWiNFO sensor log path", (t) => {
+test("Ignores the legacy HWiNFO CSV setting", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-hwinfo-settings-test-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   const selectedLog = path.join(dir, "hwinfo-sensors.csv");
   saveSettings(dir, { hwinfoLogPath: selectedLog });
 
-  assert.equal(loadSettings(dir).hwinfoLogPath, selectedLog);
+  assert.equal("hwinfoLogPath" in loadSettings(dir), false);
 });
 
 test("Persists and normalizes the weather location", (t) => {

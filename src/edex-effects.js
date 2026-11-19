@@ -16,7 +16,7 @@
   let memTimer = null;
   let sysTimer = null;
   let hwTimer = null;
-  let hwinfoSensorTimer = null;
+  let hardwareSensorTimer = null;
   let topTimer = null;
   let topSort = "cpu";
   let trafficHistory = { up: [], down: [] };
@@ -670,63 +670,46 @@
     set("mod_hardwareInspector_chassis", info.chassis);
   }
 
-  async function refreshHwinfoPrerequisites() {
-    const status = document.getElementById("mod_hardwareInspector_hwinfo");
-    if (!status) return;
-    if (!window.edex?.scanHwinfoPrerequisites) {
-      status.dataset.state = "error";
-      status.textContent = "Voraussetzungen-Scan nicht verfügbar";
-      return;
-    }
-    status.dataset.state = "checking";
-    status.textContent = "Voraussetzungen werden geprüft …";
-    try {
-      const result = await window.edex.scanHwinfoPrerequisites();
-      const version = result.version ? ` · v${result.version}` : "";
-      const messages = {
-        running: `HWiNFO läuft${version}`,
-        installed: `HWiNFO gefunden, aber nicht gestartet${version}`,
-        "not-found": "HWiNFO wurde nicht gefunden",
-        unsupported: "HWiNFO-Anbindung benötigt Windows",
-        error: `Prüfung fehlgeschlagen: ${result.error || "unbekannter Fehler"}`
-      };
-      status.dataset.state = result.state || "error";
-      status.textContent = messages[result.state] || "Unbekannter Prüfstatus";
-    } catch (error) {
-      status.dataset.state = "error";
-      status.textContent = `Prüfung fehlgeschlagen: ${error.message || String(error)}`;
-    }
-  }
-
-  async function refreshHwinfoSensors() {
-    const status = document.getElementById("mod_hardwareInspector_csv");
-    const list = document.getElementById("mod_hardwareInspector_sensors");
-    if (!status || !list) return;
-    if (!window.edex?.getHwinfoSensorData) {
-      status.dataset.state = "error";
-      status.textContent = "HWiNFO-CSV-Leser nicht verfügbar";
-      list.replaceChildren();
+  async function refreshHardwareSensors(scanPrerequisites = false) {
+    const statuses = [...document.querySelectorAll("[data-hardware-status]")];
+    const lists = [...document.querySelectorAll("[data-hardware-sensors]")];
+    if (!statuses.length) return;
+    const setStatus = (state, text) => statuses.forEach((status) => {
+      status.dataset.state = state;
+      status.textContent = text;
+    });
+    const clearLists = () => lists.forEach((list) => list.replaceChildren());
+    const readSensors = scanPrerequisites
+      ? window.edex?.scanHardwarePrerequisites
+      : window.edex?.getHardwareSensorData;
+    if (!readSensors) {
+      setStatus("error", "Hardware-Monitor nicht verfügbar");
+      clearLists();
       return;
     }
 
-    status.dataset.state = "checking";
-    status.textContent = "Sensorprotokoll wird gelesen …";
+    setStatus("checking", "Hardware-Sensoren werden geprüft …");
     try {
-      const result = await window.edex.getHwinfoSensorData();
+      const result = await readSensors();
+      const version = result.pawnIoVersion ? ` v${result.pawnIoVersion}` : "";
       const messages = {
-        "not-configured": "Kein Sensor-CSV ausgewählt.",
-        missing: "CSV-Datei nicht gefunden. Bitte erneut auswählen.",
-        invalid: `Kein gültiges HWiNFO-CSV: ${result.error || "Format nicht erkannt"}`,
-        waiting: `Warte auf Sensorwerte${result.sampleAt ? ` · ${result.sampleAt}` : ""}`,
-        error: `CSV konnte nicht gelesen werden: ${result.error || "unbekannter Fehler"}`
+        ready: result.pawnIoInstalled
+          ? `Live-Sensoren verfügbar · PawnIO${version}`
+          : "Live-Sensoren verfügbar · PawnIO fehlt, Werte ggf. unvollständig",
+        "missing-driver": "PawnIO nicht gefunden · Treiber installieren",
+        waiting: "Keine Sensorwerte gemeldet",
+        unsupported: "LibreHardwareMonitor mit PawnIO benötigt Windows",
+        error: `Sensorzugriff fehlgeschlagen: ${result.error || "unbekannter Fehler"}`
       };
-      status.dataset.state = result.state || "error";
-      status.textContent = result.state === "ready"
-        ? `${result.fileName || "HWiNFO-CSV"} · ${result.sampleAt || "letzter Messwert"}`
-        : messages[result.state] || "Unbekannter CSV-Status";
-      list.replaceChildren();
+      let statusText = messages[result.state] || "Unbekannter Hardware-Monitor-Status";
+      if (result.state === "waiting" && result.error) statusText += ` · ${result.error}`;
+      if (result.state === "missing-driver" && result.error) statusText += ` · ${result.error}`;
+      if (result.state === "ready" && result.error) statusText += ` · Teilzugriff: ${result.error}`;
+      setStatus(result.state || "error", statusText);
+      clearLists();
       if (result.state !== "ready") return;
-      (result.sensors || []).slice(0, 6).forEach((sensor) => {
+      const sensors = selectHardwareSensors(result.sensors || [], 6);
+      lists.forEach((list) => sensors.forEach((sensor) => {
         const row = document.createElement("div");
         row.className = "hwinfo-sensor-reading";
         const label = document.createElement("span");
@@ -739,12 +722,41 @@
         value.textContent = `${displayValue}${sensor.unit ? ` ${sensor.unit}` : ""}`;
         row.append(label, value);
         list.append(row);
-      });
+      }));
     } catch (error) {
-      status.dataset.state = "error";
-      status.textContent = `CSV konnte nicht gelesen werden: ${error.message || String(error)}`;
-      list.replaceChildren();
+      setStatus("error", `Sensorzugriff fehlgeschlagen: ${error.message || String(error)}`);
+      clearLists();
     }
+  }
+
+  function selectHardwareSensors(sensors, limit) {
+    const categories = [
+      ["temperature", /temp|temperatur|tctl|tdie|°c/i],
+      ["power", /power|leistung|watt|\[w\]/i],
+      ["load", /usage|utilization|auslastung|load|last|%/i],
+      ["fan", /fan|lüfter|luefter|rpm|drehzahl/i],
+      ["clock", /clock|takt|frequency|frequenz|mhz|ghz/i],
+      ["other", /.*/]
+    ];
+    const grouped = categories.map(() => []);
+    for (const sensor of sensors) {
+      const name = String(sensor.name || "");
+      const categoryIndex = categories.findIndex(([, pattern]) => pattern.test(name));
+      grouped[Math.max(categoryIndex, 0)].push(sensor);
+    }
+    const selected = [];
+    for (let index = 0; selected.length < limit; index += 1) {
+      let found = false;
+      for (const category of grouped) {
+        if (category[index]) {
+          selected.push(category[index]);
+          found = true;
+          if (selected.length >= limit) break;
+        }
+      }
+      if (!found) break;
+    }
+    return selected;
   }
 
   async function refreshToplist() {
@@ -814,28 +826,11 @@
         refreshMem();
       });
     });
-    document.querySelectorAll("[data-hwinfo-scan]").forEach((button) => {
+    document.querySelectorAll("[data-hardware-scan]").forEach((button) => {
       button.addEventListener("click", async () => {
         button.disabled = true;
         try {
-          await refreshHwinfoPrerequisites();
-        } finally {
-          button.disabled = false;
-        }
-      });
-    });
-    document.querySelectorAll("[data-hwinfo-log-pick]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-        try {
-          const result = await window.edex?.pickHwinfoCsv?.();
-          if (!result?.canceled) await refreshHwinfoSensors();
-        } catch (error) {
-          const status = document.getElementById("mod_hardwareInspector_csv");
-          if (status) {
-            status.dataset.state = "error";
-            status.textContent = `CSV-Auswahl fehlgeschlagen: ${error.message || String(error)}`;
-          }
+          await refreshHardwareSensors(true);
         } finally {
           button.disabled = false;
         }
@@ -864,17 +859,17 @@
       refreshSys();
       sysTimer = setInterval(() => { if (pageActive()) refreshSys(); }, 12000);
     }
-    if (document.getElementById("mod_hardwareInspector")) {
-      refreshHardware();
-      refreshHwinfoPrerequisites();
-      refreshHwinfoSensors();
+    const hasHardwareInfo = Boolean(document.getElementById("mod_hardwareInspector"));
+    const hasHardwarePanel = Boolean(document.querySelector("[data-hardware-status], [data-hardware-sensors]"));
+    if (hasHardwareInfo) refreshHardware();
+    if (hasHardwarePanel) {
+      refreshHardwareSensors();
       hwTimer = setInterval(() => {
         if (!pageActive()) return;
         refreshHardware();
-        refreshHwinfoPrerequisites();
       }, 30000);
-      hwinfoSensorTimer = setInterval(() => {
-        if (pageActive()) refreshHwinfoSensors();
+      hardwareSensorTimer = setInterval(() => {
+        if (pageActive()) refreshHardwareSensors();
       }, 2000);
     }
     if (document.getElementById("mod_toplist_table")) {
@@ -1009,9 +1004,9 @@
     if (memTimer) clearInterval(memTimer);
     if (sysTimer) clearInterval(sysTimer);
     if (hwTimer) clearInterval(hwTimer);
-    if (hwinfoSensorTimer) clearInterval(hwinfoSensorTimer);
+    if (hardwareSensorTimer) clearInterval(hardwareSensorTimer);
     if (topTimer) clearInterval(topTimer);
-    netTimer = trafficTimer = cpuTimer = memTimer = sysTimer = hwTimer = hwinfoSensorTimer = topTimer = null;
+    netTimer = trafficTimer = cpuTimer = memTimer = sysTimer = hwTimer = hardwareSensorTimer = topTimer = null;
     stopRain();
     stopGlobe();
   }

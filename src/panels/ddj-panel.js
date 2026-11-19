@@ -291,7 +291,6 @@
     root.querySelector("[data-ddj-output]")?.addEventListener("click", () => {
       setStatus("OUTPUT ROUTING · WINDOWS AUDIO DEVICE INTEGRATION FOLLOWS");
     });
-    setMode("media");
 
     const themeRgb = () => {
       const cs = getComputedStyle(document.documentElement);
@@ -348,6 +347,7 @@
       });
     };
 
+    setMode("media");
     state.ddjResizeObs = new ResizeObserver(() => fitJogs());
     root.querySelectorAll("[data-ddj-jog-stage]").forEach((stage) => state.ddjResizeObs.observe(stage));
     requestAnimationFrame(fitJogs);

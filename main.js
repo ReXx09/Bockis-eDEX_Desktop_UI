@@ -48,8 +48,13 @@ const { listDrives } = require("./lib/drives");
 const fileSearch = require("./lib/file-search");
 const { loadNotes, addNote, updateNote, removeNote } = require("./lib/calendar-store");
 const { getNetStatus, getLiveConnections, getTrafficSample, getCpuMetrics, getMemMetrics, getSysMetrics, loadGlobeGrid, getHardwareInfo, getTopProcesses, getWeather } = require("./lib/net-info");
-const { scanHwinfoPrerequisites } = require("./lib/hwinfo-prerequisites");
-const { getHwinfoCsvSnapshot } = require("./lib/hwinfo-csv");
+const { createHardwareMonitor } = require("./lib/hardware-monitor");
+const hardwareMonitor = createHardwareMonitor({
+  platform: process.platform,
+  isPackaged: app.isPackaged,
+  appPath: app.getAppPath(),
+  resourcesPath: process.resourcesPath
+});
 const fileOps = require("./lib/file-ops");
 const { PathPolicy } = require("./lib/path-policy");
 const { compareVersions, fetchLatestRelease } = require("./lib/update-checker");
@@ -754,6 +759,9 @@ if (!gotLock) {
       tray = null;
       stopZOrderDaemon();
       stopOleDragDaemon();
+      try { await hardwareMonitor.stop(); } catch (error) {
+        console.error("stop hardware monitor", error);
+      }
       try { await stopAllTerminalSessions(); } catch (error) {
         console.error("stop terminal sessions", error);
       }
@@ -2418,26 +2426,13 @@ ipcMain.handle("get-hardware-info", async (event) => {
   requireTrustedWindow(event);
   return getHardwareInfo();
 });
-ipcMain.handle("scan-hwinfo-prerequisites", (event) => {
+ipcMain.handle("scan-hardware-prerequisites", (event) => {
   requireTrustedWindow(event);
-  return scanHwinfoPrerequisites();
+  return hardwareMonitor.getSnapshot("scan");
 });
-ipcMain.handle("pick-hwinfo-csv", async (event) => {
+ipcMain.handle("get-hardware-sensor-data", (event) => {
   requireTrustedWindow(event);
-  const win = getSenderWindow(event);
-  const selected = await dialog.showOpenDialog(win, {
-    title: "HWiNFO-Sensorprotokoll auswählen",
-    defaultPath: settings.hwinfoLogPath || app.getPath("documents"),
-    filters: [{ name: "CSV-Dateien", extensions: ["csv"] }],
-    properties: ["openFile"]
-  });
-  if (selected.canceled || !selected.filePaths[0]) return { canceled: true };
-  settings = saveSettings(app.getPath("userData"), { hwinfoLogPath: selected.filePaths[0] });
-  return { canceled: false, snapshot: await getHwinfoCsvSnapshot(settings.hwinfoLogPath) };
-});
-ipcMain.handle("get-hwinfo-sensor-data", (event) => {
-  requireTrustedWindow(event);
-  return getHwinfoCsvSnapshot(settings.hwinfoLogPath);
+  return hardwareMonitor.getSnapshot();
 });
 ipcMain.handle("get-top-processes", async (event) => {
   requireTrustedWindow(event);
