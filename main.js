@@ -48,6 +48,7 @@ const { listDrives } = require("./lib/drives");
 const fileSearch = require("./lib/file-search");
 const { loadNotes, addNote, updateNote, removeNote } = require("./lib/calendar-store");
 const { getNetStatus, getLiveConnections, getTrafficSample, getCpuMetrics, getMemMetrics, getSysMetrics, loadGlobeGrid, getHardwareInfo, getTopProcesses, getWeather } = require("./lib/net-info");
+const { scanHwinfoPrerequisites } = require("./lib/hwinfo-prerequisites");
 const fileOps = require("./lib/file-ops");
 const { PathPolicy } = require("./lib/path-policy");
 const { compareVersions, fetchLatestRelease } = require("./lib/update-checker");
@@ -2410,6 +2411,10 @@ ipcMain.handle("get-sys-metrics", (event) => {
 ipcMain.handle("get-hardware-info", async (event) => {
   requireTrustedWindow(event);
   return getHardwareInfo();
+});
+ipcMain.handle("scan-hwinfo-prerequisites", (event) => {
+  requireTrustedWindow(event);
+  return scanHwinfoPrerequisites();
 });
 ipcMain.handle("get-top-processes", async (event) => {
   requireTrustedWindow(event);

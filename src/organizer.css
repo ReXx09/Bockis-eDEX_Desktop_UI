@@ -23,7 +23,8 @@
     --rain-speed: 1;
     --search-font: 12px;
     /* 1rem = 1% of display height, then --ui-scale shrinks 4K to 2K density. */
-    --fs: 1.12rem;
+    --ui-base-fs: 1.12rem;
+    --fs: var(--ui-base-fs);
     --ctrl: 1.8rem;
     --fab: 2.05rem;
     --ui-control-scale: var(--ui-scale);
@@ -3030,6 +3031,7 @@ div.modal_popup input[type="color"],
 .hud-card .card-body,
 .path-card .card-body,
 .desktop-card .card-body {
+    --fs: calc(var(--ui-base-fs) * var(--panel-font-scale, 1));
     font-size: calc(1.05rem * var(--panel-font-scale, 1));
 }
 

@@ -47,3 +47,68 @@ div#mod_hardwareInspector_inner > div > * {
 div#mod_hardwareInspector_inner > div > h2 {
     opacity: 0.5;
 }
+
+div#mod_hardwareInspector_inner > .hwinfo-prereq {
+    align-items: center;
+    display: flex;
+    flex: 1 1 100%;
+    gap: 0.6rem;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    min-width: 0;
+}
+
+.hwinfo-prereq > div {
+    min-width: 0;
+}
+
+.hwinfo-prereq h1,
+.hwinfo-prereq p,
+.hwinfo-prereq small {
+    display: block;
+    font-size: 1.1vh !important;
+    line-height: 1.35;
+    margin: 0.15rem 0;
+}
+
+.hwinfo-prereq p {
+    opacity: 1 !important;
+}
+
+.hwinfo-prereq p[data-state="running"] {
+    color: #72e6a3;
+}
+
+.hwinfo-prereq p[data-state="installed"] {
+    color: rgb(var(--color_yellow));
+}
+
+.hwinfo-prereq p[data-state="not-found"],
+.hwinfo-prereq p[data-state="unsupported"],
+.hwinfo-prereq p[data-state="error"] {
+    color: rgb(var(--color_red));
+}
+
+.hwinfo-prereq small {
+    opacity: 0.65;
+}
+
+.hwinfo-prereq button {
+    background: transparent;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    cursor: pointer;
+    flex: 0 0 auto;
+    font: inherit;
+    font-size: 1.1vh;
+    padding: 0.25rem 0.5rem;
+}
+
+.hwinfo-prereq button:hover:not(:disabled) {
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.2);
+}
+
+.hwinfo-prereq button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}

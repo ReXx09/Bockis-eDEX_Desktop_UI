@@ -207,6 +207,7 @@ function bindDesktopIconClicks() {
   // Prefer native detail===2; also accept a timed second click (some overlay builds drop detail).
   document.addEventListener("click", (event) => {
     if (event.button !== 0) return;
+    if (window.edexDesktopLayout.isInteractiveClickTarget(event.target)) return;
     const icon = event.target?.closest?.(".desk-icon[data-path]") || deskIconAt(event.clientX, event.clientY);
     if (!icon) return;
     holdOverlayHits(1500);

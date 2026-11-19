@@ -669,6 +669,34 @@
     set("mod_hardwareInspector_chassis", info.chassis);
   }
 
+  async function refreshHwinfoPrerequisites() {
+    const status = document.getElementById("mod_hardwareInspector_hwinfo");
+    if (!status) return;
+    if (!window.edex?.scanHwinfoPrerequisites) {
+      status.dataset.state = "error";
+      status.textContent = "Voraussetzungen-Scan nicht verfügbar";
+      return;
+    }
+    status.dataset.state = "checking";
+    status.textContent = "Voraussetzungen werden geprüft …";
+    try {
+      const result = await window.edex.scanHwinfoPrerequisites();
+      const version = result.version ? ` · v${result.version}` : "";
+      const messages = {
+        running: `HWiNFO läuft${version}`,
+        installed: `HWiNFO gefunden, aber nicht gestartet${version}`,
+        "not-found": "HWiNFO wurde nicht gefunden",
+        unsupported: "HWiNFO-Anbindung benötigt Windows",
+        error: `Prüfung fehlgeschlagen: ${result.error || "unbekannter Fehler"}`
+      };
+      status.dataset.state = result.state || "error";
+      status.textContent = messages[result.state] || "Unbekannter Prüfstatus";
+    } catch (error) {
+      status.dataset.state = "error";
+      status.textContent = `Prüfung fehlgeschlagen: ${error.message || String(error)}`;
+    }
+  }
+
   async function refreshToplist() {
     const table = document.getElementById("mod_toplist_table");
     if (!table || !window.edex?.getTopProcesses) return;
@@ -736,6 +764,16 @@
         refreshMem();
       });
     });
+    document.querySelectorAll("[data-hwinfo-scan]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await refreshHwinfoPrerequisites();
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
     if (document.getElementById("mod_globe")) {
       globeInitTimer = setTimeout(() => initGlobe(), 400);
     }
@@ -761,7 +799,12 @@
     }
     if (document.getElementById("mod_hardwareInspector")) {
       refreshHardware();
-      hwTimer = setInterval(() => { if (pageActive()) refreshHardware(); }, 30000);
+      refreshHwinfoPrerequisites();
+      hwTimer = setInterval(() => {
+        if (!pageActive()) return;
+        refreshHardware();
+        refreshHwinfoPrerequisites();
+      }, 30000);
     }
     if (document.getElementById("mod_toplist_table")) {
       refreshToplist();

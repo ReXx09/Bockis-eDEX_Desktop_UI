@@ -147,6 +147,7 @@ contextBridge.exposeInMainWorld("edex", {
   getMemMetrics: () => ipcRenderer.invoke("get-mem-metrics"),
   getSysMetrics: () => ipcRenderer.invoke("get-sys-metrics"),
   getHardwareInfo: () => ipcRenderer.invoke("get-hardware-info"),
+  scanHwinfoPrerequisites: () => ipcRenderer.invoke("scan-hwinfo-prerequisites"),
   getTopProcesses: () => ipcRenderer.invoke("get-top-processes"),
   getBootDiagnostics: () => ipcRenderer.invoke("get-boot-diagnostics"),
   getWeather: (location) => ipcRenderer.invoke("get-weather", location),

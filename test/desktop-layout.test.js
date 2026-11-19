@@ -60,3 +60,30 @@ test("Do not shrink the task panel when no edge zone fits its saved size", () =>
 
   assert.equal(result, null);
 });
+
+test("Ignore desktop icon activation for clicks on modal and form controls", () => {
+  const context = {
+    document: {
+      getElementById: () => ({ clientWidth: 1000, clientHeight: 1000 })
+    },
+    window: {
+      edexRendererState: {
+        layout: {},
+        settings: {}
+      }
+    },
+    gridSize: () => 10,
+    workspaceRect: () => ({ width: 1000, height: 1000 }),
+    occupiedLayoutRects: () => []
+  };
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "renderer", "desktop-layout.js"), "utf8");
+  vm.runInNewContext(source, context);
+
+  const interactiveTarget = {
+    closest: (selector) => selector.includes(".modal_popup") ? {} : null
+  };
+  const desktopTarget = { closest: () => null };
+
+  assert.equal(context.window.edexDesktopLayout.isInteractiveClickTarget(interactiveTarget), true);
+  assert.equal(context.window.edexDesktopLayout.isInteractiveClickTarget(desktopTarget), false);
+});

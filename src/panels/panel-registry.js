@@ -74,6 +74,14 @@ function panelBody(id) {
               <h1>CHASSIS</h1>
               <h2 id="mod_hardwareInspector_chassis">NONE</h2>
             </div>
+            <section class="hwinfo-prereq">
+              <div>
+                <h1>HWiNFO SENSOR CONNECTOR</h1>
+                <p id="mod_hardwareInspector_hwinfo" data-state="checking" role="status">Voraussetzungen werden geprüft …</p>
+                <small>Live-Sensorzugriff noch nicht eingerichtet.</small>
+              </div>
+              <button type="button" data-hwinfo-scan>Prüfen</button>
+            </section>
           </div>
         </div>`;
     case "toplist":

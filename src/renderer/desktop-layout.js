@@ -5,6 +5,12 @@
     return gridSize();
   }
 
+  function isInteractiveClickTarget(target) {
+    return Boolean(target?.closest?.(
+      ".modal_popup, button, input, select, textarea, a, [contenteditable='true'], [role='dialog']"
+    ));
+  }
+
   function alignGrid(value) {
     const g = gridSize();
     return Math.round(value / g) * g;
@@ -790,6 +796,7 @@
     panelZoneRect,
     constrainPanelPosition,
     findPanelZonePosition,
+    isInteractiveClickTarget,
     repositionPanelInZone,
     clampPanelToZone,
     syncDesktopChrome,
