@@ -16,6 +16,7 @@
   let memTimer = null;
   let sysTimer = null;
   let hwTimer = null;
+  let hwinfoSensorTimer = null;
   let topTimer = null;
   let topSort = "cpu";
   let trafficHistory = { up: [], down: [] };
@@ -697,6 +698,55 @@
     }
   }
 
+  async function refreshHwinfoSensors() {
+    const status = document.getElementById("mod_hardwareInspector_csv");
+    const list = document.getElementById("mod_hardwareInspector_sensors");
+    if (!status || !list) return;
+    if (!window.edex?.getHwinfoSensorData) {
+      status.dataset.state = "error";
+      status.textContent = "HWiNFO-CSV-Leser nicht verfügbar";
+      list.replaceChildren();
+      return;
+    }
+
+    status.dataset.state = "checking";
+    status.textContent = "Sensorprotokoll wird gelesen …";
+    try {
+      const result = await window.edex.getHwinfoSensorData();
+      const messages = {
+        "not-configured": "Kein Sensor-CSV ausgewählt.",
+        missing: "CSV-Datei nicht gefunden. Bitte erneut auswählen.",
+        invalid: `Kein gültiges HWiNFO-CSV: ${result.error || "Format nicht erkannt"}`,
+        waiting: `Warte auf Sensorwerte${result.sampleAt ? ` · ${result.sampleAt}` : ""}`,
+        error: `CSV konnte nicht gelesen werden: ${result.error || "unbekannter Fehler"}`
+      };
+      status.dataset.state = result.state || "error";
+      status.textContent = result.state === "ready"
+        ? `${result.fileName || "HWiNFO-CSV"} · ${result.sampleAt || "letzter Messwert"}`
+        : messages[result.state] || "Unbekannter CSV-Status";
+      list.replaceChildren();
+      if (result.state !== "ready") return;
+      (result.sensors || []).slice(0, 6).forEach((sensor) => {
+        const row = document.createElement("div");
+        row.className = "hwinfo-sensor-reading";
+        const label = document.createElement("span");
+        label.textContent = sensor.name || "Sensor";
+        const value = document.createElement("span");
+        const number = Number(sensor.value);
+        const displayValue = Number.isFinite(number)
+          ? number.toLocaleString(undefined, { maximumFractionDigits: 2 })
+          : String(sensor.value ?? "");
+        value.textContent = `${displayValue}${sensor.unit ? ` ${sensor.unit}` : ""}`;
+        row.append(label, value);
+        list.append(row);
+      });
+    } catch (error) {
+      status.dataset.state = "error";
+      status.textContent = `CSV konnte nicht gelesen werden: ${error.message || String(error)}`;
+      list.replaceChildren();
+    }
+  }
+
   async function refreshToplist() {
     const table = document.getElementById("mod_toplist_table");
     if (!table || !window.edex?.getTopProcesses) return;
@@ -774,6 +824,23 @@
         }
       });
     });
+    document.querySelectorAll("[data-hwinfo-log-pick]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const result = await window.edex?.pickHwinfoCsv?.();
+          if (!result?.canceled) await refreshHwinfoSensors();
+        } catch (error) {
+          const status = document.getElementById("mod_hardwareInspector_csv");
+          if (status) {
+            status.dataset.state = "error";
+            status.textContent = `CSV-Auswahl fehlgeschlagen: ${error.message || String(error)}`;
+          }
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
     if (document.getElementById("mod_globe")) {
       globeInitTimer = setTimeout(() => initGlobe(), 400);
     }
@@ -800,11 +867,15 @@
     if (document.getElementById("mod_hardwareInspector")) {
       refreshHardware();
       refreshHwinfoPrerequisites();
+      refreshHwinfoSensors();
       hwTimer = setInterval(() => {
         if (!pageActive()) return;
         refreshHardware();
         refreshHwinfoPrerequisites();
       }, 30000);
+      hwinfoSensorTimer = setInterval(() => {
+        if (pageActive()) refreshHwinfoSensors();
+      }, 2000);
     }
     if (document.getElementById("mod_toplist_table")) {
       refreshToplist();
@@ -938,8 +1009,9 @@
     if (memTimer) clearInterval(memTimer);
     if (sysTimer) clearInterval(sysTimer);
     if (hwTimer) clearInterval(hwTimer);
+    if (hwinfoSensorTimer) clearInterval(hwinfoSensorTimer);
     if (topTimer) clearInterval(topTimer);
-    netTimer = trafficTimer = cpuTimer = memTimer = sysTimer = hwTimer = topTimer = null;
+    netTimer = trafficTimer = cpuTimer = memTimer = sysTimer = hwTimer = hwinfoSensorTimer = topTimer = null;
     stopRain();
     stopGlobe();
   }

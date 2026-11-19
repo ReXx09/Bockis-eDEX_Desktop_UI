@@ -78,9 +78,16 @@ function panelBody(id) {
               <div>
                 <h1>HWiNFO SENSOR CONNECTOR</h1>
                 <p id="mod_hardwareInspector_hwinfo" data-state="checking" role="status">Voraussetzungen werden geprüft …</p>
-                <small>Live-Sensorzugriff noch nicht eingerichtet.</small>
+                <small>Für Livewerte HWiNFO-Sensor-Logging als CSV aktivieren.</small>
               </div>
-              <button type="button" data-hwinfo-scan>Prüfen</button>
+              <div class="hwinfo-prereq-actions">
+                <button type="button" data-hwinfo-scan>Prüfen</button>
+                <button type="button" data-hwinfo-log-pick>CSV wählen</button>
+              </div>
+            </section>
+            <section class="hwinfo-log">
+              <p id="mod_hardwareInspector_csv" data-state="not-configured" role="status">Kein Sensor-CSV ausgewählt.</p>
+              <div id="mod_hardwareInspector_sensors" aria-live="polite"></div>
             </section>
           </div>
         </div>`;

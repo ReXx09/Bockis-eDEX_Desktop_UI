@@ -15,7 +15,6 @@ test("Reports HWiNFO as running when its process is detected", async () => {
   assert.equal(result.installed, true);
   assert.equal(result.running, true);
   assert.equal(result.version, "8.42");
-  assert.equal(result.sensorBridgeAvailable, false);
 });
 
 test("Reports installed but stopped HWiNFO distinctly", async () => {

@@ -62,6 +62,12 @@ div#mod_hardwareInspector_inner > .hwinfo-prereq {
     min-width: 0;
 }
 
+.hwinfo-prereq-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.3rem;
+}
+
 .hwinfo-prereq h1,
 .hwinfo-prereq p,
 .hwinfo-prereq small {
@@ -111,4 +117,48 @@ div#mod_hardwareInspector_inner > .hwinfo-prereq {
 .hwinfo-prereq button:disabled {
     cursor: wait;
     opacity: 0.6;
+}
+
+.hwinfo-log {
+    border-top: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.2);
+    flex: 1 1 100%;
+    min-width: 0;
+    padding-top: 0.35rem;
+}
+
+.hwinfo-log > p {
+    font-size: 1.05vh;
+    margin: 0 0 0.25rem;
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hwinfo-log > p[data-state="error"],
+.hwinfo-log > p[data-state="invalid"],
+.hwinfo-log > p[data-state="missing"] {
+    color: rgb(var(--color_red));
+    opacity: 1;
+}
+
+.hwinfo-sensor-reading {
+    display: flex;
+    font-size: 1.05vh;
+    gap: 0.6rem;
+    justify-content: space-between;
+    line-height: 1.3;
+    min-width: 0;
+}
+
+.hwinfo-sensor-reading span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hwinfo-sensor-reading span:last-child {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
 }

@@ -49,6 +49,7 @@ const fileSearch = require("./lib/file-search");
 const { loadNotes, addNote, updateNote, removeNote } = require("./lib/calendar-store");
 const { getNetStatus, getLiveConnections, getTrafficSample, getCpuMetrics, getMemMetrics, getSysMetrics, loadGlobeGrid, getHardwareInfo, getTopProcesses, getWeather } = require("./lib/net-info");
 const { scanHwinfoPrerequisites } = require("./lib/hwinfo-prerequisites");
+const { getHwinfoCsvSnapshot } = require("./lib/hwinfo-csv");
 const fileOps = require("./lib/file-ops");
 const { PathPolicy } = require("./lib/path-policy");
 const { compareVersions, fetchLatestRelease } = require("./lib/update-checker");
@@ -2415,6 +2416,23 @@ ipcMain.handle("get-hardware-info", async (event) => {
 ipcMain.handle("scan-hwinfo-prerequisites", (event) => {
   requireTrustedWindow(event);
   return scanHwinfoPrerequisites();
+});
+ipcMain.handle("pick-hwinfo-csv", async (event) => {
+  requireTrustedWindow(event);
+  const win = getSenderWindow(event);
+  const selected = await dialog.showOpenDialog(win, {
+    title: "HWiNFO-Sensorprotokoll auswählen",
+    defaultPath: settings.hwinfoLogPath || app.getPath("documents"),
+    filters: [{ name: "CSV-Dateien", extensions: ["csv"] }],
+    properties: ["openFile"]
+  });
+  if (selected.canceled || !selected.filePaths[0]) return { canceled: true };
+  settings = saveSettings(app.getPath("userData"), { hwinfoLogPath: selected.filePaths[0] });
+  return { canceled: false, snapshot: await getHwinfoCsvSnapshot(settings.hwinfoLogPath) };
+});
+ipcMain.handle("get-hwinfo-sensor-data", (event) => {
+  requireTrustedWindow(event);
+  return getHwinfoCsvSnapshot(settings.hwinfoLogPath);
 });
 ipcMain.handle("get-top-processes", async (event) => {
   requireTrustedWindow(event);

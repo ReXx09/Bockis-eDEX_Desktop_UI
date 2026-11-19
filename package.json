@@ -12,7 +12,7 @@
     "url": "https://github.com/ReXx09/Bockis-eDEX_Desktop_UI.git"
   },
   "scripts": {
-    "test": "node --test test/organizer.test.js test/i18n.test.js test/theme-studio.test.js test/update-checker.test.js test/desktop-layout.test.js test/settings-store.test.js test/ssh-path.test.js test/cpu-live-metrics.test.js test/hwinfo-prerequisites.test.js",
+    "test": "node --test test/organizer.test.js test/i18n.test.js test/theme-studio.test.js test/update-checker.test.js test/desktop-layout.test.js test/settings-store.test.js test/ssh-path.test.js test/cpu-live-metrics.test.js test/hwinfo-prerequisites.test.js test/hwinfo-csv.test.js",
     "prepare-assets": "node scripts/prepare-assets.js",
     "prepare-rainmeter": "node scripts/prepare-rainmeter.js",
     "prestart": "node scripts/prepare-assets.js",
