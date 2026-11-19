@@ -72,6 +72,18 @@ const PANEL_META = {
   taskdock: { title: "Task-Panel", box: { x: 25, y: 86, w: 50, h: 7, zone: "edge" } }
 };
 
+const WEATHER_LOCATION_PRESETS = [
+  "Berlin",
+  "Hamburg",
+  "München",
+  "Köln",
+  "Frankfurt am Main",
+  "Stuttgart",
+  "Traunreut",
+  "Wien",
+  "Zürich"
+];
+
 let MACOS_TAGS = [];
 
 const fileStageCtx = window.edexFileStageCtx;
@@ -2712,6 +2724,11 @@ function openPanelSetup(el) {
         <option value="large">Groß</option>
       </select></td></tr>
       <tr><td>Beschriftungen</td><td><input id="panel-taskdock-show-labels" type="checkbox"> Namen unter den Icons anzeigen</td></tr>`
+        : id === "weather"
+          ? `<tr><td>Wetter-Standort</td><td><select id="panel-weather-location">
+        ${WEATHER_LOCATION_PRESETS.map((location) => `<option value="${escapeHtml(location)}">${escapeHtml(location)}</option>`).join("")}
+        <option value="__custom__">Benutzerdefiniert</option>
+      </select><input id="panel-weather-location-custom" type="text" maxlength="128" placeholder="Ort, Stadt oder Region" hidden></td></tr>`
         : `<tr><td>Panel-Einstellungen</td><td>Für dieses Panel sind derzeit keine individuellen Optionen vorhanden.</td></tr>`;
   const panelFontScale = id === "desktop"
     ? state.desktopFontScale || state.settings.desktopFontScale || 1
@@ -2766,6 +2783,20 @@ function openPanelSetup(el) {
   if (taskDockMaxWidth) taskDockMaxWidth.value = String(state.settings.taskDockMaxWidth || 90);
   if (taskDockTileSize) taskDockTileSize.value = state.settings.taskDockTileSize || "standard";
   if (taskDockShowLabels) taskDockShowLabels.checked = state.settings.taskDockShowLabels !== false;
+  const weatherLocationSelect = modal.querySelector("#panel-weather-location");
+  const weatherLocationCustom = modal.querySelector("#panel-weather-location-custom");
+  const configuredWeatherLocation = String(state.settings.weatherLocation || "Berlin").trim() || "Berlin";
+  const weatherLocationIsPreset = WEATHER_LOCATION_PRESETS.includes(configuredWeatherLocation);
+  if (weatherLocationSelect) weatherLocationSelect.value = weatherLocationIsPreset ? configuredWeatherLocation : "__custom__";
+  if (weatherLocationCustom) weatherLocationCustom.value = weatherLocationIsPreset ? "" : configuredWeatherLocation;
+  const updateWeatherLocationControls = () => {
+    if (!weatherLocationCustom) return;
+    const custom = weatherLocationSelect?.value === "__custom__";
+    weatherLocationCustom.hidden = !custom;
+    weatherLocationCustom.disabled = !custom;
+  };
+  weatherLocationSelect?.addEventListener("change", updateWeatherLocationControls);
+  updateWeatherLocationControls();
   const pathIconScale = modal.querySelector("#panel-path-icon-scale");
   const pathFontScale = modal.querySelector("#panel-path-font-scale");
   if (pathIconScale) pathIconScale.value = String(pathCard?.fileIconScale || state.settings.pathIconScale || 1);
@@ -2792,6 +2823,16 @@ function openPanelSetup(el) {
   modal.querySelector("#panel-setup-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#panel-setup-save")?.addEventListener("click", async () => {
     const patch = {};
+    let weatherLocation = "";
+    if (id === "weather") {
+      weatherLocation = weatherLocationSelect?.value === "__custom__"
+        ? weatherLocationCustom?.value.trim() || ""
+        : weatherLocationSelect?.value || "";
+      if (!weatherLocation) {
+        toast("Bitte einen Wetter-Standort auswählen oder eingeben.");
+        return;
+      }
+    }
     const panelName = panelNameInput?.value.trim().replace(/\s+/g, " ") || "";
     const previousPanelName = panelDisplayTitle(id);
     const defaultPanelName = PANEL_META[id]?.title || id;
@@ -2892,6 +2933,8 @@ function openPanelSetup(el) {
         ? taskDockTileSize.value
         : "standard";
       patch.taskDockShowLabels = Boolean(taskDockShowLabels?.checked);
+    } else if (id === "weather") {
+      patch.weatherLocation = weatherLocation.slice(0, 128);
     } else if (id === "desktop") {
       state.iconView = desktopView?.value === "list" ? "list" : "grid";
       state.desktopFilter = desktopFilter?.value || "all";
@@ -3590,13 +3633,14 @@ function bindWeatherPanel() {
   const root = document.querySelector(".weather-root");
   if (!root || !window.edex?.getWeather) return;
   const locationInput = root.querySelector("[data-weather-location]");
+  if (locationInput) locationInput.value = String(state.settings.weatherLocation || locationInput.value || "Berlin");
   const status = root.querySelector("[data-weather-status]");
   const current = root.querySelector("[data-weather-current]");
   const days = root.querySelector("[data-weather-days]");
   let request = 0;
   const load = async () => {
     const token = ++request;
-    const location = locationInput?.value?.trim() || "Berlin";
+    const location = locationInput?.value?.trim() || state.settings.weatherLocation || "Berlin";
     const locale = window.edexI18n?.locale?.() || "de";
     const text = locale === "en"
       ? { loading: "Loading weather …", updated: "updated", unavailable: "Weather unavailable", search: "Search location …", refresh: "Refresh weather", felt: "Feels like", wind: "Wind" }
@@ -3631,9 +3675,18 @@ function bindWeatherPanel() {
       days.innerHTML = "";
     }
   };
-  locationInput?.addEventListener("keydown", (event) => {
+  locationInput?.addEventListener("keydown", async (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
+      const location = locationInput.value.trim();
+      if (location) {
+        try {
+          const result = await window.edex.saveSettings({ weatherLocation: location.slice(0, 128) });
+          state.settings = result?.settings || { ...state.settings, weatherLocation: location.slice(0, 128) };
+        } catch (error) {
+          toast(error?.message || "Wetter-Standort konnte nicht gespeichert werden");
+        }
+      }
       load();
     }
   });
@@ -5921,8 +5974,8 @@ function requestPresetName(parent) {
   });
 }
 
-function presetSettingsSnapshot() {
-  const snapshot = { ...state.settings };
+function presetSettingsSnapshot(settings = state.settings) {
+  const snapshot = { ...settings };
   delete snapshot.displayLayouts;
   delete snapshot.presets;
   return snapshot;
@@ -6614,6 +6667,11 @@ function openSettings(focusPanel = "") {
     };
     if (!state.primary) delete settingsPatch.dockEnabled;
     snapAllLayoutToGrid();
+    const startupPresetName = String(settingsPatch.startupPreset || "").trim();
+    const startupPreset = (state.settings.presets || []).find((preset) => preset.name === startupPresetName);
+    if (startupPreset) {
+      settingsPatch.refreshStartupPreset = startupPresetName;
+    }
     const result = await window.edex.saveSettings({
       ...settingsPatch,
       displayLayout: { ...currentDisplayLayout(), uiScale: state.displayUiScale }
@@ -6630,7 +6688,9 @@ function openSettings(focusPanel = "") {
     applyClockMetrics();
     applyRainMetrics();
     closeSettings();
-    toast("Einstellungen und Desktop-Layout gespeichert");
+    toast(startupPreset
+      ? `Einstellungen, Desktop-Layout und Start-Preset „${startupPresetName}“ gespeichert`
+      : "Einstellungen und Desktop-Layout gespeichert");
     rebuildWorkspace();
   };
 }

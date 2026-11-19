@@ -15,7 +15,7 @@
     background:
         linear-gradient(rgba(var(--color_r), var(--color_g), var(--color_b), 0.035) 1px, transparent 1px),
         linear-gradient(90deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.025) 1px, transparent 1px),
-        rgba(1, 8, 11, 0.96);
+        transparent;
     background-size: 0.8rem 0.8rem;
 }
 
@@ -68,7 +68,7 @@
     text-align: center;
     padding: 0.4rem;
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.035);
 }
 
 .weather-current-day {
@@ -86,7 +86,7 @@
 }
 
 .weather-icon {
-    color: #ffd23c;
+    color: var(--color_yellow);
     font-size: 1.7rem;
     line-height: 1;
 }
@@ -98,7 +98,7 @@
 
 .weather-condition {
     margin-top: 0.2rem;
-    color: #00f6ff;
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
     font-size: 0.72em;
 }
 
@@ -133,7 +133,7 @@
 }
 
 .weather-day b {
-    color: #ffd23c;
+    color: var(--color_yellow);
     font-size: 1.4em;
     font-weight: 400;
 }

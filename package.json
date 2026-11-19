@@ -1,9 +1,9 @@
 {
   "name": "bockis-edex-desktop-ui",
   "productName": "Bockis-eDEX Desktop UI",
-  "version": "1.2.7+2",
-  "displayVersion": "1.2.7.2",
-  "shortVersionWindows": "1.2.7.2",
+  "version": "1.2.7+3",
+  "displayVersion": "1.2.7.3",
+  "shortVersionWindows": "1.2.7.3",
   "description": "Desktop UI using the eDEX-UI sci-fi HUD layout",
   "main": "main.js",
   "author": "bananamax9113",
@@ -30,7 +30,7 @@
     "electron-builder": "^26.15.3"
   },
   "build": {
-    "buildVersion": "1.2.7.2",
+    "buildVersion": "1.2.7.3",
     "appId": "com.bockis.edex-desktop-ui",
     "productName": "Bockis-eDEX Desktop UI",
     "copyright": "Copyright © Bockis-eDEX Desktop UI",

@@ -19,7 +19,7 @@ for (const stream of [process.stdout, process.stderr]) {
 
 const { scanRoot, listFolder, importFiles, buildPlan, executePlan, undoLast } = require("./lib/organizer");
 const { dirIcon } = require("./lib/icons");
-const { loadSettings, saveSettings } = require("./lib/settings-store");
+const { loadSettings, refreshPresetForSave, saveSettings } = require("./lib/settings-store");
 const { WALLPAPERS, listThemes, loadTheme, resolveThemeName, themesDir, configureThemeStore } = require("./lib/themes");
 const { createStore: createThemeStudioStore } = require("./lib/theme-studio-store");
 const {
@@ -984,6 +984,8 @@ ipcMain.handle("save-settings", (event, patch) => {
   const globalPatch = { ...patch };
   delete globalPatch.displayLayout;
   delete globalPatch.displayLayoutPatch;
+  const refreshStartupPresetName = String(globalPatch.refreshStartupPreset || "").trim();
+  delete globalPatch.refreshStartupPreset;
   if (Object.prototype.hasOwnProperty.call(globalPatch, "theme")) {
     globalPatch.theme = resolveThemeName(globalPatch.theme);
   }
@@ -991,6 +993,9 @@ ipcMain.handle("save-settings", (event, patch) => {
     const startWithWindows = process.platform === "win32" && globalPatch.startWithWindows === true;
     if (process.platform === "win32") app.setLoginItemSettings(loginItemOptions(startWithWindows));
     globalPatch.startWithWindows = startWithWindows;
+  }
+  if (refreshStartupPresetName) {
+    globalPatch.presets = refreshPresetForSave(settings, refreshStartupPresetName, globalPatch, displayId);
   }
   if (Object.keys(globalPatch).length) {
     settings = saveSettings(app.getPath("userData"), globalPatch);
