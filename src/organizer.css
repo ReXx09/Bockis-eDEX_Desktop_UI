@@ -2499,10 +2499,6 @@ div.modal_popup > h1,
     margin: 0;
 }
 
-.path-card .card-actions {
-    display: none;
-}
-
 .modal_popup,
 div.modal_popup {
     position: fixed !important;
