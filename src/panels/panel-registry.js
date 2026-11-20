@@ -90,20 +90,7 @@ function panelBody(id) {
           </div>
         </div>`;
     case "hwinfo":
-      return `
-        <div class="hwinfo-panel" data-hardware-panel>
-          <div class="hwinfo-panel-heading">
-            <h1>HARDWARE SENSOR TELEMETRY</h1>
-            <p data-hardware-status data-state="checking" role="status">Voraussetzungen werden geprüft …</p>
-          </div>
-          <small class="hwinfo-panel-hint">Livewerte über LibreHardwareMonitor · PawnIO-Treiber erforderlich.</small>
-          <div class="hwinfo-prereq-actions">
-            <button type="button" data-hardware-scan>Prüfen</button>
-          </div>
-          <section class="hwinfo-log">
-            <div data-hardware-sensors aria-live="polite"></div>
-          </section>
-        </div>`;
+      return window.edexHardwareDashboard.markup();
     case "toplist":
       return `
         <div id="mod_toplist">

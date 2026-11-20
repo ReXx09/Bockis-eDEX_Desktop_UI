@@ -472,7 +472,7 @@
     const workspace = document.getElementById("workspace");
     return {
       width: workspace?.clientWidth || window.innerWidth,
-      height: workspace?.clientHeight || Math.floor(window.innerHeight * 0.86)
+      height: workspace?.clientHeight || window.innerHeight
     };
   }
 

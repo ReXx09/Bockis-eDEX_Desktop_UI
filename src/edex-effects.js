@@ -673,12 +673,17 @@
   async function refreshHardwareSensors(scanPrerequisites = false) {
     const statuses = [...document.querySelectorAll("[data-hardware-status]")];
     const lists = [...document.querySelectorAll("[data-hardware-sensors]")];
+    const dashboards = [...document.querySelectorAll("[data-hardware-panel]")];
     if (!statuses.length) return;
     const setStatus = (state, text) => statuses.forEach((status) => {
       status.dataset.state = state;
       status.textContent = text;
     });
-    const clearLists = () => lists.forEach((list) => list.replaceChildren());
+    const renderDashboards = (snapshot) => dashboards.forEach((root) => window.edexHardwareDashboard.render(root, snapshot));
+    const clearLists = () => {
+      lists.forEach((list) => list.replaceChildren());
+      renderDashboards({ state: "error", sensors: [] });
+    };
     const readSensors = scanPrerequisites
       ? window.edex?.scanHardwarePrerequisites
       : window.edex?.getHardwareSensorData;
@@ -688,7 +693,7 @@
       return;
     }
 
-    setStatus("checking", "Hardware-Sensoren werden geprüft …");
+    if (scanPrerequisites) setStatus("checking", "Hardware-Sensoren werden geprüft …");
     try {
       const result = await readSensors();
       const version = result.pawnIoVersion ? ` v${result.pawnIoVersion}` : "";
@@ -706,7 +711,8 @@
       if (result.state === "missing-driver" && result.error) statusText += ` · ${result.error}`;
       if (result.state === "ready" && result.error) statusText += ` · Teilzugriff: ${result.error}`;
       setStatus(result.state || "error", statusText);
-      clearLists();
+      lists.forEach((list) => list.replaceChildren());
+      renderDashboards(result);
       if (result.state !== "ready") return;
       const sensors = selectHardwareSensors(result.sensors || [], 6);
       lists.forEach((list) => sensors.forEach((sensor) => {

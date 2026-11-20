@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.7.6] - 2026-11-19
+
+### Added
+
+- Theme-aware hardware dashboard with CPU/GPU gauges, RAM/VRAM, drive capacities, network throughput and fan readings; unavailable sensors remain explicit.
+
+### Fixed
+
+- Use the full workspace height during startup so saved bottom task-panel positions are not moved to the top.
+
 ## [1.2.7.5] - 2026-11-19
 
 ### Added

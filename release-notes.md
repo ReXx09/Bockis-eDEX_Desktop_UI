@@ -1,9 +1,16 @@
-# Bockis-eDEX Desktop UI v1.2.7.5
+# Bockis-eDEX Desktop UI v1.2.7.6
 
 ## Überblick
 
-Der Patchstand 1.2.7.5 ergänzt Live-Hardware-Sensoren über LibreHardwareMonitor
-und PawnIO. Der Installer prüft, ob PawnIO vorhanden ist, und bietet bei Bedarf
+Der Patchstand 1.2.7.6 ergänzt das theme-konforme Hardware-Dashboard mit
+CPU/GPU-Rundanzeigen, RAM/VRAM, Laufwerksbelegung, Netzwerk und Lüftern.
+Kleine Panels wechseln automatisch in eine gestapelte Ansicht; fehlende Werte
+werden als nicht verfügbar angezeigt. Die Startprüfung verwendet jetzt die
+volle Arbeitsfläche, damit unten gespeicherte Task-Panels nicht nach oben
+verschoben werden.
+
+Die Sensoranbindung aus 1.2.7.5 über LibreHardwareMonitor und PawnIO bleibt
+enthalten. Der Installer prüft, ob PawnIO vorhanden ist, und bietet bei Bedarf
 die offizielle Downloadseite an; der Treiber wird nicht automatisch installiert.
 
 Version 1.2.7 erweitert Bockis-eDEX Desktop UI um eine interaktivere

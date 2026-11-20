@@ -144,80 +144,270 @@ div#mod_hardwareInspector_inner > .hwinfo-prereq {
 }
 
 .hwinfo-panel {
+    --hardware-accent: rgb(var(--color_r), var(--color_g), var(--color_b));
+    --hardware-line: rgba(var(--color_r), var(--color_g), var(--color_b), 0.55);
+    --hardware-track: rgba(var(--color_r), var(--color_g), var(--color_b), 0.16);
     box-sizing: border-box;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: var(--panel-text, var(--hardware-accent));
+    container: hardware-panel / inline-size;
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
+    gap: 0.5em;
     height: 100%;
     min-height: 0;
     overflow: auto;
-    padding: 0.35rem;
+    padding: 0.35em;
     width: 100%;
 }
 
-.hwinfo-panel-heading h1,
-.hwinfo-panel-heading p,
+.hwinfo-panel *,
+.hwinfo-panel *::before,
+.hwinfo-panel *::after {
+    box-sizing: border-box;
+}
+
+.hardware-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6em;
+    border: 1px solid var(--hardware-line);
+    padding: 0.5em;
+    font-size: 0.85em;
+}
+
+.hardware-toolbar time {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--hardware-accent);
+}
+
+.hwinfo-panel [data-hardware-status],
 .hwinfo-panel-hint {
-    display: block;
-    font-size: 0.78em;
-    line-height: 1.4;
     margin: 0;
+    font-size: 0.75em;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
-.hwinfo-panel-heading h1 {
-    border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
-    font-size: 0.9em;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.25rem;
-    padding-bottom: 0.25rem;
-}
-
-.hwinfo-panel-heading p {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.hwinfo-panel-heading p[data-state="ready"] {
-    color: #72e6a3;
-}
-
-.hwinfo-panel-heading p[data-state="missing-driver"],
-.hwinfo-panel-heading p[data-state="unsupported"],
-.hwinfo-panel-heading p[data-state="error"] {
+.hwinfo-panel [data-hardware-status][data-state="missing-driver"],
+.hwinfo-panel [data-hardware-status][data-state="unsupported"],
+.hwinfo-panel [data-hardware-status][data-state="error"] {
     color: var(--color_red);
 }
 
 .hwinfo-panel-hint {
-    opacity: 0.65;
+    opacity: 0.8;
 }
 
-.hwinfo-panel .hwinfo-prereq-actions {
-    flex-wrap: wrap;
-}
-
-.hwinfo-panel .hwinfo-prereq-actions button {
+.hardware-toolbar button,
+.hardware-tile select {
     background: transparent;
-    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    border: 1px solid var(--hardware-line);
+    color: inherit;
     cursor: pointer;
     font: inherit;
-    font-size: 0.72em;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25em 0.5em;
+    min-width: 0;
 }
 
-.hwinfo-panel .hwinfo-prereq-actions button:hover:not(:disabled) {
-    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.2);
+.hardware-toolbar button:hover:not(:disabled),
+.hardware-toolbar button:focus-visible {
+    background: var(--hardware-track);
+    color: inherit;
 }
 
-.hwinfo-panel .hwinfo-log {
-    flex: 1 1 auto;
-    overflow: auto;
+.hardware-toolbar button:disabled {
+    cursor: wait;
+    opacity: 0.6;
 }
 
-.hwinfo-panel .hwinfo-sensor-reading {
+.hardware-dashboard {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-areas:
+        "cpu cpu cpu gpu gpu gpu"
+        "ram ram storage storage vram vram"
+        "network network storage storage fans fans";
+    gap: 0.6em;
+}
+
+.hardware-cpu { grid-area: cpu; }
+.hardware-gpu { grid-area: gpu; }
+.hardware-ram { grid-area: ram; }
+.hardware-vram { grid-area: vram; }
+.hardware-storage { grid-area: storage; }
+.hardware-network { grid-area: network; }
+.hardware-fans { grid-area: fans; }
+
+.hardware-tile {
+    min-width: 0;
+    border: 1px solid var(--hardware-line);
+    background: var(--hardware-track);
+    padding: 0.65em;
+}
+
+.hardware-tile header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.4em 0.8em;
+    margin-bottom: 0.6em;
+    min-width: 0;
+}
+
+.hardware-tile h2,
+.hardware-tile h3,
+.hardware-tile p {
+    margin: 0;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.hardware-tile h2 {
+    font-size: 1em;
+    font-weight: bold;
+}
+
+.hardware-tile h3 {
     font-size: 0.78em;
-    gap: 0.4rem;
-    padding: 0.18rem 0;
+    font-weight: normal;
+    margin: 0.6em 0 0.3em;
+}
+
+.hardware-tile header > span,
+.hardware-tile select {
+    flex: 1;
+    font-size: 0.75em;
+    overflow-wrap: anywhere;
+}
+
+.hardware-tile select option {
+    background: var(--panel-surface, var(--color_light_black));
+    color: var(--panel-text, var(--hardware-accent));
+}
+
+.hardware-processor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 0.55em;
+    align-items: center;
+}
+
+.hardware-gauge {
+    min-width: 0;
+    text-align: center;
+}
+
+.hardware-gauge svg {
+    display: block;
+    width: 100%;
+    max-width: 9em;
+    margin: auto;
+    overflow: visible;
+}
+
+.hardware-gauge path {
+    fill: none;
+    stroke-width: 13;
+}
+
+.hardware-gauge-track { stroke: var(--hardware-track); }
+.hardware-gauge-fill { stroke: var(--hardware-accent); }
+
+.hardware-gauge text {
+    fill: currentColor;
+    font: bold 20px var(--font_main, sans-serif);
+    text-anchor: middle;
+}
+
+.hardware-gauge > span,
+.hardware-gauge small {
+    display: block;
+    font-size: 0.7em;
+    overflow-wrap: anywhere;
+}
+
+.hardware-metrics,
+.hardware-network-device {
+    display: grid;
+    gap: 0.5em;
+    min-width: 0;
+}
+
+.hardware-metric {
+    min-width: 0;
+    margin-bottom: 0.4em;
+}
+
+.hardware-metric > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.15em 0.5em;
+    font-size: 0.72em;
+    margin-bottom: 0.2em;
+    overflow-wrap: anywhere;
+}
+
+.hardware-metric strong {
+    font-weight: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+.hardware-bar {
+    height: 0.6em;
+    background: var(--hardware-track);
+    overflow: hidden;
+}
+
+.hardware-bar i {
+    display: block;
+    height: 100%;
+    background: var(--hardware-accent);
+}
+
+.hardware-memory {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 0.4em;
+    align-items: center;
+}
+
+.hardware-memory p {
+    font-size: 0.75em;
+    margin: 0.45em 0;
+}
+
+.hardware-memory strong { font-weight: normal; }
+
+.hardware-drive {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.5em;
+    margin-bottom: 0.65em;
+}
+
+.hardware-drive > span { font-size: 0.78em; }
+.hardware-drive small { display: block; font-size: 0.68em; overflow-wrap: anywhere; }
+.hardware-storage-temp { display: flex; justify-content: space-between; gap: 0.5em; font-size: 0.72em; }
+.hardware-storage-temp strong { flex-shrink: 0; font-weight: normal; }
+
+@container hardware-panel (max-width: 52em) {
+    .hardware-dashboard {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas: "cpu gpu" "ram vram" "storage storage" "network fans";
+    }
+    .hardware-processor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hardware-metrics { grid-column: 1 / -1; grid-row: 2; }
+}
+
+@container hardware-panel (max-width: 30em) {
+    .hardware-dashboard {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "cpu" "gpu" "ram" "vram" "storage" "network" "fans";
+    }
 }

@@ -71,7 +71,8 @@ internal static class Program
                     pawnIo.Version,
                     DateTimeOffset.UtcNow,
                     sensors,
-                    MergeErrors(pawnIo.Error, visitor.Errors)));
+                    MergeErrors(pawnIo.Error, visitor.Errors),
+                    ReadDrives()));
             }
             catch (Exception error)
             {
@@ -83,7 +84,8 @@ internal static class Program
                     pawnIo.Version,
                     DateTimeOffset.UtcNow,
                     [],
-                    MergeErrors(pawnIo.Error, [error.Message])));
+                    MergeErrors(pawnIo.Error, [error.Message]),
+                    []));
             }
         }
 
@@ -100,13 +102,14 @@ internal static class Program
         var sensors = new List<SensorReading>();
         foreach (var hardware in computer.Hardware)
         {
-            CollectSensors(hardware, sensors);
+            CollectSensors(hardware, hardware, sensors);
+            if (sensors.Count >= 500) break;
         }
 
         return sensors;
     }
 
-    private static void CollectSensors(IHardware hardware, List<SensorReading> sensors)
+    private static void CollectSensors(IHardware hardware, IHardware rootHardware, List<SensorReading> sensors)
     {
         foreach (var sensor in hardware.Sensors)
         {
@@ -121,7 +124,16 @@ internal static class Program
             sensors.Add(new SensorReading(
                 name.Length > 180 ? name[..180] : name,
                 value,
-                UnitFor(sensor.SensorType.ToString())));
+                UnitFor(sensor.SensorType.ToString()),
+                sensor.Identifier.ToString(),
+                sensor.Name,
+                sensor.SensorType.ToString(),
+                hardware.Identifier.ToString(),
+                hardware.Name,
+                hardware.HardwareType.ToString(),
+                rootHardware.Identifier.ToString(),
+                rootHardware.Name,
+                rootHardware.HardwareType.ToString()));
             if (sensors.Count >= 500)
             {
                 return;
@@ -130,7 +142,7 @@ internal static class Program
 
         foreach (var subHardware in hardware.SubHardware)
         {
-            CollectSensors(subHardware, sensors);
+            CollectSensors(subHardware, rootHardware, sensors);
             if (sensors.Count >= 500)
             {
                 return;
@@ -149,12 +161,31 @@ internal static class Program
         "current" => "A",
         "data" => "GB",
         "smalldata" => "MB",
-        "throughput" => "MB/s",
+        "throughput" => "B/s",
         "time" => "s",
         "energy" => "Wh",
         "noise" => "dB",
         _ => ""
     };
+
+    private static List<DriveReading> ReadDrives()
+    {
+        var drives = new List<DriveReading>();
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            if (drive.DriveType != DriveType.Fixed) continue;
+            try
+            {
+                if (!drive.IsReady) continue;
+                drives.Add(new DriveReading(drive.Name, drive.TotalSize, drive.AvailableFreeSpace, null));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                drives.Add(new DriveReading(drive.Name, null, null, error.Message));
+            }
+        }
+        return drives;
+    }
 
     [SupportedOSPlatform("windows")]
     private static PawnIoInstallation ReadPawnIoInstallation()
@@ -234,7 +265,12 @@ internal static class Program
     }
 
     private sealed record PawnIoInstallation(bool Installed, string? Version, string? Error);
-    private sealed record SensorReading(string Name, float Value, string Unit);
+    private sealed record SensorReading(
+        string Name, float Value, string Unit,
+        string Id, string SensorName, string SensorType,
+        string HardwareId, string HardwareName, string HardwareType,
+        string RootHardwareId, string RootHardwareName, string RootHardwareType);
+    private sealed record DriveReading(string Name, long? TotalBytes, long? FreeBytes, string? Error);
     private sealed record HardwareSnapshot(
         string? Id,
         string State,
@@ -242,5 +278,6 @@ internal static class Program
         string? PawnIoVersion,
         DateTimeOffset SampleAt,
         IReadOnlyList<SensorReading> Sensors,
-        string? Error);
+        string? Error,
+        IReadOnlyList<DriveReading> Drives);
 }

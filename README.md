@@ -80,6 +80,15 @@ und starte das Panel erneut. Der NSIS-Installer prüft PawnIO und kann bei
 fehlender Installation die offizielle Downloadseite öffnen; installiert wird
 der Treiber nur durch dich. Welche Sensoren verfügbar sind, hängt von CPU,
 Grafikkarte und Mainboard ab; einzelne Sensoren können erhöhte Rechte erfordern.
+Das Dashboard zeigt CPU/GPU-Auslastung und Temperaturen als Rundanzeigen sowie
+Takt, Leistung, RAM/VRAM, Netzwerk und Lüfter. Es übernimmt die Theme-Farben und
+Panel-Schriftgröße und wechselt bei schmalen Panels in eine gestapelte Ansicht.
+Bei mehreren GPUs kann die Grafikkarte im Dashboard gewählt werden.
+Fehlende Messwerte erscheinen als „Nicht verfügbar“ (N/V), nicht als Null.
+Laufwerksbelegung und freie Kapazität stammen aus Windows; physische
+Datenträger-Temperaturen werden separat angezeigt, da eine sichere Zuordnung
+zu Laufwerksbuchstaben nicht immer möglich ist. Balkenskalen für Takt, Leistung,
+Netzwerk und Lüfter sind Anzeigeskalen (Tooltip), keine Hardware-Grenzwerte.
 Die LibreHardwareMonitor-Lizenz und Drittanbieterhinweise liegen im
 Installationsordner unter `resources\hardware-monitor`.
 
@@ -160,7 +169,7 @@ Mit einem expliziten Installer-Pfad kann auch eine Release-Datei außerhalb des
 Projekts verwendet werden:
 
 ```powershell
-.\install-tron.ps1 -InstallerPath "C:\Downloads\Bockis-eDEX-Desktop-UI-Setup-1.2.7.5.exe"
+.\install-tron.ps1 -InstallerPath "C:\Downloads\Bockis-eDEX-Desktop-UI-Setup-1.2.7.6.exe"
 ```
 
 Für einen entpackten Test-Build:
@@ -179,7 +188,7 @@ npm test
 
 - Repository: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI
 - Releases: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases
-- Aktueller Release: `v1.2.7.5`
+- Aktueller Release: `v1.2.7.6`
 
 ## Lizenz und Quellen
 
