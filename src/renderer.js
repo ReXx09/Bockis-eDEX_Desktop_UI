@@ -3415,7 +3415,7 @@ function openAddPicker() {
     const rows = [...editor.querySelectorAll("tbody > tr")];
     const header = rows.shift();
     const rowContains = (row, id) => Boolean(row.querySelector(`#${id}`));
-    const windowsStart = rows.findIndex((row) => rowContains(row, "set-windows-colors"));
+    const windowsStart = rows.findIndex((row) => row.id === "set-windows-sync-row");
     const displayEnd = rows.findIndex((row) => rowContains(row, "set-grid"));
     const clockEnd = rows.findIndex((row) => rowContains(row, "set-search-font"));
     const cuts = [
@@ -4911,6 +4911,28 @@ function disposeAllTerminalInstances() {
   terminalInstances.clear();
 }
 
+function applyTerminalTheme(theme) {
+  const config = theme?.terminal || {};
+  const colors = theme?.colors || {};
+  const accent = `#${[colors.r ?? 0, colors.g ?? 234, colors.b ?? 255]
+    .map((value) => Number(value).toString(16).padStart(2, "0")).join("")}`;
+  const terminalOptions = {
+    fontFamily: `"${config.fontFamily || "Fira Mono"}", "Share Tech Mono", Consolas, monospace`,
+    cursorStyle: config.cursorStyle || "block",
+    theme: {
+      background: config.background || colors.light_black || "#01080b",
+      foreground: config.foreground || accent,
+      cursor: config.cursor || config.foreground || accent
+    }
+  };
+  for (const terminal of terminalInstances.values()) {
+    terminal.setOption("fontFamily", terminalOptions.fontFamily);
+    terminal.setOption("cursorStyle", terminalOptions.cursorStyle);
+    terminal.setOption("theme", terminalOptions.theme);
+    terminal.refresh(0, Math.max(0, terminal.rows - 1));
+  }
+}
+
 function bindTerminal() {
   const root = document.querySelector(".terminal-root");
   if (!root) return;
@@ -4971,12 +4993,20 @@ function bindTerminal() {
       ? `SSH · ${terminalSshOptions.get(id)?.user || "?"}@${terminalSshOptions.get(id)?.host || "Ziel"}`
       : "PowerShell-Konsole";
     const existing = terminalInstances.get(id);
+    const terminalConfig = state.theme?.terminal || {};
+    const terminalAccent = `#${[state.theme?.colors?.r ?? 0, state.theme?.colors?.g ?? 234, state.theme?.colors?.b ?? 255]
+      .map((value) => Number(value).toString(16).padStart(2, "0")).join("")}`;
     const terminal = existing || (window.Terminal ? new window.Terminal({
       cursorBlink: true,
       convertEol: true,
-      fontFamily: '"Fira Mono", "Share Tech Mono", Consolas, monospace',
+      fontFamily: `"${terminalConfig.fontFamily || "Fira Mono"}", "Share Tech Mono", Consolas, monospace`,
       fontSize: 13,
-      theme: { background: "#01080b", foreground: "#00eaff", cursor: "#00ff75" },
+      cursorStyle: terminalConfig.cursorStyle || "block",
+      theme: {
+        background: terminalConfig.background || state.theme?.colors?.light_black || "#01080b",
+        foreground: terminalConfig.foreground || terminalAccent,
+        cursor: terminalConfig.cursor || terminalConfig.foreground || terminalAccent
+      },
       scrollback: 5000
     }) : null);
     if (!terminal) return;
@@ -6136,16 +6166,10 @@ function openSettings(focusPanel = "") {
         <td>Installierte Version und Prüfung auf neue GitHub-Releases</td>
         <td><span id="set-app-version">${escapeHtml(state.appVersion || "unbekannt")}</span> <button type="button" id="set-check-updates">Jetzt prüfen</button> <span id="set-update-status" class="settings-inline-status" aria-live="polite"></span></td>
       </tr>
-      <tr>
-        <td>Windows-Farben</td>
-        <td>Akzentfarbe anwenden; bei „Stark“ zusätzlich den Windows-Dunkelmodus setzen</td>
-        <td>
-          <select id="set-windows-colors">
-            <option value="off" ${state.settings.windowsColorMode === "off" ? "selected" : ""}>Aus</option>
-            <option value="subtle" ${state.settings.windowsColorMode !== "off" && state.settings.windowsColorMode !== "strong" ? "selected" : ""}>Dezent</option>
-            <option value="strong" ${state.settings.windowsColorMode === "strong" ? "selected" : ""}>Stark</option>
-          </select>
-        </td>
+      <tr id="set-windows-sync-row">
+        <td>Windows-Synchronisierung</td>
+        <td>Einzelne Windows-Anpassungen im Theme Studio aktivieren, testen und wiederherstellen</td>
+        <td>Modular verwaltet</td>
       </tr>
       <tr>
         <td>Theme-Hintergrund beibehalten</td>
@@ -6296,7 +6320,7 @@ function openSettings(focusPanel = "") {
     const rowContains = (row, id) => Boolean(row.querySelector(`#${id}`));
     const sectionForRow = (row) => {
       if (rowContains(row, "set-theme")
-        || rowContains(row, "set-windows-colors")
+        || row.id === "set-windows-sync-row"
         || rowContains(row, "set-keep-theme-wallpaper")
         || rowContains(row, "set-wall")
         || rowContains(row, "set-windows-wallpaper")) return "themes";
@@ -6580,9 +6604,6 @@ function openSettings(focusPanel = "") {
   modal.querySelector("#set-save").onclick = async () => {
     state.iconView = modal.querySelector("#set-icon-view").value === "list" ? "list" : "grid";
     const themeName = modal.querySelector("#set-theme").value;
-    const windowsColorMode = ["off", "subtle", "strong"].includes(modal.querySelector("#set-windows-colors")?.value)
-      ? modal.querySelector("#set-windows-colors").value
-      : "subtle";
     const keepThemeWallpaper = Boolean(modal.querySelector("#set-keep-theme-wallpaper")?.checked);
     const rainmeterEnabled = Boolean(modal.querySelector("#set-rainmeter")?.checked);
     const wallpaper = modal.querySelector("#set-wall").value;
@@ -6654,7 +6675,6 @@ function openSettings(focusPanel = "") {
       searchFontSize: searchFontValue,
       layoutMode: layoutModeValue,
       theme: themeName,
-      windowsColorMode,
       keepThemeWallpaper,
       rainmeterEnabled,
       startWithWindows,
@@ -7125,9 +7145,13 @@ window.addEventListener("keydown", (event) => {
 
   window.edex.onThemePreview?.((theme) => {
     applyTheme(theme, state.settings.wallpaper || "grid", { preview: true });
+    applyTerminalTheme(theme);
   });
   window.edex.onThemePreviewReset?.(() => {
-    if (state.theme) applyTheme(state.theme, state.settings.wallpaper || "grid");
+    if (state.theme) {
+      applyTheme(state.theme, state.settings.wallpaper || "grid");
+      applyTerminalTheme(state.theme);
+    }
   });
 
   window.edex.onSettingsUpdated((payload) => {
@@ -7141,7 +7165,10 @@ window.addEventListener("keydown", (event) => {
     window.edexI18n?.setLocale?.(state.settings.locale || "de");
     state.themeName = payload.themeName || state.themeName;
     if (payload.displays) state.displays = payload.displays;
-    if (payload.theme) applyTheme(payload.theme, state.settings.wallpaper || "grid");
+    if (payload.theme) {
+      applyTheme(payload.theme, state.settings.wallpaper || "grid");
+      applyTerminalTheme(payload.theme);
+    }
     else applyUiMetrics();
     applyClockMetrics();
     applyRainMetrics();

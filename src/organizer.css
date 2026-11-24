@@ -113,6 +113,77 @@ body.wp-hex {
     background-position: 0 0, 0 0, 2rem 3.5rem, 2rem 3.5rem;
 }
 
+body.wp-gradient {
+    background:
+        linear-gradient(135deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.24), transparent 58%),
+        linear-gradient(315deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.12), transparent 54%),
+        var(--color_light_black);
+}
+
+body.desktop-shell.per-display-wallpaper.wp-grid {
+    background: var(--color_grey) !important;
+    background-image:
+        linear-gradient(90deg, var(--color_light_black) calc(var(--grid-size) - 1px), transparent 1%),
+        linear-gradient(var(--color_light_black) calc(var(--grid-size) - 1px), transparent 1%) !important;
+    background-size: var(--grid-size) var(--grid-size) !important;
+}
+
+body.desktop-shell.per-display-wallpaper.wp-solid {
+    background: var(--color_light_black) !important;
+}
+
+body.desktop-shell.per-display-wallpaper.wp-scanlines {
+    background:
+        repeating-linear-gradient(0deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.04) 0, rgba(var(--color_r), var(--color_g), var(--color_b), 0.04) 1px, transparent 1px, transparent 3px),
+        var(--color_light_black) !important;
+}
+
+body.desktop-shell.per-display-wallpaper.wp-radial {
+    background:
+        radial-gradient(ellipse at center, rgba(var(--color_r), var(--color_g), var(--color_b), 0.18) 0%, transparent 55%),
+        radial-gradient(circle at 20% 80%, rgba(var(--color_r), var(--color_g), var(--color_b), 0.08) 0%, transparent 40%),
+        var(--color_light_black) !important;
+}
+
+body.desktop-shell.per-display-wallpaper.wp-hex {
+    background-color: var(--color_light_black) !important;
+    background-image:
+        linear-gradient(30deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.08) 12%, transparent 12.5%, transparent 87%, rgba(var(--color_r), var(--color_g), var(--color_b), 0.08) 87.5%),
+        linear-gradient(150deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.08) 12%, transparent 12.5%, transparent 87%, rgba(var(--color_r), var(--color_g), var(--color_b), 0.08) 87.5%) !important;
+    background-size: 4rem 7rem !important;
+}
+
+body.desktop-shell.per-display-wallpaper.wp-gradient {
+    background:
+        linear-gradient(135deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.24), transparent 58%),
+        linear-gradient(315deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.12), transparent 54%),
+        var(--color_light_black) !important;
+}
+
+body.desktop-shell.icon-pack-cyan .desk-icon-face img.sys-icon { filter: saturate(1.7) hue-rotate(135deg); }
+body.desktop-shell.icon-pack-mono .desk-icon-face img.sys-icon { filter: grayscale(1) contrast(1.2); }
+body.desktop-shell.icon-pack-contrast .desk-icon-face img.sys-icon { filter: grayscale(1) brightness(1.8) contrast(1.4); }
+body.desktop-shell.cursor-pack-precision .desk-icon { cursor: crosshair !important; }
+body.desktop-shell.cursor-pack-large .desk-icon { cursor: grab !important; }
+body.desktop-shell.contrast-high .desk-icon h3 { color: #fff !important; background: #000 !important; outline: 1px solid #fff; }
+body.desktop-shell.panel-style-rounded .widget,
+body.desktop-shell.panel-style-rounded .panel,
+body.desktop-shell.panel-style-rounded .hud-card,
+body.desktop-shell.panel-style-rounded .path-card,
+body.desktop-shell.panel-style-rounded .program-card,
+body.desktop-shell.panel-style-rounded .desktop-card,
+body.desktop-shell.panel-style-rounded .desk-icon-face { border-radius: var(--panel-radius) !important; }
+body.desktop-shell.panel-style-glass .widget,
+body.desktop-shell.panel-style-glass .panel,
+body.desktop-shell.panel-style-glass .hud-card,
+body.desktop-shell.panel-style-glass .path-card,
+body.desktop-shell.panel-style-glass .program-card,
+body.desktop-shell.panel-style-glass .desktop-card { backdrop-filter: blur(8px); }
+body.desktop-shell.contrast-high .hud-card,
+body.desktop-shell.contrast-high .path-card,
+body.desktop-shell.contrast-high .program-card,
+body.desktop-shell.contrast-high .desktop-card { border: 2px solid #fff !important; }
+
 html,
 body.desktop-shell,
 body.desktop-shell.wp-grid,

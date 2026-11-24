@@ -714,16 +714,16 @@
     const current = state();
     if (!options.preview) current.theme = theme;
     const c = theme.colors || {};
-    const mode = current.settings.windowsColorMode || "subtle";
-    const rawAccent = current.windowsColors?.accent || "#00eaff";
-    const match = rawAccent.replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-    const windowsRgb = match ? match.slice(1).map((part) => parseInt(part, 16)) : [0, 234, 255];
-    const blend = mode === "strong" ? 0.55 : mode === "subtle" ? 0.22 : 0;
-    const r = Math.round((c.r ?? 170) * (1 - blend) + windowsRgb[0] * blend);
-    const g = Math.round((c.g ?? 207) * (1 - blend) + windowsRgb[1] * blend);
-    const b = Math.round((c.b ?? 209) * (1 - blend) + windowsRgb[2] * blend);
+    const r = c.r ?? 170;
+    const g = c.g ?? 207;
+    const b = c.b ?? 209;
     const panelBase = c.black || "#000000";
     const panelLight = c.light_black || "#05080d";
+    const opacity = Math.max(0.5, Math.min(1, (Number(current.settings.panelOpacity) || 100) / 100));
+    const surfaceRgb = String(panelLight).match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+    const panelSurface = surfaceRgb
+      ? `rgba(${parseInt(surfaceRgb[1], 16)}, ${parseInt(surfaceRgb[2], 16)}, ${parseInt(surfaceRgb[3], 16)}, ${opacity})`
+      : panelLight;
     const panelMatch = String(panelBase).replace(/^#/, "").match(/^([0-9a-f]{6})$/i);
     const panelLuma = panelMatch
       ? (parseInt(panelMatch[1].slice(0, 2), 16) * 0.299
@@ -735,12 +735,15 @@
     document.documentElement.style.setProperty("--color_g", g);
     document.documentElement.style.setProperty("--color_b", b);
     document.documentElement.style.setProperty("--color_black", panelBase);
-    document.documentElement.style.setProperty("--color_light_black", mixThemeColor(panelLight, rawAccent, blend * 0.18));
-    document.documentElement.style.setProperty("--color_grey", mixThemeColor(c.grey || "#262828", rawAccent, blend * 0.35));
+    document.documentElement.style.setProperty("--color_light_black", panelLight);
+    document.documentElement.style.setProperty("--color_grey", c.grey || "#262828");
     document.documentElement.style.setProperty("--color_red", c.red || "#ff3c3c");
     document.documentElement.style.setProperty("--color_yellow", c.yellow || "#ffd23c");
+    document.documentElement.style.setProperty("--font_main", `"${theme.cssvars?.font_main || "United Sans Medium"}", "Segoe UI", sans-serif`);
+    document.documentElement.style.setProperty("--panel-opacity", String(opacity));
+    document.documentElement.style.setProperty("--panel-radius", theme.panelStyle === "rounded" ? "14px" : theme.panelStyle === "glass" ? "8px" : "2px");
     document.documentElement.style.setProperty("--panel-bg", panelBase);
-    document.documentElement.style.setProperty("--panel-surface", panelLight);
+    document.documentElement.style.setProperty("--panel-surface", panelSurface);
     document.documentElement.style.setProperty("--panel-content", panelBase);
     document.documentElement.style.setProperty("--panel-text", panelText);
     document.documentElement.style.setProperty("--panel-border", `rgba(${r}, ${g}, ${b}, 0.28)`);
@@ -749,14 +752,21 @@
     applyUiMetrics();
     window.__edexTheme = theme;
 
-    const wp = wallpaperId || current.settings.wallpaper || "grid";
-    document.body.className = `desktop-shell wp-${wp}`;
+    const displayId = String(current.displayId ?? window.edex?.displayId ?? "");
+    const perDisplayWallpaper = current.settings.desktopSyncAcrossDisplays === false
+      ? current.settings.displayWallpapers?.[displayId]
+      : null;
+    const wp = perDisplayWallpaper || wallpaperId || current.settings.wallpaper || "grid";
+    const wallpaperClass = perDisplayWallpaper ? " per-display-wallpaper" : "";
+    document.body.className = `desktop-shell wp-${wp} icon-pack-${current.settings.desktopIconPack || "standard"} cursor-pack-${current.settings.desktopCursorPack || "system"} contrast-${current.settings.contrastMode || "standard"} panel-style-${theme.panelStyle || "square"}${wallpaperClass}`;
     if (!options.preview) {
       const windowsThemeSync = window.edex?.applyWindowsTheme?.({
-        mode,
+        action: "sync",
         rgb: { r: c.r ?? 170, g: c.g ?? 207, b: c.b ?? 209 }
       });
-      windowsThemeSync?.catch?.(() => {});
+      windowsThemeSync?.then?.((result) => {
+        if (!result?.applied) window.edex?.logError?.("windows-theme-sync", result?.error || "Windows theme sync failed");
+      }).catch?.((error) => window.edex?.logError?.("windows-theme-sync", error?.message || String(error)));
     }
   }
 

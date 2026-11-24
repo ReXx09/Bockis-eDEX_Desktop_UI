@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Sync the accent color to DWM and Explorer accent values, with separate
+  Start/taskbar and window-title display switches.
+- Save managed Windows registry values in a versioned atomic backup and roll
+  back partial apply/restore operations on failure.
+
 ## [1.2.7.6] - 2026-11-19
 
 ### Added

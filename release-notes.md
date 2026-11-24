@@ -38,11 +38,13 @@ weiter:
 - Live-Vorschau auf den geöffneten eDEX-Monitoren.
 - Preview-Reset stellt das aktive Theme wieder her.
 - Theme-Aktivierung über den Editor.
-- Optionale Windows-11-Synchronisierung:
-  - `off`: keine Windows-Änderung
-  - `subtle`: Akzentfarbe übernehmen
-  - `strong`: Akzentfarbe übernehmen und Dark Mode aktivieren
-- Windows-Farbwerte werden vor der ersten Änderung gesichert.
+- Modulare Windows-Synchronisierung mit unabhängig schaltbarer Akzentfarbe,
+  Hell-/Dunkelmodus, Taskleisten- und Fensteroptionen sowie Transparenz.
+- Jede Anpassung kann einzeln getestet und aus ihrem gesicherten Originalwert
+  wiederhergestellt werden.
+- Theme Studio 2.0 mit Bereichen für eDEX-Design, Windows, Desktop und Profile.
+- Theme-Paket-Import/-Export, Vorher-Nachher-Vergleich, Backups und Änderungsprotokoll.
+- Desktop-Wallpaper pro Monitor, Raster-/Verlaufsstil sowie Icon- und Cursor-Presets.
 
 ### Version und Updates
 

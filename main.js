@@ -20,6 +20,8 @@ for (const stream of [process.stdout, process.stderr]) {
 const { scanRoot, listFolder, importFiles, buildPlan, executePlan, undoLast } = require("./lib/organizer");
 const { dirIcon } = require("./lib/icons");
 const { loadSettings, refreshPresetForSave, saveSettings } = require("./lib/settings-store");
+const { FEATURES, normalizeFeatures, normalizeWindowsOptions } = require("./lib/windows-theme-manager");
+const { createWindowsThemeRegistryStore, entryId, writeJsonAtomically } = require("./lib/windows-theme-registry");
 const { WALLPAPERS, listThemes, loadTheme, resolveThemeName, themesDir, configureThemeStore } = require("./lib/themes");
 const { createStore: createThemeStudioStore } = require("./lib/theme-studio-store");
 const {
@@ -702,6 +704,16 @@ if (!gotLock) {
     themeStudioStore = createThemeStudioStore(app.getPath("userData"), themesDir);
     configureThemeStore(themeStudioStore);
     settings = loadSettings(app.getPath("userData"));
+    if (process.platform === "win32") {
+      try {
+        const startupTheme = loadTheme(resolveThemeName(settings.theme || "tron"));
+        await syncWindowsThemeSettings(app.getPath("userData"), settings, startupTheme.colors);
+      } catch (error) {
+        appLog.error("windows-theme.startup", "Windows-Theme konnte beim Start nicht synchronisiert werden", {
+          error: error.message || String(error)
+        });
+      }
+    }
     if (process.platform === "win32") app.setLoginItemSettings(loginItemOptions(settings.startWithWindows));
     try {
       await restoreDesktopIcons(app.getPath("userData"));
@@ -857,99 +869,239 @@ function runRegistry(args) {
   });
 }
 
-function readRegistryDword(key, value) {
-  return new Promise((resolve) => {
-    execFile("reg.exe", ["QUERY", key, "/v", value], { windowsHide: true, encoding: "utf8" }, (error, stdout) => {
-      if (error) return resolve(null);
-      const match = String(stdout || "").match(/\b0x([0-9a-f]+)\b/i);
-      resolve(match ? Number.parseInt(match[1], 16) : null);
+function readRegistryDword(key, name) {
+  return new Promise((resolve, reject) => {
+    execFile("reg.exe", ["QUERY", key, "/v", name], { windowsHide: true, encoding: "utf8" }, (error, stdout, stderr) => {
+      if (error) {
+        const output = `${stdout || ""}\n${stderr || ""}`;
+        if (/unable to find the specified registry (?:key|key or value)/i.test(output)) {
+          return resolve({ exists: false });
+        }
+        return reject(new Error(`Registry-Wert ${name} konnte nicht gelesen werden: ${error.message}`));
+      }
+      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = String(stdout || "").match(new RegExp(`^\\s*${escapedName}\\s+(REG_[A-Z0-9_]+)\\s+(.+?)\\s*$`, "im"));
+      if (!match) return resolve({ exists: false });
+      if (match[1].toUpperCase() !== "REG_DWORD") {
+        return reject(new Error(`Registry-Wert ${name} hat den nicht unterstützten Typ ${match[1]}.`));
+      }
+      const data = match[2].trim();
+      const value = /^0x[0-9a-f]+$/i.test(data)
+        ? Number.parseInt(data.slice(2), 16)
+        : /^\d+$/.test(data) ? Number.parseInt(data, 10) : NaN;
+      if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
+        return reject(new Error(`Registry-Wert ${name} enthält keinen gültigen DWORD-Wert.`));
+      }
+      resolve({ exists: true, type: "REG_DWORD", data: value });
     });
   });
 }
 
-async function captureWindowsThemeBackup(file) {
-  if (fs.existsSync(file)) return;
-  const personalize = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
-  const dwm = "HKCU\\Software\\Microsoft\\Windows\\DWM";
-  const values = await Promise.all([
-    readRegistryDword(dwm, "AccentColor"),
-    readRegistryDword(dwm, "ColorPrevalence"),
-    readRegistryDword(personalize, "AppsUseLightTheme"),
-    readRegistryDword(personalize, "SystemUsesLightTheme")
-  ]);
-  fs.writeFileSync(file, JSON.stringify({
-    AccentColor: values[0],
-    ColorPrevalence: values[1],
-    AppsUseLightTheme: values[2],
-    SystemUsesLightTheme: values[3]
-  }, null, 2), "utf8");
-}
-
-async function restoreWindowsThemeBackup(file, options = {}) {
-  if (!fs.existsSync(file)) return false;
-  const restoreAccent = options.restoreAccent !== false;
-  const remove = options.remove !== false;
-  let backup;
-  try {
-    backup = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return false;
-  }
-  const personalize = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
-  const dwm = "HKCU\\Software\\Microsoft\\Windows\\DWM";
-  const jobs = [];
-  if (restoreAccent && Number.isInteger(backup.AccentColor)) jobs.push(runRegistry(["ADD", dwm, "/v", "AccentColor", "/t", "REG_DWORD", "/d", `0x${backup.AccentColor.toString(16)}`, "/f"]));
-  if (Number.isInteger(backup.ColorPrevalence)) jobs.push(runRegistry(["ADD", dwm, "/v", "ColorPrevalence", "/t", "REG_DWORD", "/d", String(backup.ColorPrevalence), "/f"]));
-  if (Number.isInteger(backup.AppsUseLightTheme)) jobs.push(runRegistry(["ADD", personalize, "/v", "AppsUseLightTheme", "/t", "REG_DWORD", "/d", String(backup.AppsUseLightTheme), "/f"]));
-  if (Number.isInteger(backup.SystemUsesLightTheme)) jobs.push(runRegistry(["ADD", personalize, "/v", "SystemUsesLightTheme", "/t", "REG_DWORD", "/d", String(backup.SystemUsesLightTheme), "/f"]));
-  const results = await Promise.all(jobs);
-  if (results.every(Boolean)) {
-    if (remove) {
-      try { fs.unlinkSync(file); } catch { /* ignore */ }
-    }
-    spawn("rundll32.exe", ["user32.dll,UpdatePerUserSystemParameters"], { windowsHide: true, stdio: "ignore" });
-    return true;
-  }
-  return false;
-}
-
-ipcMain.handle("apply-windows-theme", async (event, payload) => {
-  requireTrustedWindow(event);
-  if (process.platform !== "win32") return { applied: false };
-  const mode = payload?.mode === "strong" ? "strong" : payload?.mode === "subtle" ? "subtle" : "off";
-  const backupFile = path.join(app.getPath("userData"), "windows-theme-backup.json");
-  const stateFile = path.join(app.getPath("userData"), "windows-theme-state.json");
-  if (mode === "off") {
-    const applied = await restoreWindowsThemeBackup(backupFile);
-    try { if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile); } catch { /* ignore */ }
-    return { applied, mode };
-  }
-  await captureWindowsThemeBackup(backupFile);
-  if (mode !== "strong") await restoreWindowsThemeBackup(backupFile, { restoreAccent: false, remove: false });
-  const rgb = payload?.rgb || {};
+function windowsAccentValue(rgb = {}) {
   const red = Math.max(0, Math.min(255, Number(rgb.r) || 0));
   const green = Math.max(0, Math.min(255, Number(rgb.g) || 0));
   const blue = Math.max(0, Math.min(255, Number(rgb.b) || 0));
-  const accent = `0xFF${blue.toString(16).padStart(2, "0")}${green.toString(16).padStart(2, "0")}${red.toString(16).padStart(2, "0")}`;
-  const personalize = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
-  const dwm = "HKCU\\Software\\Microsoft\\Windows\\DWM";
-  const results = await Promise.all([
-    runRegistry(["ADD", dwm, "/v", "AccentColor", "/t", "REG_DWORD", "/d", accent, "/f"]),
-    runRegistry(["ADD", dwm, "/v", "ColorPrevalence", "/t", "REG_DWORD", "/d", "1", "/f"]),
-    ...(mode === "strong"
-      ? [
-        runRegistry(["ADD", personalize, "/v", "AppsUseLightTheme", "/t", "REG_DWORD", "/d", "0", "/f"]),
-        runRegistry(["ADD", personalize, "/v", "SystemUsesLightTheme", "/t", "REG_DWORD", "/d", "0", "/f"])
-      ]
-      : [])
-  ]);
-  spawn("rundll32.exe", ["user32.dll,UpdatePerUserSystemParameters"], { windowsHide: true, stdio: "ignore" });
-  if (results.every(Boolean)) {
-    try {
-      fs.writeFileSync(stateFile, JSON.stringify({ mode, rgb: { r: red, g: green, b: blue } }, null, 2), "utf8");
-    } catch { /* ignore */ }
+  return `0xFF${blue.toString(16).padStart(2, "0")}${green.toString(16).padStart(2, "0")}${red.toString(16).padStart(2, "0")}`;
+}
+
+async function writeRegistryDword(key, name, data) {
+  return runRegistry(["ADD", key, "/v", name, "/t", "REG_DWORD", "/d", `0x${data.toString(16).padStart(8, "0")}`, "/f"]);
+}
+
+async function deleteRegistryValue(key, name) {
+  if (!(await readRegistryDword(key, name)).exists) return true;
+  return runRegistry(["DELETE", key, "/v", name, "/f"]);
+}
+
+const windowsThemeRegistryStore = createWindowsThemeRegistryStore({
+  read: readRegistryDword,
+  write: writeRegistryDword,
+  remove: deleteRegistryValue
+});
+
+function windowsAccentDword(rgb) {
+  return Number.parseInt(windowsAccentValue(rgb).slice(2), 16) >>> 0;
+}
+
+function windowsThemeEntries(featureIds) {
+  const entries = new Map();
+  for (const featureId of featureIds) {
+    const feature = FEATURES[featureId];
+    if (!feature) throw new Error("Unbekannte Windows-Anpassung.");
+    for (const entry of feature.values) entries.set(entryId(entry.key, entry.name), entry);
   }
-  return { applied: results.every(Boolean), mode };
+  return [...entries.values()];
+}
+
+function windowsThemeTargets(entries, rgb, options = {}) {
+  const windowsOptions = normalizeWindowsOptions(options);
+  return Object.fromEntries(entries.map((entry) => {
+    const data = entry.value === "accent"
+      ? windowsAccentDword(rgb)
+      : entry.value === "taskbarAlignment"
+        ? windowsOptions.taskbarAlignment === "left" ? 0 : 1
+        : entry.value === "taskbarSize"
+          ? ({ small: 0, medium: 1, large: 2 })[windowsOptions.taskbarSize]
+          : entry.value;
+    return [entryId(entry.key, entry.name), { exists: true, type: "REG_DWORD", data }];
+  }));
+}
+
+async function applyWindowsThemeFeature(userData, featureId, rgb, options = {}, commit) {
+  if (!FEATURES[featureId]) throw new Error("Unbekannte Windows-Anpassung.");
+  const entries = windowsThemeEntries([featureId]);
+  const backupFile = path.join(userData, "windows-theme-backup.json");
+  await windowsThemeRegistryStore.apply(backupFile, entries, windowsThemeTargets(entries, rgb, options), commit);
+  spawn("rundll32.exe", ["user32.dll,UpdatePerUserSystemParameters"], { windowsHide: true, stdio: "ignore" });
+  return true;
+}
+
+async function restoreWindowsThemeFeature(userData, featureId, commit) {
+  if (!FEATURES[featureId]) return false;
+  const entries = windowsThemeEntries([featureId]);
+  const backupFile = path.join(userData, "windows-theme-backup.json");
+  const restored = await windowsThemeRegistryStore.restore(backupFile, entries, commit);
+  if (!restored) return false;
+  spawn("rundll32.exe", ["user32.dll,UpdatePerUserSystemParameters"], { windowsHide: true, stdio: "ignore" });
+  return true;
+}
+
+function writeWindowsThemeState(file, features, rgb, options = {}) {
+  if (!Object.values(features).some(Boolean)) {
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    return;
+  }
+  writeJsonAtomically(file, { features, rgb, options: normalizeWindowsOptions(options) });
+}
+
+function readWindowsThemeState(file) {
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+}
+
+function restoreWindowsThemeState(file, state, existed) {
+  if (existed) writeJsonAtomically(file, state);
+  else if (fs.existsSync(file)) fs.unlinkSync(file);
+}
+
+function commitWindowsFeatureSettings(userData, stateFile, features, rgb, options, previousFeatures) {
+  const previousStateExists = fs.existsSync(stateFile);
+  const previousState = readWindowsThemeState(stateFile);
+  let updated;
+  try {
+    updated = saveSettings(userData, { windowsThemeFeatures: features });
+    writeWindowsThemeState(stateFile, features, rgb, options);
+  } catch (error) {
+    try {
+      settings = saveSettings(userData, { windowsThemeFeatures: previousFeatures });
+      restoreWindowsThemeState(stateFile, previousState, previousStateExists);
+    } catch (rollbackError) {
+      throw new Error(`${error.message || error}; Windows-Einstellungen konnten nicht zurückgesetzt werden: ${rollbackError.message || rollbackError}`);
+    }
+    throw error;
+  }
+  settings = updated;
+  return updated;
+}
+
+async function syncWindowsThemeSettings(userData, currentSettings, rgb) {
+  const stateFile = path.join(userData, "windows-theme-state.json");
+  const features = normalizeFeatures(currentSettings.windowsThemeFeatures);
+  const activeIds = Object.keys(FEATURES).filter((id) => features[id]);
+  if (!activeIds.length) {
+    writeWindowsThemeState(stateFile, features, rgb, currentSettings);
+    return true;
+  }
+  const entries = windowsThemeEntries(activeIds);
+  const backupFile = path.join(userData, "windows-theme-backup.json");
+  await windowsThemeRegistryStore.apply(
+    backupFile,
+    entries,
+    windowsThemeTargets(entries, rgb, currentSettings),
+    () => writeWindowsThemeState(stateFile, features, rgb, currentSettings)
+  );
+  spawn("rundll32.exe", ["user32.dll,UpdatePerUserSystemParameters"], { windowsHide: true, stdio: "ignore" });
+  return true;
+}
+
+ipcMain.handle("apply-windows-theme", async (event, payload = {}) => {
+  requireTrustedWindow(event);
+  if (process.platform !== "win32") return { applied: false, error: "Windows-Anpassungen sind nur unter Windows verfügbar." };
+  const userData = app.getPath("userData");
+  const stateFile = path.join(userData, "windows-theme-state.json");
+  const action = payload.action;
+  const featureId = String(payload.feature || "");
+  const currentSettings = loadSettings(userData);
+  const currentFeatures = normalizeFeatures(currentSettings.windowsThemeFeatures);
+  let rgb = payload.rgb && typeof payload.rgb === "object" ? payload.rgb : null;
+
+  try {
+    if (!rgb && fs.existsSync(stateFile)) rgb = readWindowsThemeState(stateFile).rgb;
+    if (!rgb || typeof rgb !== "object") rgb = { r: 0, g: 234, b: 255 };
+    if (action === "sync") {
+      if (!(await syncWindowsThemeSettings(userData, currentSettings, rgb))) {
+        return { applied: false, error: "Mindestens eine aktive Windows-Anpassung konnte nicht angewendet werden." };
+      }
+      themeStudioStore?.recordActivity("windows-sync", "active");
+      return { applied: true, features: currentFeatures };
+    }
+    if (action === "test") {
+      if (!FEATURES[featureId]) return { applied: false, error: "Unbekannte Windows-Anpassung." };
+      const applied = await applyWindowsThemeFeature(userData, featureId, rgb, currentSettings);
+      if (applied) themeStudioStore?.recordActivity("windows-test", featureId);
+      return { applied, error: applied ? undefined : "Windows hat mindestens einen Registry-Wert abgelehnt." };
+    }
+    if (action === "restore") {
+      if (!FEATURES[featureId]) return { applied: false, error: "Unbekannte Windows-Anpassung." };
+      const state = readWindowsThemeState(stateFile);
+      const features = { ...currentFeatures, [featureId]: false };
+      const applied = await restoreWindowsThemeFeature(userData, featureId, () => {
+        commitWindowsFeatureSettings(userData, stateFile, features, rgb, currentSettings, currentFeatures);
+      });
+      const legacyStartSwitch = featureId === "startTaskbarAccent"
+        && state.features?.taskbarWindowAccent === true
+        && state.features.startTaskbarAccent === undefined;
+      if (!applied && !legacyStartSwitch) return { applied: false, error: "Kein gültiges Backup für diese Anpassung vorhanden." };
+      if (!applied) commitWindowsFeatureSettings(userData, stateFile, features, rgb, currentSettings, currentFeatures);
+      themeStudioStore?.recordActivity("windows-restore", featureId);
+      broadcast("settings-updated", {
+        settings,
+        theme: loadTheme(settings.theme || "tron"),
+        themeName: settings.theme || "tron",
+        displays: listDisplays()
+      });
+      return { applied: true, features };
+    }
+    if (action !== "set-feature" || !FEATURES[featureId] || typeof payload.enabled !== "boolean") {
+      return { applied: false, error: "Ungültige Windows-Anpassung oder Aktion." };
+    }
+    const enabled = payload.enabled;
+    const features = { ...currentFeatures, [featureId]: enabled };
+    const commit = () => commitWindowsFeatureSettings(userData, stateFile, features, rgb, currentSettings, currentFeatures);
+    if (enabled) {
+      await applyWindowsThemeFeature(userData, featureId, rgb, currentSettings, commit);
+    } else {
+      const state = readWindowsThemeState(stateFile);
+      const activeFeatures = normalizeFeatures(state.features, state.mode);
+      const restored = await restoreWindowsThemeFeature(userData, featureId, commit);
+      const legacyStartSwitch = featureId === "startTaskbarAccent"
+        && state.features?.taskbarWindowAccent === true
+        && state.features.startTaskbarAccent === undefined;
+      if (!restored && activeFeatures[featureId] && !legacyStartSwitch) {
+        return { applied: false, error: "Die aktive Windows-Anpassung hat kein wiederherstellbares Backup." };
+      }
+      if (!restored) commit();
+    }
+    themeStudioStore?.recordActivity(enabled ? "windows-enable" : "windows-disable", featureId);
+    broadcast("settings-updated", {
+      settings,
+      theme: loadTheme(settings.theme || "tron"),
+      themeName: settings.theme || "tron",
+      displays: listDisplays()
+    });
+    return { applied: true, features };
+  } catch (error) {
+    return { applied: false, error: error.message || String(error) };
+  }
 });
 
 function loginItemOptions(openAtLogin) {
@@ -1010,6 +1162,12 @@ ipcMain.handle("save-settings", (event, patch) => {
   } else {
     settings = loadSettings(app.getPath("userData"));
   }
+  if (themeStudioStore && [
+    "displayWallpapers", "desktopSyncAcrossDisplays", "gridSize", "desktopIconPack",
+    "desktopCursorPack", "panelOpacity", "contrastMode"
+  ].some((key) => Object.prototype.hasOwnProperty.call(globalPatch, key))) {
+    themeStudioStore.recordActivity("desktop-settings", "display");
+  }
   appLog.info("settings.update", "Einstellungen aktualisiert", {
     theme: settings.theme,
     wallpaper: settings.wallpaper,
@@ -1034,6 +1192,7 @@ ipcMain.handle("save-settings", (event, patch) => {
   if (
     Object.prototype.hasOwnProperty.call(globalPatch, "theme")
     || Object.prototype.hasOwnProperty.call(globalPatch, "wallpaper")
+    || Object.prototype.hasOwnProperty.call(globalPatch, "displayWallpapers")
     || Object.prototype.hasOwnProperty.call(globalPatch, "gridSize")
     || Object.prototype.hasOwnProperty.call(globalPatch, "windowsWallpaper")
   ) {
@@ -1128,6 +1287,97 @@ ipcMain.handle("theme-studio-save", (event, payload) => {
   return themeStudioStore.save(payload?.name, payload?.theme);
 });
 
+ipcMain.handle("theme-studio-export", async (event, name) => {
+  const win = requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  const key = resolveThemeName(name);
+  const result = await dialog.showSaveDialog(win, {
+    title: "Theme-Paket exportieren",
+    defaultPath: `${key}.bockis-theme.json`,
+    filters: [{ name: "Bockis Theme-Paket", extensions: ["json"] }]
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+  const desktop = {
+    wallpaper: settings.wallpaper,
+    displayWallpapers: settings.displayWallpapers,
+    desktopSyncAcrossDisplays: settings.desktopSyncAcrossDisplays,
+    gridSize: settings.gridSize,
+    desktopIconPack: settings.desktopIconPack,
+    desktopCursorPack: settings.desktopCursorPack,
+    panelOpacity: settings.panelOpacity,
+    contrastMode: settings.contrastMode,
+    windowsThemeFeatures: settings.windowsThemeFeatures,
+    windowsTaskbarAlignment: settings.windowsTaskbarAlignment,
+    windowsTaskbarSize: settings.windowsTaskbarSize
+  };
+  themeStudioStore.exportPackage(key, result.filePath, desktop);
+  return { exported: true, name: key };
+});
+
+ipcMain.handle("theme-studio-import", async (event) => {
+  const win = requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  const result = await dialog.showOpenDialog(win, {
+    title: "Theme-Paket importieren",
+    properties: ["openFile"],
+    filters: [{ name: "Bockis Theme-Paket", extensions: ["json"] }]
+  });
+  if (result.canceled || !result.filePaths[0]) return { canceled: true };
+  return themeStudioStore.importPackage(result.filePaths[0]);
+});
+
+ipcMain.handle("theme-studio-create-backup", (event) => {
+  requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  const themeName = resolveThemeName(settings.theme || "tron");
+  return themeStudioStore.createProfileBackup(themeName, loadTheme(themeName), settings);
+});
+
+ipcMain.handle("theme-studio-list-backups", (event) => {
+  requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  return themeStudioStore.listProfileBackups();
+});
+
+ipcMain.handle("theme-studio-restore-backup", async (event, id) => {
+  requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  const snapshot = themeStudioStore.loadProfileBackup(id);
+  let name = snapshot.name;
+  const builtInFile = path.join(themesDir, `${name}.json`);
+  if (fs.existsSync(builtInFile)) name = `${name}_restored`;
+  let suffix = 2;
+  while (name !== snapshot.name && listThemes().includes(name)) {
+    name = `${snapshot.name}_restored_${suffix++}`;
+  }
+  themeStudioStore.save(name, snapshot.theme);
+  const source = snapshot.settings;
+  const restoredSettings = {};
+  for (const key of [
+    "wallpaper", "displayWallpapers", "desktopSyncAcrossDisplays", "gridSize",
+    "desktopIconPack", "desktopCursorPack", "panelOpacity", "contrastMode",
+    "windowsThemeFeatures", "windowsTaskbarAlignment", "windowsTaskbarSize", "windowsWallpaper"
+  ]) {
+    if (source[key] !== undefined) restoredSettings[key] = source[key];
+  }
+  settings = saveSettings(app.getPath("userData"), { ...restoredSettings, theme: name });
+  themeStudioStore.recordActivity("restore", name);
+  const theme = loadTheme(name);
+  const payload = { settings, theme, themeName: name, displays: listDisplays() };
+  broadcast("settings-updated", payload);
+  scheduleWallpaper();
+  const windowsApplied = process.platform === "win32"
+    ? await syncWindowsThemeSettings(app.getPath("userData"), settings, theme.colors)
+    : false;
+  return { name, windowsApplied };
+});
+
+ipcMain.handle("theme-studio-activity", (event) => {
+  requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  return themeStudioStore.listActivity(50);
+});
+
 ipcMain.handle("theme-studio-delete", (event, name) => {
   requireTrustedWindow(event);
   if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
@@ -1162,6 +1412,7 @@ ipcMain.handle("theme-studio-activate", (event, name) => {
   const resolved = resolveThemeName(name);
   if (resolved !== name) throw new Error("Theme nicht gefunden");
   settings = saveSettings(app.getPath("userData"), { theme: resolved });
+  themeStudioStore?.recordActivity("activate", resolved);
   const payload = {
     settings,
     theme: loadTheme(resolved),

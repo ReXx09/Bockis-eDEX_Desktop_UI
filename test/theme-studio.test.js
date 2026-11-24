@@ -36,10 +36,49 @@ test("Protect built-in themes and reject path traversal", (t) => {
 
 test("Normalize invalid values without injecting arbitrary style strings", () => {
   const result = normalizeTheme({
-    colors: { r: 999, g: 42, b: 14, black: "url(file:///x)", grey: "#AbCdEf" }
+    colors: { r: 999, g: 42, b: 14, black: "url(file:///x)", grey: "#AbCdEf" },
+    panelStyle: "url(javascript:alert(1))",
+    cssvars: { font_main: "url(file:///x)" },
+    terminal: { fontFamily: "url(file:///x)", cursorStyle: "url(file:///x)", background: "url(file:///x)" }
   });
   assert.equal(result.colors.r, 0);
   assert.equal(result.colors.grey, "#abcdef");
   assert.equal(result.colors.black, "#000000");
   assert.equal(result.terminal.foreground, "#002a0e");
+  assert.equal(result.panelStyle, "square");
+  assert.equal(result.cssvars.font_main, "United Sans Medium");
+  assert.equal(result.terminal.fontFamily, "Fira Mono");
+  assert.equal(result.terminal.cursorStyle, "block");
+  assert.equal(result.terminal.background, "#05080d");
+});
+
+test("Theme packages import/export validated theme data and desktop options", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-studio-package-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const assets = path.join(__dirname, "..", "assets", "themes");
+  const source = createStore(path.join(dir, "source"), assets);
+  const target = createStore(path.join(dir, "target"), assets);
+  source.save("custom_cyan", { colors: { r: 12, g: 200, b: 255 } });
+  const packageFile = path.join(dir, "custom_cyan.json");
+
+  source.exportPackage("custom_cyan", packageFile, { wallpaper: "gradient", gridSize: 24 });
+  const imported = target.importPackage(packageFile);
+
+  assert.equal(imported.name, "custom_cyan");
+  assert.equal(imported.theme.colors.r, 12);
+  assert.deepEqual(imported.desktop, { wallpaper: "gradient", gridSize: 24 });
+  assert.deepEqual(target.listActivity().map((entry) => entry.action), ["import", "save"]);
+});
+
+test("Theme profile backups preserve validated themes and activity", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-studio-backup-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const store = createStore(dir, path.join(__dirname, "..", "assets", "themes"));
+  const backup = store.createProfileBackup("tron", store.load("tron"), { wallpaper: "grid" });
+
+  assert.equal(store.listProfileBackups()[0].id, backup.id);
+  assert.equal(store.loadProfileBackup(backup.id).theme.colors.r, 170);
+  assert.deepEqual(store.loadProfileBackup(backup.id).settings, { wallpaper: "grid" });
+  assert.throws(() => store.loadProfileBackup("../outside"), /Backup-ID/);
+  assert.equal(store.listActivity()[0].action, "backup");
 });

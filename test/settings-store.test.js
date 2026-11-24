@@ -15,6 +15,62 @@ test("Preserves analog clock mode when saving unrelated settings", (t) => {
   assert.equal(loadSettings(dir).clockDisplayMode, "analog");
 });
 
+test("Migrates legacy Windows color modes to independent features", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-settings-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "organizer-settings.json");
+
+  fs.writeFileSync(file, JSON.stringify({ windowsColorMode: "strong" }));
+  assert.deepEqual(loadSettings(dir).windowsThemeFeatures, {
+    accentColor: true,
+    appsDarkMode: true,
+    systemDarkMode: true,
+    startTaskbarAccent: true,
+    windowTitleAccent: true,
+    transparencyEffects: false,
+    taskbarAlignment: false,
+    taskbarSize: false
+  });
+  saveSettings(dir, { windowsThemeFeatures: { accentColor: false, appsDarkMode: true } });
+  const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.deepEqual(saved.windowsThemeFeatures, {
+    accentColor: false,
+    appsDarkMode: true,
+    systemDarkMode: false,
+    startTaskbarAccent: false,
+    windowTitleAccent: false,
+    transparencyEffects: false,
+    taskbarAlignment: false,
+    taskbarSize: false
+  });
+  assert.equal("windowsColorMode" in saved, false);
+});
+
+test("Persists normalized per-display desktop and Windows options", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-desktop-settings-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  saveSettings(dir, {
+    displayWallpapers: { "1234": "gradient", "bad/id": "grid", "7": "../invalid" },
+    desktopSyncAcrossDisplays: false,
+    desktopIconPack: "mono",
+    desktopCursorPack: "precision",
+    panelOpacity: 20,
+    contrastMode: "high",
+    windowsTaskbarAlignment: "left",
+    windowsTaskbarSize: "large"
+  });
+  const settings = loadSettings(dir);
+  assert.deepEqual(settings.displayWallpapers, { "1234": "gradient" });
+  assert.equal(settings.desktopSyncAcrossDisplays, false);
+  assert.equal(settings.desktopIconPack, "mono");
+  assert.equal(settings.desktopCursorPack, "precision");
+  assert.equal(settings.panelOpacity, 50);
+  assert.equal(settings.contrastMode, "high");
+  assert.equal(settings.windowsTaskbarAlignment, "left");
+  assert.equal(settings.windowsTaskbarSize, "large");
+});
+
 test("Persists and validates task-panel sizing options", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-taskdock-settings-test-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
