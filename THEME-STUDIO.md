@@ -17,14 +17,23 @@ colors are written to the DWM and Explorer accent values; Start/taskbar and
 title-bar display switches are separate. Enabled features are reapplied when
 eDEX synchronizes the active theme and at startup; a Windows update may reset
 a value, so use **Testen** to check it again. Live preview never changes
-Windows settings.
+Windows settings. `TaskbarSi` is explicitly experimental because Windows 11
+versions may ignore it or reset it.
 
 The Windows registry backup is a versioned snapshot of every registry value
-an enabled or tested feature changes. It is written atomically before changes;
-a failed multi-value apply or restore rolls back the registry writes and
-retains the backup. This is a rollback-safe transaction, not a Windows-wide
-transaction: unmanaged personalization such as sounds, fonts, and arbitrary
-theme files is not part of the registry manager's backup.
+an enabled or tested feature changes. A durable transaction journal and backup
+are written before changes; failed operations roll back, and an interrupted
+operation is checked and recovered at the next app start. **Profile &
+Sicherheit** shows backup/recovery status and offers a manual restore of all
+Theme-Studio-managed values. This is not a Windows-wide backup: unmanaged
+personalization settings are outside the registry manager's scope.
+
+The Windows `.theme` importer reads theme colors, wallpaper references, cursor
+schemes, sounds, and visual-style metadata into the eDEX theme draft. It does
+not apply Windows settings or copy assets. Save the draft as a custom theme to
+keep the imported metadata. Theme normalization also preserves properties not
+currently exposed by the editor, so editing known fields does not discard
+additional theme data.
 
 The **Desktop** area manages eDEX wallpaper per display, shared or independent
 display settings, grid/gradient backgrounds, icon/cursor presets, panel

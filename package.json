@@ -12,7 +12,7 @@
     "url": "https://github.com/ReXx09/Bockis-eDEX_Desktop_UI.git"
   },
   "scripts": {
-    "test": "node --test test/organizer.test.js test/i18n.test.js test/theme-studio.test.js test/update-checker.test.js test/desktop-layout.test.js test/settings-store.test.js test/windows-theme-registry.test.js test/ssh-path.test.js test/cpu-live-metrics.test.js test/hardware-monitor.test.js",
+    "test": "node --test test/organizer.test.js test/i18n.test.js test/theme-studio.test.js test/update-checker.test.js test/desktop-layout.test.js test/settings-store.test.js test/windows-theme-registry.test.js test/windows-theme-importer.test.js test/ssh-path.test.js test/cpu-live-metrics.test.js test/hardware-monitor.test.js",
     "prepare-assets": "node scripts/prepare-assets.js",
     "prepare-rainmeter": "node scripts/prepare-rainmeter.js",
     "build-hardware-monitor": "dotnet publish hardware-monitor\\BockisHardwareMonitor.csproj --configuration Release --output build\\hardware-monitor",
@@ -55,10 +55,6 @@
       {
         "from": "start-tron.cmd",
         "to": "start-tron.cmd"
-      },
-      {
-        "from": "sync-windows-theme.ps1",
-        "to": "sync-windows-theme.ps1"
       },
       {
         "from": "build/hardware-monitor",

@@ -52,6 +52,32 @@ test("Normalize invalid values without injecting arbitrary style strings", () =>
   assert.equal(result.terminal.background, "#05080d");
 });
 
+test("Preserves editor-unmanaged theme fields through normalization and save", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-studio-preserve-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const assets = path.join(__dirname, "..", "assets", "themes");
+  const store = createStore(dir, assets);
+  const source = {
+    colors: { r: 12, g: 34, b: 56, customPalette: { warning: "#abcdef" } },
+    cssvars: { font_main: "Rajdhani", font_main_light: "Rajdhani Light", customFontVar: "preserve-me" },
+    terminal: { fontFamily: "Cascadia Mono", cursorStyle: "bar", customTerminalOption: { enabled: true } },
+    globe: { base: "#123456", marker: "#234567", pin: "#345678", satellite: "#456789", customGlobeOption: 7 },
+    customFeature: { enabled: true, values: ["keep", "all"] }
+  };
+
+  const normalized = normalizeTheme(source);
+  store.save("preserved_theme", normalized);
+  const saved = store.load("preserved_theme");
+
+  assert.deepEqual(saved.customFeature, source.customFeature);
+  assert.deepEqual(saved.colors.customPalette, source.colors.customPalette);
+  assert.equal(saved.cssvars.font_main_light, "Rajdhani Light");
+  assert.equal(saved.cssvars.customFontVar, "preserve-me");
+  assert.deepEqual(saved.terminal.customTerminalOption, source.terminal.customTerminalOption);
+  assert.equal(saved.globe.customGlobeOption, 7);
+  assert.equal(saved.globe.base, "#123456");
+});
+
 test("Theme packages import/export validated theme data and desktop options", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-studio-package-test-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

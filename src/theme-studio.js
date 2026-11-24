@@ -62,7 +62,9 @@
           <button data-act="save-windows-options">Optionen testen / anwenden</button>
         </div>
         <div class="studio-actions"><button data-act="adopt-windows-theme">Windows-Systemtheme übernehmen</button></div>
-        <p class="studio-help">Taskleisten-Einstellungen können je nach Windows-Version ignoriert oder zurückgesetzt werden. Kontrastmodus steuert zusätzlich die eDEX-Oberfläche.</p>
+        <div class="studio-actions"><button data-act="import-windows-theme">.theme-Datei nur einlesen</button></div>
+        <div class="studio-windows-import" data-id="windows-import-preview" hidden></div>
+        <p class="studio-help">TaskbarSi ist experimentell: Windows 11 kann die Taskleisten-Größe je nach Version ignorieren oder zurücksetzen. Kontrastmodus steuert zusätzlich die eDEX-Oberfläche.</p>
       </section>
       <section class="studio-section" data-section-panel="desktop" hidden>
         <h3>Desktop pro Monitor</h3>
@@ -84,6 +86,9 @@
         <div class="studio-actions"><button data-act="import-package">Theme-Paket importieren</button><button data-act="export-package">Aktuelles Theme exportieren</button><button data-act="create-backup">Backup erstellen</button></div>
         <label class="studio-setting">Backup auswählen<select data-id="profile-backups"></select></label>
         <button data-act="restore-backup">Backup wiederherstellen</button>
+        <h3>Windows-Registry-Notfallwiederherstellung</h3>
+        <p class="studio-help" data-id="windows-recovery-status" role="status">Prüfung ausstehend.</p>
+        <button data-act="windows-emergency-restore">Verwaltete Windows-Werte wiederherstellen</button>
         <div class="studio-compare" data-id="compare" hidden></div>
         <h3>Änderungsprotokoll</h3><ol class="studio-activity" data-id="activity"><li>Protokoll wird geladen …</li></ol>
         <p class="studio-help">Theme-Pakete enthalten validierte Theme-Daten und Desktop-Optionen. Backups bleiben lokal im Benutzerprofil gespeichert.</p>
@@ -138,6 +143,26 @@
       get('[data-theme-setting="terminalCursor"]').value = theme.terminal?.cursorStyle || "block";
       updatePreview();
     }
+    function renderWindowsImport(imported) {
+      const container = get('[data-id="windows-import-preview"]');
+      container.replaceChildren();
+      container.hidden = !imported;
+      if (!imported) return;
+      const cursorCount = Object.keys(imported.cursorScheme?.cursors || {}).length;
+      const details = [
+        `Importiert: ${imported.displayName || imported.sourceName}`,
+        `Wallpaper: ${imported.wallpaper?.path || "nicht enthalten"}`,
+        `Cursor-Schema: ${imported.cursorScheme?.name || "nicht enthalten"} (${cursorCount} Cursorpfade)`,
+        `Sounds: ${(imported.sounds || []).length}`,
+        `Visual-Style: ${imported.visualStyle?.path || "nicht enthalten"}`,
+        `Farben: ${Object.values(imported.colors?.entries || {}).filter(Boolean).length} erkannt`
+      ];
+      for (const text of details) {
+        const line = document.createElement("p");
+        line.textContent = text;
+        container.append(line);
+      }
+    }
     const windowsFeatures = [
       ["accentColor", "Windows-Akzentfarbe"],
       ["appsDarkMode", "Dunkler Modus für Apps"],
@@ -146,7 +171,7 @@
       ["windowTitleAccent", "Akzentfarbe auf Fenstertiteln"],
       ["transparencyEffects", "Windows-Transparenzeffekte"],
       ["taskbarAlignment", "Taskleisten-Ausrichtung"],
-      ["taskbarSize", "Taskleisten-Größe"]
+      ["taskbarSize", "Taskleisten-Größe (experimentell)"]
     ];
     async function setWindowsFeature(id, enabled) {
       const colors = theme.colors;
@@ -287,6 +312,28 @@
         list.append(item);
       }
     }
+    async function refreshWindowsRecovery() {
+      const indicator = get('[data-id="windows-recovery-status"]');
+      const button = get('[data-act="windows-emergency-restore"]');
+      const recovery = await api().themeStudioWindowsRecoveryStatus();
+      if (!recovery.available) {
+        indicator.textContent = "Windows-Registry-Backup ist auf dieser Plattform nicht verfügbar.";
+        button.disabled = true;
+        return;
+      }
+      if (!recovery.backupValid) {
+        indicator.textContent = `Windows-Backup ist ungültig: ${recovery.error || "Formatfehler"}`;
+      } else if (recovery.pendingRecovery) {
+        indicator.textContent = recovery.transactionValid
+          ? "Eine unterbrochene Transaktion wartet auf Wiederherstellung."
+          : `Transaktionsjournal ist beschädigt: ${recovery.error || "Formatfehler"}`;
+      } else if (recovery.backupEntries) {
+        indicator.textContent = `Backup geprüft: ${recovery.backupEntries} verwaltete Registry-Werte sind gesichert.`;
+      } else {
+        indicator.textContent = "Kein offenes Registry-Backup vorhanden.";
+      }
+      button.disabled = !recovery.pendingRecovery && recovery.backupEntries === 0;
+    }
     function renderComparison() {
       const container = get('[data-id="compare"]');
       container.replaceChildren();
@@ -380,6 +427,7 @@
       selected = name;
       originalTheme = JSON.parse(JSON.stringify(theme));
       get('[data-id="name"]').value = name;
+      renderWindowsImport(theme.windowsThemeImport);
       refreshInputs();
       status(`Theme „${name}“ geladen. Änderungen sind noch nicht gespeichert.`);
     }
@@ -463,6 +511,19 @@
           refreshInputs();
           return status("Windows-Akzentfarbe und Hell-/Dunkelmodus in den Theme-Entwurf übernommen.");
         }
+        if (action === "import-windows-theme") {
+          const result = await api().themeStudioImportWindowsTheme();
+          if (result.canceled) return;
+          theme = result.theme;
+          selected = "";
+          importedDesktop = null;
+          originalTheme = JSON.parse(JSON.stringify(theme));
+          get('[data-id="name"]').value = result.name;
+          renderWindowsImport(result.imported);
+          refreshInputs();
+          await refreshProfileHistory();
+          return status(`Windows-Theme „${result.imported.displayName}“ nur eingelesen. Windows wurde nicht verändert; zum Übernehmen als eDEX-Theme speichern.`);
+        }
         if (action === "compare") {
           renderComparison();
           return;
@@ -473,6 +534,7 @@
           theme = imported.theme;
           selected = imported.name;
           originalTheme = JSON.parse(JSON.stringify(theme));
+          renderWindowsImport(theme.windowsThemeImport);
           importedDesktop = imported.desktop || null;
           if (importedDesktop) {
             desktopSettings = { ...desktopSettings, ...importedDesktop };
@@ -516,11 +578,25 @@
             ? `Backup als „${result.name}“ wiederhergestellt.`
             : `Backup als „${result.name}“ wiederhergestellt; Windows-Anpassungen konnten nicht synchronisiert werden.`, !result.windowsApplied && bootstrap.platform === "win32");
         }
+        if (action === "windows-emergency-restore") {
+          if (!window.confirm("Alle vom Theme Studio verwalteten Windows-Registry-Werte aus dem Backup wiederherstellen und die Windows-Anpassungen deaktivieren?")) return;
+          const result = await api().themeStudioWindowsEmergencyRestore();
+          if (result.restored) {
+            renderWindowsFeatures(result.features);
+            await refreshProfileHistory();
+            await refreshWindowsRecovery();
+            return status("Verwaltete Windows-Werte wurden aus dem Backup wiederhergestellt.");
+          }
+          await refreshWindowsRecovery();
+          if (result.recovered) return status(result.error, true);
+          throw new Error(result.error || "Windows-Notfallwiederherstellung fehlgeschlagen.");
+        }
       if (action === "new") {
         theme = defaultTheme();
         selected = "";
-          originalTheme = JSON.parse(JSON.stringify(theme));
+        originalTheme = JSON.parse(JSON.stringify(theme));
         get('[data-id="name"]').value = "mein_theme";
+        renderWindowsImport(null);
         refreshInputs();
         return status("Neues Theme erstellt. Bitte benennen und speichern.");
       }
@@ -584,6 +660,7 @@
         renderDesktopSettings(desktopSettings);
         renderWindowsFeatures(bootstrap?.settings?.windowsThemeFeatures);
         await refreshProfileHistory();
+        await refreshWindowsRecovery();
       } catch (error) {
         status(`Initialisierung fehlgeschlagen: ${error.message}`, true);
       }

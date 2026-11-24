@@ -45,6 +45,9 @@ weiter:
 - Theme Studio 2.0 mit Bereichen für eDEX-Design, Windows, Desktop und Profile.
 - Theme-Paket-Import/-Export, Vorher-Nachher-Vergleich, Backups und Änderungsprotokoll.
 - Desktop-Wallpaper pro Monitor, Raster-/Verlaufsstil sowie Icon- und Cursor-Presets.
+- Bewahrung zusätzlicher Theme-Eigenschaften beim Bearbeiten; Windows-`.theme`-Import ohne Änderungen an Windows.
+- Dauerhaftes Registry-Transaktionsjournal mit Startprüfung, Recovery-Status und manueller Wiederherstellung.
+- Taskleisten-Größe als experimentelle Windows-Option gekennzeichnet.
 
 ### Version und Updates
 

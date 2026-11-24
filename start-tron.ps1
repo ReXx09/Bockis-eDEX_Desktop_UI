@@ -40,18 +40,7 @@ Start-Sleep -Milliseconds 100
 Beep-Tron 880 110
 Write-Tron '  [LINK] IPC channel ready'
 
-Write-Tron '  [THEME] Synchronizing Windows color bridge ...' ([ConsoleColor]::Cyan)
-$themeBridge = Join-Path $PSScriptRoot 'sync-windows-theme.ps1'
-if (Test-Path -LiteralPath $themeBridge) {
-    $themeResult = & powershell.exe -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File $themeBridge
-    if ($LASTEXITCODE -eq 0 -and ($themeResult -contains 'SYNC_APPLIED')) {
-        Write-Tron '  [ OK ] Windows theme state applied' ([ConsoleColor]::Cyan)
-    } else {
-        Write-Tron '  [WARN] Windows theme state was not applied; GUI will retry' ([ConsoleColor]::Yellow)
-    }
-} else {
-    Write-Tron '  [WARN] Windows theme bridge not installed' ([ConsoleColor]::Yellow)
-}
+Write-Tron '  [THEME] Safe registry recovery and sync will run in the GUI' ([ConsoleColor]::Cyan)
 Start-Sleep -Milliseconds 180
 
 if (-not (Test-Path -LiteralPath $AppPath)) {

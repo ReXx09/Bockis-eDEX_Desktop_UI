@@ -22,6 +22,7 @@ const { dirIcon } = require("./lib/icons");
 const { loadSettings, refreshPresetForSave, saveSettings } = require("./lib/settings-store");
 const { FEATURES, normalizeFeatures, normalizeWindowsOptions } = require("./lib/windows-theme-manager");
 const { createWindowsThemeRegistryStore, entryId, writeJsonAtomically } = require("./lib/windows-theme-registry");
+const { parseWindowsThemeFile } = require("./lib/windows-theme-importer");
 const { WALLPAPERS, listThemes, loadTheme, resolveThemeName, themesDir, configureThemeStore } = require("./lib/themes");
 const { createStore: createThemeStudioStore } = require("./lib/theme-studio-store");
 const {
@@ -705,6 +706,42 @@ if (!gotLock) {
     configureThemeStore(themeStudioStore);
     settings = loadSettings(app.getPath("userData"));
     if (process.platform === "win32") {
+      const backupFile = path.join(app.getPath("userData"), "windows-theme-backup.json");
+      const recoveryStatus = windowsThemeRegistryStore.inspect(backupFile);
+      if (!recoveryStatus.backupValid) {
+        appLog.error("windows-theme.backup-check", "Windows-Theme-Backup ist beim Start ungültig", {
+          error: recoveryStatus.error
+        });
+      }
+      let recoveredTransaction = false;
+      if (recoveryStatus.pendingRecovery) {
+        try {
+          await windowsThemeRegistryStore.recover(backupFile);
+          recoveredTransaction = true;
+          appLog.warn("windows-theme.recovery", "Unvollständige Windows-Theme-Transaktion beim Start zurückgerollt", {
+            backupEntries: recoveryStatus.backupEntries
+          });
+        } catch (error) {
+          appLog.error("windows-theme.recovery", "Windows-Theme-Transaktion konnte beim Start nicht wiederhergestellt werden", {
+            error: error.message || String(error)
+          });
+        }
+      }
+      if (recoveredTransaction && !Object.values(normalizeFeatures(settings.windowsThemeFeatures)).some(Boolean)) {
+        try {
+          const restored = await windowsThemeRegistryStore.restore(
+            backupFile,
+            windowsThemeEntries(Object.keys(FEATURES))
+          );
+          if (restored) {
+            appLog.warn("windows-theme.recovery", "Verwaltete Windows-Werte nach abgebrochener Deaktivierung wiederhergestellt");
+          }
+        } catch (error) {
+          appLog.error("windows-theme.recovery", "Windows-Werte konnten nach der Recovery nicht wiederhergestellt werden", {
+            error: error.message || String(error)
+          });
+        }
+      }
       try {
         const startupTheme = loadTheme(resolveThemeName(settings.theme || "tron"));
         await syncWindowsThemeSettings(app.getPath("userData"), settings, startupTheme.colors);
@@ -1344,6 +1381,99 @@ ipcMain.handle("theme-studio-import", async (event) => {
   });
   if (result.canceled || !result.filePaths[0]) return { canceled: true };
   return themeStudioStore.importPackage(result.filePaths[0]);
+});
+
+ipcMain.handle("theme-studio-import-windows-theme", async (event) => {
+  const win = requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  const result = await dialog.showOpenDialog(win, {
+    title: "Windows-Theme-Datei importieren",
+    properties: ["openFile"],
+    filters: [{ name: "Windows-Theme-Datei", extensions: ["theme"] }]
+  });
+  if (result.canceled || !result.filePaths[0]) return { canceled: true };
+  const imported = parseWindowsThemeFile(result.filePaths[0]);
+  const theme = loadTheme(resolveThemeName(settings.theme || "tron"));
+  theme.windowsThemeImport = imported;
+  const importedAccent = imported.colors.accent;
+  if (importedAccent) {
+    theme.colors.r = Number.parseInt(importedAccent.slice(1, 3), 16);
+    theme.colors.g = Number.parseInt(importedAccent.slice(3, 5), 16);
+    theme.colors.b = Number.parseInt(importedAccent.slice(5, 7), 16);
+  }
+  if (imported.colors.panel || imported.colors.background) {
+    theme.colors.black = imported.colors.panel || imported.colors.background;
+  }
+  if (imported.colors.background) theme.colors.light_black = imported.colors.background;
+  if (imported.colors.foreground || imported.colors.background) {
+    theme.terminal = {
+      ...theme.terminal,
+      foreground: imported.colors.foreground || theme.terminal?.foreground,
+      background: imported.colors.background || theme.terminal?.background
+    };
+  }
+  themeStudioStore.recordActivity("windows-theme-import", imported.displayName);
+  const suggestedName = path.basename(imported.sourceName, path.extname(imported.sourceName))
+    .replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 48) || "windows_theme";
+  return { canceled: false, theme, name: suggestedName, imported };
+});
+
+ipcMain.handle("theme-studio-windows-recovery-status", (event) => {
+  requireTrustedWindow(event);
+  if (process.platform !== "win32") return { available: false };
+  const backupFile = path.join(app.getPath("userData"), "windows-theme-backup.json");
+  return { available: true, ...windowsThemeRegistryStore.inspect(backupFile) };
+});
+
+ipcMain.handle("theme-studio-windows-emergency-restore", async (event) => {
+  requireTrustedWindow(event);
+  if (process.platform !== "win32") return { restored: false, error: "Nur unter Windows verfügbar." };
+  const userData = app.getPath("userData");
+  const backupFile = path.join(userData, "windows-theme-backup.json");
+  const recoveryStatus = windowsThemeRegistryStore.inspect(backupFile);
+  let recoveredTransaction = false;
+  try {
+    if (recoveryStatus.pendingRecovery && recoveryStatus.transactionValid) {
+      await windowsThemeRegistryStore.recover(backupFile);
+      recoveredTransaction = true;
+    }
+    const currentSettings = loadSettings(userData);
+    const currentFeatures = normalizeFeatures(currentSettings.windowsThemeFeatures);
+    const features = Object.fromEntries(Object.keys(FEATURES).map((id) => [id, false]));
+    const theme = loadTheme(resolveThemeName(currentSettings.theme || "tron"));
+    const restored = await windowsThemeRegistryStore.emergencyRestore(
+      backupFile,
+      windowsThemeEntries(Object.keys(FEATURES)),
+      () => commitWindowsFeatureSettings(
+        userData,
+        path.join(userData, "windows-theme-state.json"),
+        features,
+        theme.colors,
+        currentSettings,
+        currentFeatures
+      )
+    );
+    if (!restored) {
+      return {
+        restored: false,
+        recovered: recoveredTransaction,
+        error: recoveredTransaction
+          ? "Unterbrochene Transaktion wurde zurückgesetzt; es gibt kein separates Windows-Backup."
+          : "Kein gültiges Backup für verwaltete Windows-Werte vorhanden."
+      };
+    }
+    spawn("rundll32.exe", ["user32.dll,UpdatePerUserSystemParameters"], { windowsHide: true, stdio: "ignore" });
+    themeStudioStore?.recordActivity("windows-emergency-restore", "all-managed-values");
+    broadcast("settings-updated", {
+      settings,
+      theme,
+      themeName: currentSettings.theme || "tron",
+      displays: listDisplays()
+    });
+    return { restored: true, features };
+  } catch (error) {
+    return { restored: false, error: error.message || String(error) };
+  }
 });
 
 ipcMain.handle("theme-studio-create-backup", (event) => {

@@ -146,6 +146,52 @@ test("Rolls registry values and backup state back when restore commit fails", as
   assert.equal(JSON.parse(fs.readFileSync(backupFile, "utf8")).entries[id].data, 4);
 });
 
+test("Recovers a registry transaction left behind by a process exit", async (t) => {
+  const key = "HKCU\\Software\\Microsoft\\Windows\\DWM";
+  const entry = { key, name: "AccentColor", value: 1 };
+  const id = entryId(key, "AccentColor");
+  const { backupFile, store, values } = makeRegistryStore(t, {
+    [id]: { exists: true, type: "REG_DWORD", data: 4 }
+  });
+  await store.apply(backupFile, [entry], {
+    [id]: { exists: true, type: "REG_DWORD", data: 9 }
+  });
+  const backupBefore = JSON.parse(fs.readFileSync(backupFile, "utf8"));
+  const transactionFile = `${backupFile}.transaction.json`;
+  fs.writeFileSync(transactionFile, JSON.stringify({
+    version: 1,
+    backupExisted: true,
+    backupBefore,
+    previous: { [id]: { key, name: "AccentColor", exists: true, type: "REG_DWORD", data: 9 } }
+  }));
+  values.set(id, { exists: true, type: "REG_DWORD", data: 12 });
+
+  assert.equal(store.inspect(backupFile).pendingRecovery, true);
+  assert.equal(await store.recover(backupFile), true);
+  assert.equal(values.get(id).data, 9);
+  assert.deepEqual(JSON.parse(fs.readFileSync(backupFile, "utf8")), backupBefore);
+  assert.equal(store.inspect(backupFile).pendingRecovery, false);
+});
+
+test("Emergency restore can recover managed values when the transaction journal is damaged", async (t) => {
+  const key = "HKCU\\Software\\Microsoft\\Windows\\DWM";
+  const entry = { key, name: "AccentColor", value: 1 };
+  const id = entryId(key, "AccentColor");
+  const { backupFile, store, values } = makeRegistryStore(t, {
+    [id]: { exists: true, type: "REG_DWORD", data: 4 }
+  });
+  await store.apply(backupFile, [entry], {
+    [id]: { exists: true, type: "REG_DWORD", data: 9 }
+  });
+  values.set(id, { exists: true, type: "REG_DWORD", data: 12 });
+  fs.writeFileSync(`${backupFile}.transaction.json`, "damaged");
+
+  assert.equal(store.inspect(backupFile).transactionValid, false);
+  assert.equal(await store.emergencyRestore(backupFile, [entry]), true);
+  assert.equal(values.get(id).data, 4);
+  assert.equal(fs.existsSync(`${backupFile}.transaction.json`), false);
+});
+
 test("Covers distinct Windows switches and migrates the former combined toggle", () => {
   assert.deepEqual(normalizeFeatures({ taskbarWindowAccent: true }).startTaskbarAccent, true);
   assert.deepEqual(normalizeFeatures({ taskbarWindowAccent: true }).windowTitleAccent, true);
@@ -155,4 +201,5 @@ test("Covers distinct Windows switches and migrates the former combined toggle",
     && entry.key.endsWith("\\Themes\\Personalize")));
   assert.ok(FEATURES.windowTitleAccent.values.some((entry) => entry.name === "ColorPrevalence"
     && entry.key.endsWith("\\Windows\\DWM")));
+  assert.equal(FEATURES.taskbarSize.experimental, true);
 });
