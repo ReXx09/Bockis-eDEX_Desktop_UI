@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.7.8] - 2026-11-24
+
+### Fixed
+
+- Detect missing Windows registry keys and values without relying on localized
+  `reg.exe` error messages, preventing repeated sync failures on non-English
+  Windows installations.
+
 ## [1.2.7.7] - 2026-11-24
 
 ### Fixed

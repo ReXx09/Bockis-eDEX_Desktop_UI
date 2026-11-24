@@ -869,32 +869,51 @@ function runRegistry(args) {
   });
 }
 
-function readRegistryDword(key, name) {
+function readRegistryDwords(entries) {
+  const items = entries.map((entry) => {
+    const subKey = String(entry.key).replace(/^HKCU\\/i, "");
+    if (subKey === entry.key) throw new Error(`Nicht unterstützter Registry-Pfad: ${entry.key}`);
+    return { key: subKey, name: entry.name };
+  });
+  const encodedItems = Buffer.from(JSON.stringify(items), "utf16le").toString("base64");
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    `$items = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${encodedItems}')) | ConvertFrom-Json`,
+    "foreach ($item in $items) {",
+    "  $registryKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey([string]$item.key, $false)",
+    "  if ($null -eq $registryKey) { [Console]::Out.WriteLine('{\"exists\":false}'); continue }",
+    "  try {",
+    "    if ($registryKey.GetValueNames() -notcontains [string]$item.name) { [Console]::Out.WriteLine('{\"exists\":false}'); continue }",
+    "    if ($registryKey.GetValueKind([string]$item.name) -ne [Microsoft.Win32.RegistryValueKind]::DWord) { throw \"Unsupported registry type for $($item.name)\" }",
+    "    $data = ([long]$registryKey.GetValue([string]$item.name)) -band 0xffffffffL",
+    "    $result = @{ exists = $true; type = 'REG_DWORD'; data = $data }",
+    "    [Console]::Out.WriteLine((ConvertTo-Json -InputObject $result -Compress))",
+    "  } finally { $registryKey.Dispose() }",
+    "}"
+  ].join("\n");
+  const encodedScript = Buffer.from(script, "utf16le").toString("base64");
   return new Promise((resolve, reject) => {
-    execFile("reg.exe", ["QUERY", key, "/v", name], { windowsHide: true, encoding: "utf8" }, (error, stdout, stderr) => {
+    execFile("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodedScript], {
+      windowsHide: true,
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024
+    }, (error, stdout, stderr) => {
       if (error) {
-        const output = `${stdout || ""}\n${stderr || ""}`;
-        if (/unable to find the specified registry (?:key|key or value)/i.test(output)) {
-          return resolve({ exists: false });
-        }
-        return reject(new Error(`Registry-Wert ${name} konnte nicht gelesen werden: ${error.message}`));
+        return reject(new Error(`Windows-Registrywerte konnten nicht gelesen werden: ${(stderr || error.message).trim()}`));
       }
-      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const match = String(stdout || "").match(new RegExp(`^\\s*${escapedName}\\s+(REG_[A-Z0-9_]+)\\s+(.+?)\\s*$`, "im"));
-      if (!match) return resolve({ exists: false });
-      if (match[1].toUpperCase() !== "REG_DWORD") {
-        return reject(new Error(`Registry-Wert ${name} hat den nicht unterstützten Typ ${match[1]}.`));
+      try {
+        const lines = String(stdout || "").trim().split(/\r?\n/).filter(Boolean);
+        if (lines.length !== entries.length) throw new Error("Unvollständige Antwort aus der Windows-Registry.");
+        resolve(lines.map((line) => JSON.parse(line)));
+      } catch (parseError) {
+        reject(new Error(`Windows-Registrywerte konnten nicht ausgewertet werden: ${parseError.message}`));
       }
-      const data = match[2].trim();
-      const value = /^0x[0-9a-f]+$/i.test(data)
-        ? Number.parseInt(data.slice(2), 16)
-        : /^\d+$/.test(data) ? Number.parseInt(data, 10) : NaN;
-      if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
-        return reject(new Error(`Registry-Wert ${name} enthält keinen gültigen DWORD-Wert.`));
-      }
-      resolve({ exists: true, type: "REG_DWORD", data: value });
     });
   });
+}
+
+function readRegistryDword(key, name) {
+  return readRegistryDwords([{ key, name }]).then((values) => values[0]);
 }
 
 function windowsAccentValue(rgb = {}) {
@@ -915,6 +934,7 @@ async function deleteRegistryValue(key, name) {
 
 const windowsThemeRegistryStore = createWindowsThemeRegistryStore({
   read: readRegistryDword,
+  readMany: readRegistryDwords,
   write: writeRegistryDword,
   remove: deleteRegistryValue
 });
