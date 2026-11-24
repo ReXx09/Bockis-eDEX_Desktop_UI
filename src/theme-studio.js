@@ -12,11 +12,12 @@
     terminal: { fontFamily: "Fira Mono", cursorStyle: "block", foreground: "#00eaff", background: "#05080d" }
   });
 
-  function mount(root, { embedded = false } = {}) {
+  function mount(root, { embedded = false, externalNavigation = false } = {}) {
     if (!root || root.dataset.mounted) return;
     root.dataset.mounted = "1";
     root.classList.add("bockis-studio");
     if (embedded) root.classList.add("bockis-studio-embedded");
+    if (embedded && externalNavigation) root.classList.add("studio-external-navigation");
     root.innerHTML = `
       <div class="studio-header"><div><strong>BOCKIS // THEME STUDIO 2.0</strong><small>Theme-, Windows- und Desktop-Manager</small></div>
       ${embedded ? '<button data-act="popout">↗ Eigenes Fenster</button>' : '<span class="studio-version">2.0</span>'}</div>
@@ -26,7 +27,7 @@
         <button type="button" data-section="desktop" aria-pressed="false"><span>▦</span>Desktop</button>
         <button type="button" data-section="profiles" aria-pressed="false"><span>⛨</span>Profile &amp; Sicherheit</button>
       </nav>
-      <div class="studio-toolbar">
+      <div class="studio-toolbar" data-studio-anchor="theme-library">
        <label>Theme <select data-id="themes" aria-label="Theme auswählen"></select></label>
        <button data-act="load">Laden</button><button data-act="new">Neues Theme</button>
        <label>Name <input data-id="name" maxlength="48" placeholder="mein_theme" spellcheck="false"></label>
@@ -34,7 +35,7 @@
       </div>
       <section class="studio-section is-active" data-section-panel="edex">
         <div class="studio-layout"><section class="studio-controls">
-          <h3>Primär- und Sekundärfarben</h3><div class="studio-colors">
+          <h3 data-studio-anchor="edex-colors">Primär- und Sekundärfarben</h3><div class="studio-colors">
           ${[["accent", "Akzentfarbe"], ["black", "Panel-Hintergrund"], ["light_black", "Oberfläche"], ["grey", "Sekundärfarbe"], ["red", "Warnfarbe"], ["yellow", "Hinweisfarbe"]].map(([key, label]) => `<label class="studio-color"><span>${label}</span><input data-color="${key}" type="color"><input data-hex="${key}" maxlength="7" spellcheck="false"></label>`).join("")}
           <label class="studio-color"><span>Terminal-Text</span><input data-color="terminalForeground" type="color"><input data-hex="terminalForeground" maxlength="7" spellcheck="false"></label>
           <label class="studio-color"><span>Terminal-Hintergrund</span><input data-color="terminalBackground" type="color"><input data-hex="terminalBackground" maxlength="7" spellcheck="false"></label>
@@ -49,11 +50,11 @@
           <div class="studio-preview-top"><span>BOCKIS // SYSTEM</span><span>● ONLINE</span></div>
           <div class="studio-preview-grid"><div><b>CPU / STATUS</b><svg viewBox="0 0 160 40"><polyline points="0,30 20,28 30,5 45,32 60,12 80,24 95,10 110,18 130,6 160,20"/></svg></div><div><b>NETWORK</b><svg viewBox="0 0 160 40"><polyline points="0,30 25,22 45,27 70,10 95,22 120,6 145,14 160,8"/></svg></div></div>
           <div class="studio-preview-terminal">&gt; theme preview --live<br><span>Theme Engine online.</span><br>_</div>
-        </div><div class="studio-actions"><button data-act="preview">Auf eDEX live ansehen</button><button data-act="compare">Vorher / Nachher</button><button data-act="reset">Vorschau zurücksetzen</button><button data-act="apply" class="studio-primary">Theme aktivieren</button></div>
+        </div><div class="studio-actions" data-studio-anchor="live-preview"><button data-act="preview">Auf eDEX live ansehen</button><button data-act="compare">Vorher / Nachher</button><button data-act="reset">Vorschau zurücksetzen</button><button data-act="apply" class="studio-primary">Theme aktivieren</button></div>
         <p class="studio-help">Farben, Terminal-Schrift und Rahmenstil werden in deinem Theme-Paket gespeichert.</p></section></div>
       </section>
       <section class="studio-section" data-section-panel="windows" hidden>
-        <h3>Windows 11 synchronisieren</h3>
+        <h3 data-studio-anchor="windows-manager">Windows 11 synchronisieren</h3>
         <p class="studio-help">Akzentfarbe sowie die Schalter für Startmenü/Taskleiste und Fenstertitel sind getrennt. Jede Anpassung lässt sich testen und aus einem atomaren Original-Backup wiederherstellen; bei einem Fehler werden Teiländerungen zurückgerollt. Es werden keine Windows-Systemdateien gepatcht.</p>
         <div class="studio-sync-features" data-id="windows-features"></div>
         <div class="studio-option-row">
@@ -65,9 +66,14 @@
         <div class="studio-actions"><button data-act="import-windows-theme">.theme-Datei nur einlesen</button></div>
         <div class="studio-windows-import" data-id="windows-import-preview" hidden></div>
         <p class="studio-help">TaskbarSi ist experimentell: Windows 11 kann die Taskleisten-Größe je nach Version ignorieren oder zurücksetzen. Kontrastmodus steuert zusätzlich die eDEX-Oberfläche.</p>
+        <h3 data-studio-anchor="windhawk">BOCKIS Windows Style Integration 1.0</h3>
+        <p class="studio-help">Windhawk ist optional und wird im eDEX-Setup nur nach Zustimmung installiert. Bestehende Windhawk-Installationen und Mods bleiben unangetastet. Mit der stabilen Windhawk-Version prüft eDEX die Runtime; Mods und ihre Einstellungen müssen manuell in Windhawk geprüft und verwaltet werden. Es werden keine Mods automatisch installiert, aktualisiert oder aktiviert.</p>
+        <p class="studio-windhawk-status" data-id="windows-style-status" role="status">Windhawk-Status wird geprüft …</p>
+        <div class="studio-windhawk-mods" data-id="windows-style-mods"></div>
+        <div class="studio-actions"><button data-act="open-windhawk-install">Offizielle Windhawk-Seite öffnen</button></div>
       </section>
       <section class="studio-section" data-section-panel="desktop" hidden>
-        <h3>Desktop pro Monitor</h3>
+        <h3 data-studio-anchor="desktop">Desktop pro Monitor</h3>
         <div class="studio-desktop-grid">
           <label>Monitor<select data-id="desktop-display"></select></label>
           <label>Wallpaper<select data-id="desktop-wallpaper"></select></label>
@@ -82,7 +88,7 @@
         <p class="studio-help">Raster und Farbverläufe verwenden die Farben des aktiven eDEX-Themes. Änderungen am Wallpaper können pro Monitor getrennt oder synchron erfolgen.</p>
       </section>
       <section class="studio-section" data-section-panel="profiles" hidden>
-        <h3>Theme-Pakete und Wiederherstellung</h3>
+        <h3 data-studio-anchor="profiles">Theme-Pakete und Wiederherstellung</h3>
         <div class="studio-actions"><button data-act="import-package">Theme-Paket importieren</button><button data-act="export-package">Aktuelles Theme exportieren</button><button data-act="create-backup">Backup erstellen</button></div>
         <label class="studio-setting">Backup auswählen<select data-id="profile-backups"></select></label>
         <button data-act="restore-backup">Backup wiederherstellen</button>
@@ -334,6 +340,55 @@
       }
       button.disabled = !recovery.pendingRecovery && recovery.backupEntries === 0;
     }
+    function renderWindowsStyleStatus(integration) {
+      const statusElement = get('[data-id="windows-style-status"]');
+      const container = get('[data-id="windows-style-mods"]');
+      container.replaceChildren();
+      if (!integration.supportedPlatform) {
+        statusElement.textContent = "BOCKIS Windows Style Integration ist nur unter Windows verfügbar.";
+      } else if (integration.runtime === "missing") {
+        statusElement.textContent = "Windhawk wurde nicht gefunden. Es wird nichts automatisch installiert.";
+      } else if (integration.compatible) {
+        statusElement.textContent = `Windhawk ${integration.version} erkannt. Die stabile Runtime ist kompatibel; Mod-Status bitte manuell in Windhawk prüfen.`;
+      } else {
+        statusElement.textContent = `Windhawk ${integration.version || "unbekannte Version"} erkannt, aber nicht mit dieser Integration geprüft. Benötigt wird eine stabile Version ab ${integration.minimumVersion} aus der 1.x-Reihe.`;
+      }
+      for (const mod of integration.mods || []) {
+        const row = document.createElement("div");
+        row.className = "studio-windhawk-mod";
+        const details = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = mod.name;
+        const note = document.createElement("small");
+        note.textContent = mod.status === "manual-verification-required"
+          ? "Installations- und Einstellungsstatus ist mit Windhawk 1.x nicht über eine unterstützte CLI prüfbar."
+          : mod.status === "requires-windhawk"
+            ? "Windhawk wird für dieses Mod benötigt."
+            : mod.status === "blocked-by-runtime"
+              ? "Runtime-Version nicht kompatibel oder nicht geprüft."
+              : "Nur unter Windows verfügbar.";
+        details.append(title, note);
+        const open = document.createElement("button");
+        open.type = "button";
+        open.textContent = "Mod-Seite öffnen";
+        open.disabled = !integration.supportedPlatform;
+        open.addEventListener("click", busy(async () => {
+          await api().themeStudioOpenWindowsStyleLink(mod.id);
+          status(`${mod.name} auf der offiziellen Windhawk-Seite geöffnet.`);
+        }));
+        row.append(details, open);
+        container.append(row);
+      }
+    }
+    async function refreshWindowsStyleStatus() {
+      const statusElement = get('[data-id="windows-style-status"]');
+      try {
+        renderWindowsStyleStatus(await api().themeStudioWindowsStyleStatus());
+      } catch (error) {
+        statusElement.textContent = `Windhawk-Status konnte nicht geprüft werden: ${error.message || String(error)}`;
+        throw error;
+      }
+    }
     function renderComparison() {
       const container = get('[data-id="compare"]');
       container.replaceChildren();
@@ -471,6 +526,10 @@
       const action = button.dataset.act;
       if (action === "popout") return api().themeStudioOpen();
       if (action === "load") return load(get('[data-id="themes"]').value);
+        if (action === "open-windhawk-install") {
+          await api().themeStudioOpenWindowsStyleLink("install");
+          return status("Offizielle Windhawk-Seite geöffnet. Installation und Mod-Auswahl bleiben deine Entscheidung.");
+        }
         if (action === "save-desktop") return saveDesktopSettings();
         if (action === "save-windows-options") {
           const patch = {
@@ -661,12 +720,27 @@
         renderWindowsFeatures(bootstrap?.settings?.windowsThemeFeatures);
         await refreshProfileHistory();
         await refreshWindowsRecovery();
+        await refreshWindowsStyleStatus();
       } catch (error) {
         status(`Initialisierung fehlgeschlagen: ${error.message}`, true);
       }
     })();
   }
-  window.BockisThemeStudio = { mount };
+  function selectSection(root, section, anchor) {
+    const button = root?.querySelector(`[data-section="${section}"]`);
+    if (!button) return false;
+    button.click();
+    if (anchor) {
+      requestAnimationFrame(() => {
+        root.querySelector(`[data-studio-anchor="${anchor}"]`)?.scrollIntoView({
+          block: "start",
+          behavior: "smooth"
+        });
+      });
+    }
+    return true;
+  }
+  window.BockisThemeStudio = { mount, selectSection };
   document.addEventListener("DOMContentLoaded", () => {
     const standalone = document.querySelector("#theme-studio-root");
     if (standalone) mount(standalone);

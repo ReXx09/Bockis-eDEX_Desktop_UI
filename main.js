@@ -23,6 +23,7 @@ const { loadSettings, refreshPresetForSave, saveSettings } = require("./lib/sett
 const { FEATURES, normalizeFeatures, normalizeWindowsOptions } = require("./lib/windows-theme-manager");
 const { createWindowsThemeRegistryStore, entryId, writeJsonAtomically } = require("./lib/windows-theme-registry");
 const { parseWindowsThemeFile } = require("./lib/windows-theme-importer");
+const { assessWindhawk, windhawkLink } = require("./lib/windows-style-integration");
 const { WALLPAPERS, listThemes, loadTheme, resolveThemeName, themesDir, configureThemeStore } = require("./lib/themes");
 const { createStore: createThemeStudioStore } = require("./lib/theme-studio-store");
 const {
@@ -896,6 +897,71 @@ ipcMain.handle("get-app-log", (event, limit) => {
 ipcMain.handle("get-windows-colors", (event) => {
   requireTrustedWindow(event);
   return { accent: windowsAccentHex(), dark: Boolean(nativeTheme.shouldUseDarkColors) };
+});
+
+function findWindhawkInstallation() {
+  if (process.platform !== "win32") return Promise.resolve(null);
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "$items = @()",
+    "foreach ($hive in @([Microsoft.Win32.RegistryHive]::CurrentUser, [Microsoft.Win32.RegistryHive]::LocalMachine)) {",
+    "  foreach ($view in @([Microsoft.Win32.RegistryView]::Registry64, [Microsoft.Win32.RegistryView]::Registry32)) {",
+    "    $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, $view)",
+    "    try {",
+    "      $root = $base.OpenSubKey('Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall')",
+    "      if ($null -eq $root) { continue }",
+    "      try {",
+    "        foreach ($subName in $root.GetSubKeyNames()) {",
+    "          $item = $root.OpenSubKey($subName)",
+    "          if ($null -eq $item) { continue }",
+    "          try {",
+    "            $displayName = [string]$item.GetValue('DisplayName', '')",
+    "            if ($displayName -match '^Windhawk(?:\\s|$)') {",
+    "              $items += [pscustomobject]@{ version = [string]$item.GetValue('DisplayVersion', ''); installLocation = [string]$item.GetValue('InstallLocation', '') }",
+    "            }",
+    "          } finally { $item.Dispose() }",
+    "        }",
+    "      } finally { $root.Dispose() }",
+    "    } finally { $base.Dispose() }",
+    "  }",
+    "}",
+    "[Console]::Out.WriteLine((ConvertTo-Json -InputObject @($items) -Compress))"
+  ].join("\n");
+  const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+  return new Promise((resolve, reject) => {
+    execFile("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodedScript], {
+      windowsHide: true,
+      encoding: "utf8",
+      timeout: 8000,
+      maxBuffer: 1024 * 1024
+    }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`Windhawk-Installation konnte nicht geprüft werden: ${(stderr || error.message).trim()}`));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(String(stdout || "").trim());
+        const installations = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+        const installation = installations.find((entry) => entry && typeof entry.version === "string" && entry.version);
+        resolve(installation || null);
+      } catch (parseError) {
+        reject(new Error(`Windhawk-Installationsstatus konnte nicht ausgewertet werden: ${parseError.message}`));
+      }
+    });
+  });
+}
+
+ipcMain.handle("theme-studio-windows-style-status", async (event) => {
+  requireTrustedWindow(event);
+  const installation = await findWindhawkInstallation();
+  return assessWindhawk(process.platform, installation);
+});
+
+ipcMain.handle("theme-studio-open-windows-style-link", async (event, linkId) => {
+  requireTrustedWindow(event);
+  const url = windhawkLink(String(linkId || ""));
+  await shell.openExternal(url);
+  return true;
 });
 
 function runRegistry(args) {

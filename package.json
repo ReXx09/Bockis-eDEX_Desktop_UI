@@ -12,14 +12,15 @@
     "url": "https://github.com/ReXx09/Bockis-eDEX_Desktop_UI.git"
   },
   "scripts": {
-    "test": "node --test test/organizer.test.js test/i18n.test.js test/theme-studio.test.js test/update-checker.test.js test/desktop-layout.test.js test/settings-store.test.js test/windows-theme-registry.test.js test/windows-theme-importer.test.js test/ssh-path.test.js test/cpu-live-metrics.test.js test/hardware-monitor.test.js",
+    "test": "node --test test/organizer.test.js test/i18n.test.js test/theme-studio.test.js test/update-checker.test.js test/desktop-layout.test.js test/settings-store.test.js test/windows-theme-registry.test.js test/windows-theme-importer.test.js test/windows-style-integration.test.js test/ssh-path.test.js test/cpu-live-metrics.test.js test/hardware-monitor.test.js",
     "prepare-assets": "node scripts/prepare-assets.js",
     "prepare-rainmeter": "node scripts/prepare-rainmeter.js",
+    "prepare-windhawk": "node scripts/prepare-windhawk.js",
     "build-hardware-monitor": "dotnet publish hardware-monitor\\BockisHardwareMonitor.csproj --configuration Release --output build\\hardware-monitor",
     "prestart": "node scripts/prepare-assets.js && npm run build-hardware-monitor",
     "start": "electron .",
     "rebuild-native": "electron-rebuild -f -w node-pty",
-    "predist": "npm run rebuild-native && node scripts/prepare-assets.js && node scripts/prepare-rainmeter.js && npm run build-hardware-monitor",
+    "predist": "npm run rebuild-native && node scripts/prepare-assets.js && node scripts/prepare-rainmeter.js && node scripts/prepare-windhawk.js && npm run build-hardware-monitor",
     "dist": "electron-builder --win nsis --x64",
     "predist:dir": "npm run build-hardware-monitor",
     "postdist": "node scripts/build-tron-installer.js",
@@ -67,6 +68,14 @@
       {
         "from": "hardware-monitor/THIRD-PARTY-NOTICES.txt",
         "to": "hardware-monitor/THIRD-PARTY-NOTICES.txt"
+      },
+      {
+        "from": "NOTICE.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
       }
     ],
     "asar": true,

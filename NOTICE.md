@@ -29,6 +29,19 @@ Die visuelle Sprache, Themes und Teile der Panel-/CSS-Struktur basieren auf eDEX
   PawnIO-Projekt und Lizenzinformationen:
   https://github.com/namazso/PawnIO
 
+## Windhawk (Windows-Stil-Manager)
+
+- Bockis-eDEX Setup enthält den unveränderten offiziellen Online-Installer von
+  Windhawk v1.7.3. Die Installation erfolgt nur nach ausdrücklicher Zustimmung;
+  eine bereits erkannte Installation wird übersprungen.
+- Windhawk ist GPL-3.0-lizenziert. Quellcode, Lizenztext und Releases:
+  https://github.com/ramensoftware/windhawk/tree/v1.7.3
+  https://github.com/ramensoftware/windhawk/releases/tag/v1.7.3
+- SHA-256 des offiziellen Installers `windhawk_setup.exe`:
+  `5116cc1703384aac88b8d7a3b57f172aea5da32b6df7355fb2f8247d23813c8f`
+- Bockis-eDEX installiert oder aktualisiert keine Windhawk-Mods und verändert
+  keine bestehenden Mod-Einstellungen.
+
 ## Weitergabe
 
 Dieses Projekt wird als GPL-3.0-Software weitergegeben. Bei Binärdistributionen ist der zugehörige Quellcode über die aktuelle Repository-URL verfügbar. Copyright- und Herkunftshinweise bleiben erhalten.

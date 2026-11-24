@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld("edex", {
   themeStudioImportWindowsTheme: () => ipcRenderer.invoke("theme-studio-import-windows-theme"),
   themeStudioWindowsRecoveryStatus: () => ipcRenderer.invoke("theme-studio-windows-recovery-status"),
   themeStudioWindowsEmergencyRestore: () => ipcRenderer.invoke("theme-studio-windows-emergency-restore"),
+  themeStudioWindowsStyleStatus: () => ipcRenderer.invoke("theme-studio-windows-style-status"),
+  themeStudioOpenWindowsStyleLink: (id) => ipcRenderer.invoke("theme-studio-open-windows-style-link", id),
   themeStudioCreateBackup: () => ipcRenderer.invoke("theme-studio-create-backup"),
   themeStudioListBackups: () => ipcRenderer.invoke("theme-studio-list-backups"),
   themeStudioRestoreBackup: (id) => ipcRenderer.invoke("theme-studio-restore-backup", id),

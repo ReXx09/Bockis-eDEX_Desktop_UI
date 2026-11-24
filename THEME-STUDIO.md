@@ -20,6 +20,17 @@ a value, so use **Testen** to check it again. Live preview never changes
 Windows settings. `TaskbarSi` is explicitly experimental because Windows 11
 versions may ignore it or reset it.
 
+**BOCKIS Windows Style Integration 1.0** detects the installed Windhawk
+version and lists the File Explorer Styler and Taskbar Styler pilot modules.
+The eDEX Windows installer embeds the official Windhawk 1.7.3 online setup and
+asks before running it; an existing registered Windhawk installation is left
+untouched. Windhawk is a required installer component for this integration:
+declining or canceling its setup also cancels the eDEX installation.
+With the stable Windhawk 1.x line, pilot-mod installation and settings are
+manually managed in Windhawk. eDEX does not install, update, enable, disable,
+or overwrite mod settings. Mod compatibility must be checked on each official
+Windhawk page; unregistered/portable Windhawk installations may not be detected.
+
 The Windows registry backup is a versioned snapshot of every registry value
 an enabled or tested feature changes. A durable transaction journal and backup
 are written before changes; failed operations roll back, and an interrupted

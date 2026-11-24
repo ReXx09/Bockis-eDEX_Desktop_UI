@@ -53,9 +53,11 @@ internal static class TronBootstrap
         WriteLine("  [ OK ] xterm.js-Terminaldarstellung", ConsoleColor.DarkCyan);
         WriteLine("  [ OK ] node-pty-Windows-Anbindung", ConsoleColor.DarkCyan);
         WriteLine("  [ OK ] Windows-Desktop-Integration", ConsoleColor.DarkCyan);
+        WriteLine("  [REQ] Windhawk Windows-Stil-Manager (Zustimmung vor Installation)", ConsoleColor.DarkCyan);
         Console.WriteLine();
         WriteLine("  Diese Komponenten sind Bestandteil der Anwendung und", ConsoleColor.DarkGray);
-        WriteLine("  koennen nicht einzeln abgewahlt werden.", ConsoleColor.DarkGray);
+        WriteLine("  koennen nicht einzeln abgewahlt werden. Windhawk wird nur", ConsoleColor.DarkGray);
+        WriteLine("  mit deiner Zustimmung installiert, falls es noch fehlt.", ConsoleColor.DarkGray);
         Console.WriteLine();
         WriteLine("  [Enter] Zur Installationskonfiguration", ConsoleColor.Cyan);
         Console.ReadKey(true);
@@ -90,6 +92,7 @@ internal static class TronBootstrap
         Console.WriteLine();
         WriteLine("  Rainmeter ist optional. Ohne Rainmeter bleibt die Anwendung", ConsoleColor.DarkGray);
         WriteLine("  vollstaendig funktionsfaehig.", ConsoleColor.DarkGray);
+        WriteLine("  Windhawk wird vor eDEX nach separater Zustimmung geprueft.", ConsoleColor.DarkGray);
     }
 
     private static bool ConfigureInstallation(ref string installPath, ref bool installRainmeter)
@@ -191,6 +194,12 @@ internal static class TronBootstrap
         {
             WriteLine("  [AUTO] Silent winget mode: default path, optional HUD skipped", ConsoleColor.DarkGray);
         }
+        if (!silent && !ConfirmWindhawkConsent())
+        {
+            WriteLine("  [ABORT] Windhawk-Zustimmung verweigert; eDEX wurde nicht installiert.", ConsoleColor.Yellow);
+            WaitForClose();
+            return 0;
+        }
         WriteSection("Configuration accepted");
         WriteLine("  [ OK ] Overlay notice accepted", ConsoleColor.DarkCyan);
         WriteLine("  [ OK ] Install path: " + installPath, ConsoleColor.DarkCyan);
@@ -217,6 +226,7 @@ internal static class TronBootstrap
             Console.WriteLine();
 
             Environment.SetEnvironmentVariable("EDEX_INSTALL_RAINMETER", installRainmeter ? "1" : "0");
+            Environment.SetEnvironmentVariable("EDEX_WINDHAWK_CONSENT", !silent ? "1" : "0");
 
             using (Process installer = Process.Start(new ProcessStartInfo
             {
@@ -469,5 +479,28 @@ internal static class TronBootstrap
         Console.WriteLine();
         WriteLine("  Press any key to close this installation console.", ConsoleColor.DarkCyan);
         try { Console.ReadKey(true); } catch { }
+    }
+
+    private static bool ConfirmWindhawkConsent()
+    {
+        Console.WriteLine();
+        WriteLine("  Windhawk ist fuer die Windows-Stil-Integration erforderlich.", ConsoleColor.Cyan);
+        WriteLine("  Eine vorhandene Installation bleibt unangetastet.", ConsoleColor.DarkCyan);
+        WriteLine("  Falls Windhawk fehlt, wird dessen Setup separat gestartet.", ConsoleColor.DarkCyan);
+        Console.Write("  Zustimmung zur Installation, falls erforderlich? [J/N] ");
+        while (true)
+        {
+            ConsoleKey key = Console.ReadKey(true).Key;
+            if (key == ConsoleKey.J || key == ConsoleKey.Y)
+            {
+                Console.WriteLine("Ja");
+                return true;
+            }
+            if (key == ConsoleKey.N || key == ConsoleKey.Escape)
+            {
+                Console.WriteLine("Nein");
+                return false;
+            }
+        }
     }
 }

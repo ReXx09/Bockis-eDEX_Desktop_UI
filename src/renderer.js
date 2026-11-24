@@ -6314,20 +6314,58 @@ function openSettings(focusPanel = "") {
     </div>
   `;
   const settingsTable = modal.querySelector("#settingsEditor");
+  let activateSettingsSubmenu = null;
   if (settingsTable) {
+    const headings = [...modal.querySelectorAll(":scope > h2")];
+    const [languageHeading, presetsHeading, displayHeading] = headings;
+    const languageTable = languageHeading?.nextElementSibling;
+    const presetControls = presetsHeading?.nextElementSibling;
+    const settingsFooter = modal.querySelector("#set-save")?.parentElement;
     const rows = [...settingsTable.querySelectorAll("tr")];
     const header = rows.shift();
+    const panels = new Map();
+    const rowTables = new Map();
+    const rowBodies = new Map();
+
+    const addPanel = (id, title, description = "") => {
+      const panel = document.createElement("section");
+      panel.className = "settings-section settings-view-panel";
+      panel.dataset.settingsPanel = id;
+      panel.hidden = true;
+      const heading = document.createElement("h3");
+      heading.textContent = title;
+      panel.append(heading);
+      if (description) {
+        const help = document.createElement("p");
+        help.className = "settings-view-help";
+        help.textContent = description;
+        panel.append(help);
+      }
+      const body = document.createElement("div");
+      body.className = "settings-view-panel-body";
+      panel.append(body);
+      panels.set(id, panel);
+      return body;
+    };
+
     const rowContains = (row, id) => Boolean(row.querySelector(`#${id}`));
-    const sectionForRow = (row) => {
+    const sectionForRow = (row, index) => {
+      if (index < 2
+        || rowContains(row, "set-window-zone-enabled")
+        || rowContains(row, "set-zone-left")
+        || rowContains(row, "set-grid")
+        || rowContains(row, "set-layout-mode")
+        || rowContains(row, "set-ui-scale")) return "layout";
       if (rowContains(row, "set-theme")
-        || row.id === "set-windows-sync-row"
         || rowContains(row, "set-keep-theme-wallpaper")
         || rowContains(row, "set-wall")
-        || rowContains(row, "set-windows-wallpaper")) return "themes";
+        || rowContains(row, "set-windows-wallpaper")) return "background";
+      if (row.id === "set-windows-sync-row") return "windows-sync";
       if (rowContains(row, "set-rainmeter")
         || rowContains(row, "set-rain-font")
         || rowContains(row, "set-rain-speed")) return "extensions";
-      if (rowContains(row, "set-start-with-windows")) return "start";
+      if (rowContains(row, "set-start-with-windows")
+        || rowContains(row, "set-check-updates")) return "startup";
       if (rowContains(row, "set-icon-view")
         || rowContains(row, "set-snap")
         || rowContains(row, "set-dock")
@@ -6336,68 +6374,225 @@ function openSettings(focusPanel = "") {
         || rowContains(row, "set-dock-label-color-mode")
         || rowContains(row, "set-clock-panel")
         || rowContains(row, "set-search-font")) return "panels";
-      return "edex";
+      return "startup";
     };
-    const sections = [
-      ["edex", "eDEX"],
-      ["panels", "Panels"],
-      ["themes", "Themes"],
-      ["extensions", "Erweiterungen"],
-      ["start", "Start"],
-      ["studio", "Theme Studio"]
-    ];
-    const fragment = document.createDocumentFragment();
-    sections.forEach(([id, title], index) => {
-      const details = document.createElement("details");
-      details.className = "settings-section";
-      details.dataset.settingsTab = id;
-      details.open = index === 0;
-      const summary = document.createElement("summary");
-      summary.textContent = title;
-      if (id === "studio") {
-        const host = document.createElement("div");
-        host.className = "theme-studio-in-settings";
-        details.append(summary, host);
-      } else {
+
+    addPanel("language", "Sprache", "Sprache der eDEX-Oberfläche festlegen.");
+    addPanel("presets", "Presets", "Gespeicherte Layouts auswählen, laden und verwalten.");
+    addPanel("startup", "Start & Updates", "Startverhalten und Versionsprüfung verwalten.");
+    addPanel("layout", "Raster & Layout", "Anzeigeinformationen, Skalierung und geschützte Desktop-Zonen.");
+    addPanel("background", "Theme & Hintergrund", "eDEX-Theme sowie Desktop-Hintergründe konfigurieren.");
+    addPanel("panels", "Panels & Dock", "Desktop-Icons, Panels, Dock und Schriftoptionen verwalten.");
+    addPanel("extensions", "Erweiterungen", "Rainmeter und Code-Regen-Effekte konfigurieren.");
+    addPanel("windows-sync", "Windows-Synchronisierung", "Status der einzeln verwalteten Windows-Anpassungen.");
+    const studioBody = addPanel("studio", "Theme Studio", "Themes, Windows-Styling und Wiederherstellung.");
+    const studioHost = document.createElement("div");
+    studioHost.className = "theme-studio-in-settings";
+    studioBody.append(studioHost);
+
+    if (languageHeading && languageTable) {
+      languageHeading.remove();
+      languageHeading.textContent = "Sprache";
+      languageTable.classList.add("settings-section-table");
+      panels.get("language").querySelector(".settings-view-panel-body").append(languageTable);
+    }
+    if (presetsHeading && presetControls) {
+      presetsHeading.remove();
+      presetsHeading.textContent = "Presets";
+      presetControls.classList.remove("settings-footer");
+      presetControls.classList.add("settings-preset-controls");
+      panels.get("presets").querySelector(".settings-view-panel-body").append(presetControls);
+    }
+
+    rows.forEach((row, index) => {
+      const destination = sectionForRow(row, index);
+      if (!rowTables.has(destination)) {
         const table = settingsTable.cloneNode(false);
         table.removeAttribute("id");
         table.classList.add("settings-section-table");
-        if (index === 0) table.id = "settingsEditor";
         const body = document.createElement("tbody");
-        if (header) body.appendChild(header.cloneNode(true));
-        rows.filter((row) => sectionForRow(row) === id).forEach((row) => body.appendChild(row));
-        table.appendChild(body);
-        details.append(summary, table);
+        if (header) body.append(header.cloneNode(true));
+        table.append(body);
+        rowTables.set(destination, table);
+        rowBodies.set(destination, body);
+        panels.get(destination).querySelector(".settings-view-panel-body").append(table);
       }
-      fragment.appendChild(details);
+      rowBodies.get(destination).append(row);
     });
-    const nav = document.createElement("nav");
-    nav.className = "settings-tab-nav";
-    nav.setAttribute("aria-label", "Einstellungsbereiche");
-    nav.innerHTML = sections.map(([id, title], index) =>
-      `<button type="button" class="settings-tab${index === 0 ? " active" : ""}" data-settings-tab="${id}" aria-selected="${index === 0 ? "true" : "false"}">${title}</button>`
-    ).join("");
-    modal.querySelector("#settingsEditor")?.before(nav);
-    settingsTable.replaceWith(fragment);
-    nav.querySelectorAll("[data-settings-tab]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const selected = button.dataset.settingsTab;
-        nav.querySelectorAll(".settings-tab").forEach((item) => {
-          const active = item === button;
-          item.classList.toggle("active", active);
-          item.setAttribute("aria-selected", active ? "true" : "false");
-        });
-        modal.querySelectorAll(".settings-section").forEach((section) => {
-          section.hidden = section.dataset.settingsTab !== selected;
-          section.open = section.dataset.settingsTab === selected;
-        });
+    const primaryTable = rowTables.get("layout");
+    if (primaryTable) primaryTable.id = "settingsEditor";
+    displayHeading?.remove();
+    settingsTable.remove();
+
+    const navigationTree = [
+      {
+        id: "general", label: "Allgemein", icon: "⚙", children: [
+          { id: "language", label: "Sprache", panel: "language" },
+          { id: "presets", label: "Presets", panel: "presets" },
+          { id: "startup", label: "Start & Updates", panel: "startup" }
+        ]
+      },
+      {
+        id: "display", label: "Anzeige & Monitore", icon: "▣", children: [
+          { id: "layout", label: "Raster & Layout", panel: "layout" },
+          { id: "background", label: "Theme & Hintergrund", panel: "background" }
+        ]
+      },
+      {
+        id: "modules", label: "Panels & Module", icon: "▦", children: [
+          { id: "panels", label: "Panels & Dock", panel: "panels" },
+          { id: "extensions", label: "Erweiterungen", panel: "extensions" }
+        ]
+      },
+      {
+        id: "studio", label: "Theme Studio", icon: "◉", children: [
+          { id: "theme-library", label: "Theme-Bibliothek", panel: "studio", section: "edex", anchor: "theme-library" },
+          { id: "studio-colors", label: "eDEX-Farben", panel: "studio", section: "edex", anchor: "edex-colors" },
+          { id: "studio-panels", label: "Fenster & Panels", panel: "studio", section: "desktop", anchor: "desktop" },
+          { id: "studio-preview", label: "Live-Vorschau", panel: "studio", section: "edex", anchor: "live-preview" },
+          { id: "windows-manager", label: "Windows-Farbmanager", panel: "studio", section: "windows", anchor: "windows-manager" },
+          { id: "windhawk", label: "Windows Style Integration", panel: "studio", section: "windows", anchor: "windhawk" }
+        ]
+      },
+      {
+        id: "system", label: "System & Sicherheit", icon: "⛨", children: [
+          { id: "windows-sync", label: "Windows-Synchronisierung", panel: "windows-sync" },
+          { id: "profiles", label: "Profile & Wiederherstellung", panel: "studio", section: "profiles", anchor: "profiles" }
+        ]
+      }
+    ];
+
+    const workspace = document.createElement("div");
+    workspace.className = "settings-workspace";
+    const sidebar = document.createElement("aside");
+    sidebar.className = "settings-sidebar";
+    const searchLabel = document.createElement("label");
+    searchLabel.className = "settings-search";
+    searchLabel.innerHTML = '<span class="sr-only">Einstellungen suchen</span>';
+    const search = document.createElement("input");
+    search.type = "search";
+    search.placeholder = "Suchen …";
+    search.setAttribute("aria-label", "Einstellungen suchen");
+    searchLabel.append(search);
+    const navigation = document.createElement("nav");
+    navigation.className = "settings-navigation";
+    navigation.setAttribute("aria-label", "Einstellungskategorien");
+    const menuEntries = new Map();
+
+    navigationTree.forEach((category, index) => {
+      const group = document.createElement("section");
+      group.className = "settings-navigation-group";
+      group.dataset.category = category.id;
+      const categoryButton = document.createElement("button");
+      categoryButton.type = "button";
+      categoryButton.className = "settings-category";
+      categoryButton.setAttribute("aria-expanded", String(index === 0));
+      const icon = document.createElement("span");
+      icon.className = "settings-category-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = category.icon;
+      const label = document.createElement("span");
+      label.textContent = category.label;
+      const caret = document.createElement("span");
+      caret.className = "settings-category-caret";
+      caret.setAttribute("aria-hidden", "true");
+      caret.textContent = "›";
+      categoryButton.append(icon, label, caret);
+      const children = document.createElement("div");
+      children.className = "settings-navigation-children";
+      children.hidden = index !== 0;
+      category.children.forEach((child) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "settings-submenu";
+        button.dataset.submenu = child.id;
+        button.textContent = child.label;
+        button.setAttribute("aria-current", "false");
+        children.append(button);
+        menuEntries.set(child.id, { ...child, category, group, button });
+      });
+      group.append(categoryButton, children);
+      navigation.append(group);
+      categoryButton.addEventListener("click", () => {
+        const expanded = categoryButton.getAttribute("aria-expanded") !== "true";
+        categoryButton.setAttribute("aria-expanded", String(expanded));
+        children.hidden = !expanded;
+        if (expanded && !children.contains(navigation.querySelector(".settings-submenu.active"))) {
+          children.querySelector(".settings-submenu:not([hidden])")?.click();
+        }
       });
     });
-    modal.querySelectorAll(".settings-section").forEach((section, index) => {
-      section.hidden = index !== 0;
+
+    const main = document.createElement("main");
+    main.className = "settings-main";
+    const viewHeader = document.createElement("header");
+    viewHeader.className = "settings-view-header";
+    const breadcrumb = document.createElement("div");
+    breadcrumb.className = "settings-breadcrumb";
+    const viewTitle = document.createElement("h2");
+    viewTitle.className = "settings-view-title";
+    viewHeader.append(breadcrumb, viewTitle);
+    const viewBody = document.createElement("div");
+    viewBody.className = "settings-view-body";
+    panels.forEach((panel) => viewBody.append(panel));
+    main.append(viewHeader, viewBody);
+    sidebar.append(searchLabel, navigation);
+    workspace.append(sidebar, main);
+    modal.querySelector("h1")?.after(workspace);
+    if (settingsFooter) {
+      settingsFooter.classList.add("settings-actions-footer");
+      modal.append(settingsFooter);
+    }
+
+    activateSettingsSubmenu = (id) => {
+      const entry = menuEntries.get(id);
+      if (!entry) return;
+      entry.group.querySelector(".settings-category")?.setAttribute("aria-expanded", "true");
+      entry.group.querySelector(".settings-navigation-children").hidden = false;
+      menuEntries.forEach(({ button }) => {
+        const active = button === entry.button;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-current", String(active));
+      });
+      panels.forEach((panel) => { panel.hidden = panel.dataset.settingsPanel !== entry.panel; });
+      breadcrumb.textContent = `Einstellungen / ${entry.category.label}`;
+      viewTitle.textContent = entry.label;
+      if (entry.section) {
+        window.BockisThemeStudio?.selectSection?.(studioHost, entry.section, entry.anchor);
+      }
+    };
+
+    menuEntries.forEach(({ button, id }) => {
+      button.addEventListener("click", () => activateSettingsSubmenu(id));
     });
-    const studioHost = modal.querySelector(".theme-studio-in-settings");
-    if (studioHost) window.BockisThemeStudio?.mount(studioHost, { embedded: true });
+    search.addEventListener("input", () => {
+      const query = search.value.trim().toLocaleLowerCase();
+      const matches = [];
+      navigationTree.forEach((category) => {
+        const group = navigation.querySelector(`[data-category="${category.id}"]`);
+        let visibleCount = 0;
+        category.children.forEach((child) => {
+          const entry = menuEntries.get(child.id);
+          const panelText = panels.get(child.panel)?.textContent || "";
+          const isMatch = !query || `${category.label} ${child.label} ${panelText}`.toLocaleLowerCase().includes(query);
+          entry.button.hidden = !isMatch;
+          if (isMatch) {
+            visibleCount += 1;
+            matches.push(child.id);
+          }
+        });
+        group.hidden = visibleCount === 0;
+        if (query && visibleCount) {
+          group.querySelector(".settings-category")?.setAttribute("aria-expanded", "true");
+          group.querySelector(".settings-navigation-children").hidden = false;
+        }
+      });
+      const active = navigation.querySelector(".settings-submenu.active");
+      if (query && active?.hidden && matches.length) activateSettingsSubmenu(matches[0]);
+    });
+
+    activateSettingsSubmenu("language");
+    window.BockisThemeStudio?.mount(studioHost, { embedded: true, externalNavigation: true });
   }
   document.body.appendChild(modal);
   modal.querySelector("#set-check-updates")?.addEventListener("click", async (event) => {
@@ -6460,12 +6655,10 @@ function openSettings(focusPanel = "") {
       statusEl.dataset.state = "unknown";
     }
   });
-  const focusSection = focusPanel === "coderain"
+  const focusSubmenu = focusPanel === "coderain"
     ? "extensions"
     : focusPanel === "clock" || focusPanel === "desktop" ? "panels" : "";
-  if (focusSection) {
-    modal.querySelector(`.settings-tab[data-settings-tab="${focusSection}"]`)?.click();
-  }
+  if (focusSubmenu) activateSettingsSubmenu?.(focusSubmenu);
 
   const presetSelect = modal.querySelector("#set-preset");
   const startupPresetSelect = modal.querySelector("#set-startup-preset");

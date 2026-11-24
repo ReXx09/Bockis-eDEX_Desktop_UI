@@ -3,7 +3,36 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const vm = require("node:vm");
 const { createStore, normalizeTheme } = require("../lib/theme-studio-store");
+
+test("Theme Studio submenu selects its panel and scrolls to the requested feature", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "theme-studio.js"), "utf8");
+  const window = {};
+  const context = {
+    window,
+    document: { addEventListener() {} },
+    requestAnimationFrame: (callback) => callback()
+  };
+  vm.runInNewContext(source, context);
+
+  const actions = [];
+  const root = {
+    querySelector(selector) {
+      const section = /\[data-section="([^"]+)"\]/.exec(selector);
+      if (section && ["edex", "windows", "desktop", "profiles"].includes(section[1])) {
+        return { click: () => actions.push(`section:${section[1]}`) };
+      }
+      const anchor = /\[data-studio-anchor="([^"]+)"\]/.exec(selector);
+      if (anchor) return { scrollIntoView: () => actions.push(`anchor:${anchor[1]}`) };
+      return null;
+    }
+  };
+
+  assert.equal(window.BockisThemeStudio.selectSection(root, "windows", "windhawk"), true);
+  assert.deepEqual(actions, ["section:windows", "anchor:windhawk"]);
+  assert.equal(window.BockisThemeStudio.selectSection(root, "missing"), false);
+});
 
 test("Custom theme creation, loading, listing and deletion", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-studio-test-"));

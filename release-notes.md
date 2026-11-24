@@ -48,6 +48,7 @@ weiter:
 - Bewahrung zusätzlicher Theme-Eigenschaften beim Bearbeiten; Windows-`.theme`-Import ohne Änderungen an Windows.
 - Dauerhaftes Registry-Transaktionsjournal mit Startprüfung, Recovery-Status und manueller Wiederherstellung.
 - Taskleisten-Größe als experimentelle Windows-Option gekennzeichnet.
+- BOCKIS Windows Style Integration 1.0 mit bestätigungspflichtigem Windhawk-Setup, Runtime-Erkennung und Links zu den Pilot-Mods; Mod-Einstellungen bleiben in Windhawk manuell.
 
 ### Version und Updates
 
