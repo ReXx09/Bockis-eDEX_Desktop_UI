@@ -1,0 +1,143 @@
+#card_weather .card-body {
+    display: flex;
+    min-height: 0;
+}
+
+.weather-root {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 0.35rem;
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
+    font-family: var(--font_mono), monospace;
+    background:
+        linear-gradient(rgba(var(--color_r), var(--color_g), var(--color_b), 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--color_r), var(--color_g), var(--color_b), 0.025) 1px, transparent 1px),
+        transparent;
+    background-size: 0.8rem 0.8rem;
+}
+
+.weather-toolbar {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.weather-toolbar input,
+.weather-toolbar button {
+    min-width: 0;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.06);
+    color: inherit;
+    font: inherit;
+    font-size: 0.72em;
+}
+
+.weather-toolbar input {
+    flex: 1;
+    padding: 0.22rem 0.3rem;
+    outline: none;
+}
+
+.weather-toolbar button {
+    width: 1.8rem;
+    cursor: pointer;
+}
+
+.weather-toolbar input:focus,
+.weather-toolbar button:hover,
+.weather-toolbar button:focus-visible {
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    outline: none;
+}
+
+.weather-status {
+    min-height: 1em;
+    overflow: hidden;
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.62);
+    font-size: 0.62em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.weather-current {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0.4rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.035);
+}
+
+.weather-current-day {
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.68);
+    font-size: 0.7em;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.weather-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.weather-icon {
+    color: var(--color_yellow);
+    font-size: 1.7rem;
+    line-height: 1;
+}
+
+.weather-main strong {
+    font-size: 1.75rem;
+    font-weight: 400;
+}
+
+.weather-condition {
+    margin-top: 0.2rem;
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
+    font-size: 0.72em;
+}
+
+.weather-meta {
+    margin-top: 0.35rem;
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.66);
+    font-size: 0.58em;
+    line-height: 1.4;
+}
+
+.weather-days {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.weather-day {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.24rem;
+    padding: 0.45rem 0.25rem 0.5rem;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.045);
+    font-size: 0.78em;
+}
+
+.weather-day span,
+.weather-day small {
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.58);
+}
+
+.weather-day b {
+    color: var(--color_yellow);
+    font-size: 1.4em;
+    font-weight: 400;
+}
+
+.weather-day strong {
+    font-weight: 400;
+}

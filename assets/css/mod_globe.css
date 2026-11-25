@@ -1,0 +1,181 @@
+div#mod_globe {
+    border-top: 0.092vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    font-family: var(--font_main_light);
+    letter-spacing: 0.092vh;
+    padding: 0.645vh 0vh;
+    display: flex;
+}
+
+div#mod_globe::before {
+    content: "";
+    border-left: 0.092vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    align-self: flex-start;
+    position: relative;
+    left: -0.092vh;
+    top: -1.111vh;
+    height: 0.833vh;
+}
+
+div#mod_globe::after {
+    content: "";
+    border-right: 0.092vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    position: relative;
+    right: -0.092vh;
+    top: -1.111vh;
+    height: 0.833vh;
+}
+
+div#mod_globe_innercontainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+div#mod_globe .globe-meta {
+    width: 100%;
+    min-height: 1.3vh;
+    box-sizing: border-box;
+    padding-left: 0.5vh;
+    text-align: left;
+}
+
+div#mod_globe .globe-meta i {
+    font-style: normal;
+    font-size: 1.32vh;
+    opacity: 0.5;
+}
+
+div#mod_globe i.mod_globe_headerInfo {
+    padding-top: .2vh;
+}
+
+.globe-filters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.35vh;
+    align-self: flex-start;
+    width: calc(100% - 0.35rem);
+    box-sizing: border-box;
+    min-width: 0;
+    margin-top: 0.45vh;
+    margin-bottom: 0.15vh;
+    margin-right: 0.35rem;
+    flex-shrink: 0;
+}
+
+.globe-view-switch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35vh;
+    align-self: flex-start;
+    width: calc(100% - 0.35rem);
+    box-sizing: border-box;
+    margin-top: 0.35vh;
+    margin-right: 0.35rem;
+}
+
+.globe-connections-list {
+    width: calc(100% - 0.35rem);
+    max-height: 31vh;
+    overflow: auto;
+    box-sizing: border-box;
+    margin: 0.45vh 0.35rem 0 0;
+    font-size: 1.02vh;
+    letter-spacing: 0.03em;
+}
+
+.globe-list-head,
+.globe-list-row {
+    display: grid;
+    grid-template-columns: minmax(4.5rem, 0.8fr) minmax(5rem, 1fr) minmax(10rem, 1.8fr);
+    gap: 0.45rem;
+    align-items: center;
+    min-width: 20rem;
+    padding: 0.35rem 0.4rem;
+    border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.16);
+    white-space: nowrap;
+}
+
+.globe-list-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(3, 8, 13, 0.96);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.62);
+    font-size: 0.9em;
+}
+
+.globe-list-row span,
+.globe-list-row strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.globe-list-row strong {
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
+}
+
+.globe-list-row.incoming strong { color: #00ff75; }
+.globe-list-row.local strong { color: #ffd23c; }
+
+.globe-list-empty {
+    padding: 1rem 0.5rem;
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.65);
+}
+
+.globe-filter {
+    min-width: 0;
+    width: auto;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0.12vh 0.45vh;
+    border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.04);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.62);
+    font: inherit;
+    font-size: 1.02vh;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+}
+
+.globe-filter:hover,
+.globe-filter:focus-visible,
+.globe-filter.on {
+    border-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.18);
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
+    outline: none;
+}
+
+div#mod_globe canvas {
+    width: 109%;
+    margin: 0px;
+    margin-top: -1.5vh;
+}
+
+div#mod_globe_canvas_placeholder {
+    width: 109%;
+    height: 0px;
+    padding-bottom: 100%;
+    margin: 0px;
+    margin-top: -1.5vh;
+}
+
+div#mod_globe h3 {
+    position: absolute;
+    font-size: 2vh;
+    z-index: 15;
+    opacity: 0;
+}
+
+div#mod_globe.offline canvas {
+    opacity: 0.3;
+}
+
+div#mod_globe.offline h3 {
+    opacity: 1;
+}

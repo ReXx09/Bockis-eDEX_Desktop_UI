@@ -1,0 +1,7578 @@
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const {
+  cardToolsHtml,
+  closeCardMenus,
+  openCardMenu,
+  deskIconAt,
+  setupDesktopClickThrough,
+  itemFromDeskNode
+} = window.edexRendererPanels || {};
+
+const FILE_FORMAT_FILTERS = [
+  { id: "documents", label: "Dokumente" },
+  { id: "images", label: "Bilder" },
+  { id: "videos", label: "Videos" },
+  { id: "audio", label: "Audio" },
+  { id: "archives", label: "Archive" },
+  { id: "apps", label: "Anwendungen" },
+  { id: "other", label: "Sonstige" }
+];
+
+const DESK_FILTERS = [
+  { id: "all", label: "Alle" },
+  { id: "favorites", label: "Favoriten" },
+  { id: "folders", label: "Ordner" },
+  { id: "icons", label: "Symbole" },
+  ...FILE_FORMAT_FILTERS
+];
+
+const REMOVED_PANELS = new Set(["sysinfo", "hw", "netstat", "shortcuts"]);
+
+const DEFAULT_WIDGETS_PRIMARY = {
+  clock: { x: 1.2, y: 2, w: 16, h: 8 },
+  cpu: { x: 1.2, y: 13, w: 16, h: 20 },
+  ram: { x: 1.2, y: 34, w: 16, h: 16 },
+  toplist: { x: 1.2, y: 51, w: 16, h: 18 },
+  globe: { x: 82, y: 2, w: 16.5, h: 48 },
+  conninfo: { x: 82, y: 52, w: 16.5, h: 23 },
+  calendar: { x: 66, y: 2, w: 15, h: 38 },
+  drives: { x: 66, y: 42, w: 15, h: 38 },
+  filesearch: { x: 18, y: 82, w: 47, h: 16 },
+  dock: { x: 25, y: 94, w: 50, h: 6, locked: true },
+  taskdock: { x: 25, y: 86, w: 50, h: 7, zone: "edge" }
+};
+
+// Plugins only default on primary — secondary starts empty.
+const DEFAULT_WIDGETS_SECONDARY = {};
+
+const DEFAULT_DESKTOP_PRIMARY = { x: 18, y: 2, w: 47, h: 78 };
+const DEFAULT_DESKTOP_SECONDARY = { x: 8, y: 8, w: 84, h: 84 };
+
+const PANEL_META = {
+  clock: { title: "Uhr", box: { x: 1.2, y: 2, w: 16, h: 8 } },
+  coderain: { title: "Code-Hintergrund", box: { x: 34, y: 64, w: 16, h: 22 } },
+  cpu: { title: "Prozessor", box: { x: 1.2, y: 13, w: 16, h: 20 } },
+  ram: { title: "Arbeitsspeicher", box: { x: 1.2, y: 34, w: 16, h: 16 } },
+  toplist: { title: "Prozesse", box: { x: 1.2, y: 51, w: 16, h: 18 } },
+  globe: { title: "Weltansicht", box: { x: 82, y: 2, w: 16.5, h: 48 } },
+  conninfo: { title: "Netzwerkverkehr", box: { x: 82, y: 52, w: 16.5, h: 23 } },
+  calendar: { title: "Kalender", icon: "calendar", box: { x: 66, y: 2, w: 15, h: 38 } },
+  drives: { title: "Laufwerke", box: { x: 66, y: 42, w: 15, h: 38 } },
+  filesearch: { title: "Schnellsuche", box: { x: 18, y: 82, w: 47, h: 16 } },
+  terminal: { title: "Terminal", box: { x: 19, y: 42, w: 31, h: 36 } },
+  weather: { title: "Wetter", box: { x: 52, y: 42, w: 13, h: 28 } },
+  hwinfo: { title: "Hardware-Monitor", icon: "cpu", box: { x: 66, y: 44, w: 18, h: 28 } },
+  cockpit: { title: "Cockpit", box: { x: 20, y: 22, w: 38, h: 54 } },
+  cassette: { title: "Musikkassette", box: { x: 28, y: 28, w: 36, h: 38 } },
+  ddj: { title: "DDJ-1000", box: { x: 8, y: 6, w: 84, h: 86 } },
+  cpuRail: { title: "CPU-Versorgung", box: { x: 20, y: 28, w: 42, h: 40 } },
+  calculator: { title: "Rechner", icon: "calculator", box: { x: 40, y: 18, w: 18, h: 48 } },
+  autostart: { title: "Autostart", icon: "processes", box: { x: 20, y: 28, w: 42, h: 36 } },
+  log: { title: "Log", box: { x: 52, y: 42, w: 29, h: 38 } },
+  dock: { title: "Dock", box: { x: 25, y: 94, w: 50, h: 6 } },
+  taskdock: { title: "Task-Panel", box: { x: 25, y: 86, w: 50, h: 7, zone: "edge" } }
+};
+
+const WEATHER_LOCATION_PRESETS = [
+  "Berlin",
+  "Hamburg",
+  "München",
+  "Köln",
+  "Frankfurt am Main",
+  "Stuttgart",
+  "Traunreut",
+  "Wien",
+  "Zürich"
+];
+
+let MACOS_TAGS = [];
+
+const fileStageCtx = window.edexFileStageCtx;
+let terminalGridMode = "1x1";
+let terminalNextPane = 1;
+const terminalPaneIds = [];
+const terminalBuffers = new Map();
+const terminalStarted = new Set();
+const terminalInstances = new Map();
+const terminalFitAddons = new Map();
+const terminalResizeObservers = new Map();
+const terminalCwds = new Map();
+const terminalShells = new Map();
+const terminalModes = new Map();
+const terminalSshOptions = new Map();
+const terminalBrowserState = new Map();
+const terminalBrowserTimers = new Map();
+let terminalBridgeBound = false;
+let taskbarDockItems = [];
+let taskbarWindowItems = [];
+const taskbarWindowIconCache = new Map();
+let taskbarWindowTimer = null;
+let taskbarDockLoaded = false;
+let taskbarDockLoadPromise = null;
+let taskbarDockRetryTimer = null;
+let taskbarDockLoadAttempts = 0;
+
+function logUiAction(event, message, details) {
+  window.edex?.logAction?.(event, message, details);
+}
+
+function bindUiErrorLogging() {
+  window.addEventListener("error", (event) => {
+    window.edex?.logError?.("renderer.error", event.message || "Unbekannter Renderer-Fehler", {
+      source: event.filename,
+      line: event.lineno,
+      column: event.colno
+    });
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    window.edex?.logError?.("renderer.unhandledrejection", String(event.reason?.message || event.reason || "Unbehandelte Promise-Ablehnung"));
+  });
+}
+
+const state = {
+  bootstrap: null,
+  settings: {},
+  displays: [],
+  displayId: null,
+  displayIndex: 0,
+  primary: true,
+  displayUiScale: null,
+  displayDockEnabled: null,
+  displayDockSettings: null,
+  bounds: null,
+  scaleFactor: 1,
+  physicalSize: null,
+  themes: [],
+  wallpapers: [],
+  themeName: "tron",
+  theme: null,
+  appVersion: "",
+  updateResult: null,
+  windowsColors: null,
+  scan: null,
+  plan: null,
+  includeFolders: false,
+  iconView: "grid",
+  busy: false,
+  pathCards: [],
+  activePathId: null,
+  fileClipboard: { paths: [], cut: false },
+  layout: { ...DEFAULT_WIDGETS_PRIMARY },
+  desktopStage: { ...DEFAULT_DESKTOP_PRIMARY },
+  desktopEnabled: true,
+  desktopLocked: false,
+  desktopFilter: "all",
+  desktopGrouped: false,
+  desktopFavorites: [],
+  desktopIconScale: 1,
+  desktopFontScale: 1,
+  desktopTabId: "classify",
+  desktopFolderTabs: [],
+  iconPositions: {},
+  zTop: 10,
+  clockTimer: null,
+  calCursor: new Date(),
+  calSelected: null,
+  calNotes: {},
+  desktopListing: null,
+  cockpitRaf: null,
+  cockpitMatrixTimer: null,
+  cassetteRaf: null,
+  ddjRaf: null,
+  ddjResizeObs: null,
+  cpuRailRaf: null,
+  dockTimer: null,
+  dockRaf: null
+  ,weatherTimer: null
+};
+window.edexRendererState = state;
+
+function defaultWidgets() {
+  return JSON.parse(JSON.stringify(state.primary ? DEFAULT_WIDGETS_PRIMARY : DEFAULT_WIDGETS_SECONDARY));
+}
+
+function defaultDesktop() {
+  return { ...(state.primary ? DEFAULT_DESKTOP_PRIMARY : DEFAULT_DESKTOP_SECONDARY) };
+}
+
+function panelBody(id) {
+  return window.edexRendererPanels.panelBody(id);
+}
+function bindDesktopIconClicks() {
+  if (document.documentElement.dataset.iconClicksBound === "1") return;
+  document.documentElement.dataset.iconClicksBound = "1";
+  let pairCtrl = false;
+  let lastPath = "";
+  let lastAt = 0;
+  const runActivate = (icon, ctrl) => {
+    if (!icon) return;
+    holdOverlayHits(500);
+    const pathStage = icon.closest(".path-stage");
+    const cardId = pathStage?.dataset.pathStage;
+    const card = cardId ? state.pathCards.find((item) => item.id === cardId) : null;
+    const item = itemFromDeskNode(icon);
+    if (card && item?.isDirectory && !ctrl) {
+      navigatePathCard(card, item.path, item.name);
+      return;
+    }
+    activateDesktopItem(item, { ctrl });
+  };
+  // Prefer native detail===2; also accept a timed second click (some overlay builds drop detail).
+  document.addEventListener("click", (event) => {
+    if (event.button !== 0) return;
+    if (window.edexDesktopLayout.isInteractiveClickTarget(event.target)) return;
+    const icon = event.target?.closest?.(".desk-icon[data-path]") || deskIconAt(event.clientX, event.clientY);
+    if (!icon) return;
+    holdOverlayHits(1500);
+    if (event.ctrlKey || event.metaKey) pairCtrl = true;
+    const path = icon.dataset.path || "";
+    const now = Date.now();
+    const timedDbl = now - lastAt < 500 && lastPath === path;
+    lastAt = now;
+    lastPath = path;
+    if (event.detail !== 2 && !timedDbl) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const ctrl = event.ctrlKey || event.metaKey || pairCtrl;
+    pairCtrl = false;
+    runActivate(icon, ctrl);
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const selected = document.querySelector(
+      "#desktop-stage .desk-icon.selected[data-path], .path-stage .desk-icon.selected[data-path]"
+    );
+    if (!selected) return;
+    event.preventDefault();
+    runActivate(selected, event.ctrlKey || event.metaKey);
+  }, true);
+}
+
+let overlayHoldTimer = 0;
+function holdOverlayHits(ms = 800) {
+  document.body.classList.add("is-ui-hold");
+  window.edex?.setMouseIgnore?.(false);
+  clearTimeout(overlayHoldTimer);
+  overlayHoldTimer = setTimeout(() => {
+    document.body.classList.remove("is-ui-hold");
+  }, ms);
+}
+
+function activateDesktopItem(item, { ctrl = false } = {}) {
+  if (!item?.path && !item?.targetPath) {
+    toast("Dieser Eintrag kann nicht geöffnet werden");
+    return;
+  }
+  document.body.classList.remove("is-file-drag-armed", "is-file-dragging");
+  window.edex?.setFileDragArmed?.(false);
+  window.edex?.cancelFileDragPrepare?.();
+  hideFileDragGhost();
+  holdOverlayHits(500);
+  if (item.kind === "thispc") {
+    if (!state.layout.drives) {
+      addPanel("drives").catch((err) => toast(err?.message || "Laufwerke konnten nicht geöffnet werden"));
+    } else {
+      state.layout.drives = { ...state.layout.drives, minimized: false };
+      rebuildWorkspace();
+    }
+    return;
+  }
+  if (item.kind === "recycle") {
+    toast("Der Papierkorb ist derzeit nicht als integrierter Ordner verfügbar");
+    return;
+  }
+  const folder = resolveFolderForTab(item);
+  if (ctrl) {
+    if (folder) {
+      openFolderInDesktopTab(folder);
+      return;
+    }
+    toast("請對資料夾（或資料夾捷徑）使用 Ctrl+雙擊");
+    return;
+  }
+  const openPath = folder?.path || item.targetPath || item.path;
+  if (!openPath) {
+    toast("Dieser Eintrag kann nicht geöffnet werden");
+    return;
+  }
+  const title = folder?.name || itemLabel(item) || "項目";
+  if (folder) {
+    addPathCardAt(openPath, { name: title, promptName: false }).catch((err) => {
+      toast(err?.message || "Ordner-Panel konnte nicht geöffnet werden");
+    });
+    return;
+  }
+  // Fire-and-forget: no “正在開啟” toast; only report hard failures.
+  Promise.resolve(window.edex.openPath(openPath))
+    .then((result) => {
+      if (result && result.ok === false) {
+        toast(result.message || `„${title}“ konnte nicht geöffnet werden`);
+      }
+    })
+    .catch((err) => {
+      toast(err?.message || "開啟失敗");
+    });
+}
+
+async function openInVsCode(target) {
+  const value = String(target || "").trim();
+  if (!value || !window.edex?.openInVsCode) return;
+  try {
+    const result = await window.edex.openInVsCode(value);
+    if (!result?.ok) toast(result?.message || "VS Code konnte nicht geöffnet werden");
+  } catch (err) {
+    toast(err?.message || "VS Code konnte nicht geöffnet werden");
+  }
+}
+
+function toast(message) {
+  document.querySelector(".toast")?.remove();
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = window.edexI18n?.translateDynamic?.(message) || message;
+  document.body.appendChild(el);
+  el.style.left = "50%";
+  el.style.top = "auto";
+  el.style.bottom = "9vh";
+  el.style.transform = "translateX(-50%)";
+  setTimeout(() => el.remove(), 2400);
+}
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function gridSize() {
+  const cell = settingsGridSize();
+  const fit = layoutFitScale();
+  return Math.max(4, Math.round(cell * fit));
+}
+
+function settingsGridSize() {
+  const raw = Number(state.settings?.gridSize);
+  if (!Number.isFinite(raw)) return 32;
+  return Math.max(12, Math.min(96, Math.round(raw)));
+}
+
+function clockScale() {
+  const raw = Number(state.settings?.clockScale);
+  if (!Number.isFinite(raw)) return 1;
+  return Math.max(0.25, Math.min(2, Math.round(raw * 20) / 20));
+}
+
+function clockLedColor() {
+  return toHex6(state.settings?.clockLedColor || "#ffffff");
+}
+
+function clockShowDate() {
+  return state.settings?.clockShowDate !== false;
+}
+
+let panelTourClockPreview = null;
+function clockDisplayMode() {
+  if (panelTourClockPreview !== null) return panelTourClockPreview;
+  return state.settings?.clockDisplayMode === "analog" ? "analog" : "digital";
+}
+
+function analogClockMinimum() {
+  const cells = 5;
+  return { cells, px: cellsPx(cells) };
+}
+
+function clockTimeFormat() {
+  const value = String(state.settings?.clockTimeFormat || "24h-seconds");
+  return ["24h-seconds", "24h-short", "12h-seconds", "12h-short"].includes(value) ? value : "24h-seconds";
+}
+
+function clockDateFormat() {
+  const value = String(state.settings?.clockDateFormat || "yy/m/d");
+  return ["yy/m/d", "dd/mm/yy", "mm/dd/yy", "dd.mm.yy", "yyyy/mm/dd"].includes(value) ? value : "yy/m/d";
+}
+
+function ramGaugeMode() {
+  const value = String(state.settings?.ramGaugeMode || "used");
+  return ["used", "free", "cached", "available", "total"].includes(value) ? value : "used";
+}
+
+async function setRamGaugeMode(mode) {
+  const next = ["used", "free", "cached", "available", "total"].includes(mode) ? mode : "used";
+  state.settings = { ...state.settings, ramGaugeMode: next };
+  document.documentElement.dataset.ramGaugeMode = next;
+  const result = await window.edex.saveSettings({ ramGaugeMode: next });
+  if (result?.settings) state.settings = result.settings;
+}
+
+window.setRamGaugeMode = setRamGaugeMode;
+
+function searchFontSize() {
+  const raw = Number(state.settings?.searchFontSize);
+  if (!Number.isFinite(raw)) return 12;
+  return Math.max(8, Math.min(72, Math.round(raw)));
+}
+
+function rainFontSize() {
+  const raw = Number(state.settings?.rainFontSize);
+  if (!Number.isFinite(raw)) return 14;
+  return Math.max(8, Math.min(72, Math.round(raw)));
+}
+
+function rainSpeed() {
+  const raw = Number(state.settings?.rainSpeed);
+  if (!Number.isFinite(raw)) return 1;
+  return Math.max(0.1, Math.min(8, Math.round(raw * 10) / 10));
+}
+
+function applyClockMetrics() {
+  const cell = Math.max(2, Math.round(gridSize() * clockScale()));
+  document.documentElement.style.setProperty("--clock-scale", String(clockScale()));
+  document.documentElement.style.setProperty("--clock-cell", `${cell}px`);
+  document.documentElement.style.setProperty("--clock-led", clockLedColor());
+  const host = document.getElementById("mod_clock_led");
+  if (host) host.style.setProperty("--clock-led", clockLedColor());
+}
+
+function applyRainMetrics() {
+  const font = rainFontSize();
+  const speed = rainSpeed();
+  document.documentElement.style.setProperty("--rain-font", `${font}px`);
+  document.documentElement.style.setProperty("--rain-speed", String(speed));
+  window.edexEffects?.setRainOptions?.({
+    fontSize: font,
+    speed
+  });
+  const meta = document.getElementById("mod_coderain_meta");
+  if (meta) meta.textContent = `${font}PX · ${speed.toFixed(1)}×`;
+}
+
+/* 5×7 LED glyphs — lit cells map onto the wallpaper grid. */
+const LED_GLYPHS = {
+  "0": ["111", "101", "101", "101", "111"],
+  "1": ["010", "110", "010", "010", "111"],
+  "2": ["111", "001", "111", "100", "111"],
+  "3": ["111", "001", "111", "001", "111"],
+  "4": ["101", "101", "111", "001", "001"],
+  "5": ["111", "100", "111", "001", "111"],
+  "6": ["111", "100", "111", "101", "111"],
+  "7": ["111", "001", "010", "010", "010"],
+  "8": ["111", "101", "111", "101", "111"],
+  "9": ["111", "101", "111", "001", "111"],
+  ":": ["0", "1", "0", "1", "0"],
+  ".": ["0", "0", "0", "0", "1"],
+  "/": ["001", "001", "010", "100", "100"],
+  "-": ["000", "000", "111", "000", "000"],
+  " ": ["0", "0", "0", "0", "0"]
+};
+
+const LED_ROWS = 5;
+
+const snapGap = (...args) => window.edexDesktopLayout.snapGap(...args);
+const alignGrid = (...args) => window.edexDesktopLayout.alignGrid(...args);
+const gridCells = (...args) => window.edexDesktopLayout.gridCells(...args);
+const cellsPx = (...args) => window.edexDesktopLayout.cellsPx(...args);
+const alignGridSpan = (...args) => window.edexDesktopLayout.alignGridSpan(...args);
+const snapExclusiveEdge = (...args) => window.edexDesktopLayout.snapExclusiveEdge(...args);
+const gridLineOf = (...args) => window.edexDesktopLayout.gridLineOf(...args);
+const pxFromBox = (...args) => window.edexDesktopLayout.pxFromBox(...args);
+const boxToPx = (...args) => window.edexDesktopLayout.boxToPx(...args);
+const snapBoxVwVh = (...args) => window.edexDesktopLayout.snapBoxVwVh(...args);
+const pxToGridFields = (...args) => window.edexDesktopLayout.pxToGridFields(...args);
+const applyBoxPx = (...args) => window.edexDesktopLayout.applyBoxPx(...args);
+const rectsTooClose = (...args) => window.edexDesktopLayout.rectsTooClose(...args);
+const otherCardRects = (...args) => window.edexDesktopLayout.otherCardRects(...args);
+const overlapsAny = (...args) => window.edexDesktopLayout.overlapsAny(...args);
+const resolveMoveNoOverlap = (...args) => window.edexDesktopLayout.resolveMoveNoOverlap(...args);
+const clampResizeNoOverlap = (...args) => window.edexDesktopLayout.clampResizeNoOverlap(...args);
+const snapAllLayoutToGrid = (...args) => window.edexDesktopLayout.snapAllLayoutToGrid(...args);
+
+/** Occupied card rects from layout state (DOM may not exist yet during add). */
+function occupiedLayoutRects(exclude = {}) {
+  const rects = [];
+  Object.keys(state.layout).forEach((id) => {
+    if (id === "status" || !state.layout[id]) return;
+    if (exclude.unplaced?.has(`panel:${id}`)) return;
+    if (state.layout[id].minimized) return;
+    if (exclude.panelId === id) return;
+    rects.push(pxFromBox(state.layout[id]));
+  });
+  if (
+    state.desktopEnabled !== false
+    && state.desktopStage
+    && !state.desktopStage.minimized
+    && !exclude.desktop
+    && !exclude.unplaced?.has("desktop")
+  ) {
+    rects.push(pxFromBox(state.desktopStage));
+  }
+  (state.pathCards || []).forEach((card) => {
+    if (exclude.unplaced?.has(`path:${card.id}`)) return;
+    if (card.minimized) return;
+    if (exclude.pathId === card.id) return;
+    rects.push(pxFromBox(card));
+  });
+  return rects;
+}
+
+/**
+ * Place a new card in the first free grid slot (row-major), preferring the
+ * suggested box when it does not overlap existing containers/plugins.
+ */
+function findEmptyBox(preferredBox, exclude = {}, options = {}) {
+  const g = gridSize();
+  const ws = workspaceRect();
+  const base = snapBoxVwVh({ ...(preferredBox || {}) });
+  let { x, y, w, h } = pxFromBox(base);
+  w = alignGridSpan(w, 2);
+  h = alignGridSpan(h, 2);
+  const others = occupiedLayoutRects(exclude);
+  const fits = (rect) => (
+    rect.x >= 0
+    && rect.y >= 0
+    && rect.x + rect.w <= ws.width + g
+    && rect.y + rect.h <= ws.height + g
+    && !overlapsAny(rect, others)
+  );
+  if (fits({ x, y, w, h })) {
+    return snapBoxVwVh({ ...base, ...pxToGridFields(x, y, w, h) });
+  }
+  const maxDx = Math.max(0, Math.floor(Math.max(0, ws.width - w) / g));
+  const maxDy = Math.max(0, Math.floor(Math.max(0, ws.height - h) / g));
+  for (let dy = 0; dy <= maxDy; dy += 1) {
+    for (let dx = 0; dx <= maxDx; dx += 1) {
+      const rect = { x: dx * g, y: dy * g, w, h };
+      if (!fits(rect)) continue;
+      return snapBoxVwVh({ ...base, ...pxToGridFields(rect.x, rect.y, rect.w, rect.h) });
+    }
+  }
+  // Workspace full — keep preferred snapped position (user can drag later).
+  if (options.strict) return null;
+  return snapBoxVwVh({ ...base, ...pxToGridFields(x, y, w, h) });
+}
+
+function normalizeSavedLayout() {
+  let changed = false;
+  const targets = [];
+  if (state.desktopEnabled !== false && state.desktopStage) {
+    targets.push({ key: "desktop", box: state.desktopStage, exclude: { desktop: true } });
+  }
+  Object.keys(state.layout).forEach((id) => {
+    if (id !== "status" && state.layout[id]) {
+      targets.push({ key: `panel:${id}`, box: state.layout[id], exclude: { panelId: id } });
+    }
+  });
+  state.pathCards.forEach((card) => {
+    targets.push({ key: `path:${card.id}`, box: card, exclude: { pathId: card.id } });
+  });
+  const unplaced = new Set(targets.map((target) => target.key));
+  const place = (target) => {
+    const { box, exclude } = target;
+    if (!box || box.minimized) return;
+    unplaced.delete(target.key);
+    let placed = findEmptyBox(box, { ...exclude, unplaced }, { strict: true });
+    if (!placed) {
+      if (target.key === "panel:taskdock") return;
+      placed = findEmptyBox(
+        { ...box, gx: 0, gy: 0, gw: 2, gh: 2 },
+        { ...exclude, unplaced },
+        { strict: true }
+      );
+    }
+    if (!placed) {
+      box.minimized = true;
+      changed = true;
+      return;
+    }
+    if (
+      placed.gx !== box.gx
+      || placed.gy !== box.gy
+      || placed.gw !== box.gw
+      || placed.gh !== box.gh
+    ) {
+      Object.assign(box, placed);
+      changed = true;
+    }
+  };
+
+  targets.forEach(place);
+  return changed;
+}
+
+const workspaceRect = (...args) => window.edexDesktopLayout.workspaceRect(...args);
+const panelZoneMode = (...args) => window.edexDesktopLayout.panelZoneMode(...args);
+const centralZoneRect = (...args) => window.edexDesktopLayout.centralZoneRect(...args);
+const panelZoneRect = (...args) => window.edexDesktopLayout.panelZoneRect(...args);
+
+const constrainPanelPosition = (...args) => window.edexDesktopLayout.constrainPanelPosition(...args);
+const findPanelZonePosition = (...args) => window.edexDesktopLayout.findPanelZonePosition(...args);
+const repositionPanelInZone = (...args) => window.edexDesktopLayout.repositionPanelInZone(...args);
+const clampPanelToZone = (...args) => window.edexDesktopLayout.clampPanelToZone(...args);
+
+function vw(px) {
+  const den = layoutProfile().w * layoutFitScale();
+  return den > 0 ? (px / den) * 100 : 0;
+}
+
+function vh(px) {
+  const den = layoutProfile().h * layoutFitScale();
+  return den > 0 ? (px / den) * 100 : 0;
+}
+
+function pxFromVw(v) {
+  return (v / 100) * layoutProfile().w * layoutFitScale();
+}
+
+function pxFromVh(v) {
+  return (v / 100) * layoutProfile().h * layoutFitScale();
+}
+
+const LAYOUT_PROFILES = {
+  "2k": { id: "2k", label: "2K（2560×1440）", w: 2560, h: 1440 },
+  "4k": { id: "4k", label: "4K（3840×2160）", w: 3840, h: 2160 }
+};
+
+function pageSize() {
+  const phys = state.physicalSize;
+  const cssW = window.innerWidth;
+  const cssH = window.innerHeight;
+  return {
+    width: Math.max(cssW, phys?.width || 0),
+    height: Math.max(cssH, phys?.height || 0)
+  };
+}
+
+function defaultLayoutMode() {
+  const primary = (state.displays || []).find((d) => d.primary) || state.displays?.[0];
+  const width = Number(primary?.physicalSize?.width) || pageSize().width;
+  const height = Number(primary?.physicalSize?.height) || pageSize().height;
+  return (width >= 3200 || height >= 2000) ? "4k" : "2k";
+}
+
+function layoutMode() {
+  const raw = state.settings?.layoutMode;
+  if (raw === "4k" || raw === "2k") return raw;
+  return defaultLayoutMode();
+}
+
+function layoutProfile() {
+  return LAYOUT_PROFILES[layoutMode()];
+}
+
+function layoutFitScale() {
+  const primary = (state.displays || []).find((d) => d.primary) || state.displays?.[0];
+  const pw = Number(primary?.physicalSize?.width);
+  const ph = Number(primary?.physicalSize?.height);
+  const mine = state.physicalSize;
+  const width = Number(mine?.width) || pageSize().width;
+  const height = Number(mine?.height) || pageSize().height;
+  if (!(pw > 4 && ph > 4 && width > 4 && height > 4)) return 1;
+  const short = Math.min(width, height) / Math.min(pw, ph);
+  const long = Math.max(width, height) / Math.max(pw, ph);
+  const scale = Math.min(short, long);
+  if (!Number.isFinite(scale) || scale <= 0) return 1;
+  return Math.min(1, scale);
+}
+
+function displayUiScale() {
+  const raw = Number(state.displayUiScale ?? state.settings?.uiScale);
+  if (raw === 0.72 || !Number.isFinite(raw) || raw <= 0) return 1;
+  return Math.max(0.4, Math.min(1.5, raw));
+}
+
+async function migrateWindowZoneToRaster() {
+  if (state.settings?.windowZoneUnit === "raster") return;
+  const margins = state.settings?.windowZoneMargins || {};
+  const grid = gridSize();
+  const width = Math.max(1, document.getElementById("workspace")?.clientWidth || window.innerWidth);
+  const height = Math.max(1, document.getElementById("workspace")?.clientHeight || window.innerHeight);
+  const percent = (value) => Math.max(0, Math.min(45, Number(value) || 0));
+  const toRaster = (value, span) => Math.max(0, Math.min(45, Math.round((span * percent(value) / 100) / grid)));
+  const windowZoneMargins = {
+    left: toRaster(margins.left, width),
+    top: toRaster(margins.top, height),
+    right: toRaster(margins.right, width),
+    bottom: toRaster(margins.bottom, height)
+  };
+  state.settings = { ...state.settings, windowZoneMargins, windowZoneUnit: "raster" };
+  try {
+    await window.edex.saveSettings({ windowZoneMargins, windowZoneUnit: "raster" });
+  } catch {
+    // Keep the in-memory migration; it will be retried on the next save.
+  }
+}
+
+function applyUiMetrics() {
+  const user = displayUiScale();
+  const design = layoutProfile();
+  const fit = layoutFitScale();
+  document.documentElement.style.setProperty("--ui-scale", String(user * fit));
+  document.documentElement.style.setProperty("--disp-h", `${design.h}px`);
+  document.documentElement.style.setProperty("--disp-w", `${design.w}px`);
+  document.documentElement.style.setProperty("--grid-size", `${gridSize()}px`);
+  document.documentElement.style.setProperty("--snap-gap", `${gridSize()}px`);
+  document.documentElement.style.setProperty("--search-font", `${searchFontSize()}px`);
+  const controlUnit = (design.h / 100) * user * fit;
+  document.documentElement.style.setProperty("--ui-card-tool-size", `${Math.max(16, controlUnit * 1.7)}px`);
+  document.documentElement.style.setProperty("--ui-card-tool-gap", `${Math.max(3, controlUnit * 0.45)}px`);
+  document.documentElement.style.setProperty("--ui-card-tool-font-size", `${Math.max(10, controlUnit)}px`);
+  applyClockMetrics();
+}
+
+function mixThemeColor(base, accent, amount) {
+  const baseMatch = String(base || "").replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  const accentMatch = String(accent || "").replace(/^#/, "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!baseMatch || !accentMatch) return base;
+  const values = baseMatch.slice(1).map((part, index) => Math.round(
+    parseInt(part, 16) * (1 - amount) + parseInt(accentMatch[index + 1], 16) * amount
+  ));
+  return rgbToHex(...values);
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function panelDisplayTitle(id) {
+  return state.layout[id]?.title || PANEL_META[id]?.title || id;
+}
+
+const applyTheme = (...args) => window.edexDesktopLayout.applyTheme(...args);
+
+function ledGlyph(ch) {
+  return LED_GLYPHS[ch] || LED_GLYPHS[" "];
+}
+
+function pushLedCols(rows, count) {
+  for (let i = 0; i < count; i += 1) rows.forEach((row) => row.push(0));
+}
+
+function buildLedLine(text) {
+  const rows = Array.from({ length: LED_ROWS }, () => []);
+  [...String(text || "")].forEach((ch, i) => {
+    const glyph = ledGlyph(ch);
+    const w = glyph[0].length;
+    const prev = i ? text[i - 1] : "";
+    if (ch === ":" || ch === ".") pushLedCols(rows, 2);
+    else if (prev === ":" || prev === ".") pushLedCols(rows, 2);
+    else if (i) pushLedCols(rows, 1);
+    for (let r = 0; r < LED_ROWS; r += 1) {
+      const bits = glyph[r] || "".padEnd(w, "0");
+      for (let c = 0; c < w; c += 1) rows[r].push(bits[c] === "1" ? 1 : 0);
+    }
+  });
+  return rows;
+}
+
+function buildLedMatrix(lines) {
+  const blocks = (lines || []).filter(Boolean).map((line) => buildLedLine(line));
+  if (!blocks.length) return [[]];
+  const width = Math.max(...blocks.map((block) => block[0].length));
+  const pad = (block) => block.map((row) => {
+    const next = row.slice();
+    while (next.length < width) next.push(0);
+    return next;
+  });
+  const grid = [];
+  blocks.forEach((block, i) => {
+    if (i) grid.push(Array(width).fill(0));
+    grid.push(...pad(block));
+  });
+  return grid;
+}
+
+function parseLedColor(color) {
+  const s = String(color || "#ffffff").trim();
+  const hex = s.replace(/^#/, "");
+  if (/^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(hex)) {
+    const r = Number.parseInt(hex.slice(0, 2), 16);
+    const g = Number.parseInt(hex.slice(2, 4), 16);
+    const b = Number.parseInt(hex.slice(4, 6), 16);
+    return { r, g, b, css: `rgb(${r}, ${g}, ${b})` };
+  }
+  const fill = colorToFill(s) || "rgb(255,255,255)";
+  const m = fill.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+  if (m) {
+    const r = Number(m[1]);
+    const g = Number(m[2]);
+    const b = Number(m[3]);
+    return { r, g, b, css: `rgb(${r}, ${g}, ${b})` };
+  }
+  return { r: 255, g: 255, b: 255, css: "rgb(255, 255, 255)" };
+}
+
+function toHex6(color) {
+  const parsed = parseLedColor(color);
+  const h = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${h(parsed.r)}${h(parsed.g)}${h(parsed.b)}`;
+}
+
+function wallpaperGridCell() {
+  return Math.max(1, Math.round(gridSize()));
+}
+
+function alignClockToWallpaperGrid() {
+  const card = document.getElementById("card_clock");
+  const host = document.getElementById("mod_clock_led");
+  if (!card || !host || card.classList.contains("dragging")) return;
+  if (!card.classList.contains("clock-bare")) {
+    host.style.left = "auto";
+    host.style.top = "auto";
+    return;
+  }
+  const g = wallpaperGridCell();
+  const scale = Number(state.scaleFactor) || 1;
+  const originX = (Number(state.bounds?.x) || 0) * scale;
+  const originY = (Number(state.bounds?.y) || 0) * scale;
+  const rect = host.getBoundingClientRect();
+  const worldX = originX + rect.left;
+  const worldY = originY + rect.top;
+  const dx = Math.round(worldX / g) * g - worldX;
+  const dy = Math.round(worldY / g) * g - worldY;
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+    host.style.left = host.style.left || "0px";
+    host.style.top = host.style.top || "0px";
+    return;
+  }
+  const left = Number.parseFloat(host.style.left) || 0;
+  const top = Number.parseFloat(host.style.top) || 0;
+  host.style.left = `${Math.round(left + dx)}px`;
+  host.style.top = `${Math.round(top + dy)}px`;
+}
+
+function renderClock() {
+  const host = document.getElementById("mod_clock_led");
+  const analog = document.getElementById("mod_clock_analog");
+  const analogDate = document.getElementById("mod_clock_analog_date");
+  if (!host || !analog || !analogDate) return;
+  applyClockMetrics();
+  const now = new Date();
+  const isAnalog = clockDisplayMode() === "analog";
+  host.hidden = isAnalog;
+  analog.hidden = !isAnalog;
+  analogDate.hidden = !isAnalog || !clockShowDate();
+  if (isAnalog) {
+    const seconds = now.getSeconds() + now.getMilliseconds() / 1000;
+    const minute = now.getMinutes() + seconds / 60;
+    const hour = (now.getHours() % 12) + minute / 60;
+    analog.style.setProperty("--clock-hour-angle", `${hour * 30}deg`);
+    analog.style.setProperty("--clock-minute-angle", `${minute * 6}deg`);
+    analog.style.setProperty("--clock-second-angle", `${seconds * 6}deg`);
+    analogDate.textContent = `${String(now.getFullYear()).slice(-2)}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`;
+    return;
+  }
+  const timeMode = clockTimeFormat();
+  const hour24 = now.getHours();
+  const hour12 = hour24 % 12 || 12;
+  const timeHour = timeMode.startsWith("12h") ? hour12 : hour24;
+  const time = `${pad(timeHour)}:${pad(now.getMinutes())}${timeMode.endsWith("seconds") ? `:${pad(now.getSeconds())}` : ""}`;
+  const year = now.getFullYear();
+  const month = pad(now.getMonth() + 1);
+  const day = pad(now.getDate());
+  const dateFormats = {
+    "yy/m/d": `${String(year).slice(-2)}/${Number(month)}/${Number(day)}`,
+    "dd/mm/yy": `${day}/${month}/${String(year).slice(-2)}`,
+    "mm/dd/yy": `${month}/${day}/${String(year).slice(-2)}`,
+    "dd.mm.yy": `${day}.${month}.${String(year).slice(-2)}`,
+    "yyyy/mm/dd": `${year}/${month}/${day}`
+  };
+  const date = dateFormats[clockDateFormat()];
+  const matrix = buildLedMatrix(clockShowDate() ? [time, date] : [time]);
+  const rows = matrix.length;
+  const cols = matrix[0]?.length || 0;
+  if (!cols) return;
+
+  const cell = Math.max(2, Math.round(wallpaperGridCell() * clockScale()));
+  const led = clockLedColor();
+  host.style.setProperty("--led-cell", `${cell}px`);
+  host.style.setProperty("--clock-led", led);
+  host.style.width = `${cols * cell}px`;
+  host.style.height = `${rows * cell}px`;
+  host.style.gridTemplateColumns = `repeat(${cols}, ${cell}px)`;
+  host.style.gridTemplateRows = `repeat(${rows}, ${cell}px)`;
+
+  const total = rows * cols;
+  const layoutKey = `${cols}x${rows}`;
+  if (host.dataset.ledLayout !== layoutKey || host.childElementCount !== total) {
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < total; i += 1) {
+      frag.appendChild(document.createElement("span"));
+    }
+    host.replaceChildren(frag);
+    host.dataset.ledLayout = layoutKey;
+  }
+  const nodes = host.children;
+  let i = 0;
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const on = Boolean(matrix[r][c]);
+      nodes[i].className = on ? "on" : "";
+      if (on) nodes[i].style.setProperty("background-color", led, "important");
+      else nodes[i].style.removeProperty("background-color");
+      i += 1;
+    }
+  }
+  alignClockToWallpaperGrid();
+}
+
+function iconSvg(icon) {
+  if (!icon) return "";
+  if (icon.dataUrl) {
+    const dataUrl = String(icon.dataUrl);
+    if (!/^data:image\//i.test(dataUrl)) return "";
+    return `<img class="sys-icon" src="${escapeHtml(dataUrl)}" alt="" width="${escapeHtml(icon.width || 32)}" height="${escapeHtml(icon.height || 32)}" draggable="false" />`;
+  }
+  if (!icon.svg) return "";
+  const color = "rgb(var(--color_r), var(--color_g), var(--color_b))";
+  return `<svg viewBox="0 0 ${icon.width} ${icon.height}" fill="${color}">${icon.svg}</svg>`;
+}
+
+const FILE_BROWSER_ICON_DIR = "../assets/file-icons/";
+const FILE_BROWSER_ICON_BY_EXTENSION = {
+  ".css": "datei_css.png",
+  ".exe": "datei_exe.png",
+  ".appx": "datei_exe.png",
+  ".bat": "datei_exe.png",
+  ".cmd": "datei_exe.png",
+  ".dll": "datei_exe.png",
+  ".7z": "datei_7z.png",
+  ".avi": "datei_avi.png",
+  ".csv": "datei_csv.png",
+  ".doc": "datei_docx.png",
+  ".docx": "datei_docx.png",
+  ".flac": "datei_flac.png",
+  ".gif": "datei_gif.png",
+  ".html": "datei_html.png",
+  ".htm": "datei_html.png",
+  ".iso": "datei_iso.png",
+  ".jpg": "datei_jpg.png",
+  ".jpeg": "datei_jpg.png",
+  ".js": "datei_js.png",
+  ".json": "datei_json.png",
+  ".lnk": "datei_exe.png",
+  ".md": "datei_md.png",
+  ".mkv": "datei_mkv.png",
+  ".mp3": "datei_mp3.png",
+  ".mp4": "datei_mp4.png",
+  ".msi": "datei_exe.png",
+  ".pdf": "datei_pdf.png",
+  ".png": "datei_png.png",
+  ".ppt": "datei_pptx.png",
+  ".pptx": "datei_pptx.png",
+  ".ps1": "datei_exe.png",
+  ".rar": "datei_rar.png",
+  ".txt": "datei_txt.png",
+  ".url": "datei_html.png",
+  ".wav": "datei_wav.png",
+  ".webp": "datei_webp.png",
+  ".xls": "datei_xls.png",
+  ".xlsx": "datei_xlsx.png",
+  ".zip": "datei_zip.png"
+};
+
+function fileBrowserIcon(item) {
+  if (!item) return "";
+  const name = String(item.displayName || item.name || "").trim();
+  const fileName = String(item.name || name).trim();
+  const normalized = name.toLocaleLowerCase();
+  const normalizedFileName = fileName.toLocaleLowerCase();
+  const folderKey = normalized.replace(/[\s_-]+/g, "");
+  let asset = item.isDirectory ? "ordner.png" : "";
+  if (item.isDirectory || item.kind === "thispc" || item.kind === "drive" || item.kind === "remote") {
+    if (item.kind === "thispc" || folderKey === "dieserpc" || folderKey === "thispc") asset = "dieser_pc.png";
+    else if (folderKey === "benutzer" || folderKey === "user" || folderKey === "users") asset = "benutzer.png";
+    else if (folderKey === "bilder" || folderKey === "pictures") asset = "bilder.png";
+    else if (folderKey === "cloud") asset = "cloud.png";
+    else if (folderKey === "desktop") asset = "desktop.png";
+    else if (folderKey === "dokumente" || folderKey === "documents") asset = "dokumente.png";
+    else if (folderKey === "musik" || folderKey === "music") asset = "musik.png";
+    else if (folderKey === "netzwerk" || folderKey === "network") asset = "netzwerk.png";
+    else if (folderKey === "programme" || folderKey === "programs") asset = "programme.png";
+    else if (item.kind === "remote" || folderKey === "remote") asset = "remote.png";
+    else if (folderKey === "temp" || folderKey === "temporary") asset = "temp.png";
+    else if (folderKey === "video" || folderKey === "videos") asset = "video.png";
+    else if (folderKey === "windows") asset = "windows.png";
+    else if (normalized === "downloads" || normalized === "download") asset = "downloads.png";
+    else if (normalized === "home") asset = "home.png";
+    else if (normalized.includes("favorit")) asset = "favoriten.png";
+    else if (normalized.includes("papierkorb") || normalized === "recycle.bin") asset = "papierkorb.png";
+    else if (normalized.includes("geschützt") || normalized.includes("protected")) asset = "geschuetzt.png";
+    else if (normalized.includes("shared") || normalized.includes("freigegeben")) asset = "shared.png";
+    else if (normalized.includes("setting") || normalized.includes("einstellung")) asset = "einstellungen.png";
+  } else {
+    const dot = normalizedFileName.lastIndexOf(".");
+    asset = FILE_BROWSER_ICON_BY_EXTENSION[dot >= 0 ? normalizedFileName.slice(dot) : ""] || "datei_txt.png";
+  }
+  return `<img class="sys-icon file-browser-icon" src="${FILE_BROWSER_ICON_DIR}${asset}" alt="" draggable="false">`;
+}
+
+function fileBrowserTreeIcon(name, root = false) {
+  return fileBrowserIcon({
+    name: name || "",
+    isDirectory: true
+  }).replace("file-browser-icon", "file-browser-icon file-browser-tree-icon")
+    .replace(' alt=""', ` alt="${root ? "Ordner" : "Unterordner"}"`);
+}
+
+function itemLabel(item) {
+  return item?.displayName || item?.name || "";
+}
+
+function fileBrowserTooltipText(item) {
+  const name = itemLabel(item) || "Unbenannt";
+  const type = item?.isDirectory ? "Ordner" : item?.kind === "shortcut" ? "Verknüpfung" : "Datei";
+  const size = item?.isDirectory ? "Ordner" : String(item?.sizeLabel || "Nicht verfügbar");
+  const modified = Number(item?.mtime) > 0
+    ? new Date(item.mtime).toLocaleString()
+    : "Nicht verfügbar";
+  const category = item?.category ? String(item.category) : "Nicht verfügbar";
+  const target = item?.targetPath ? String(item.targetPath) : "";
+  return [
+    `Name: ${name}`,
+    `Typ: ${type}`,
+    `Größe: ${size}`,
+    `Geändert: ${modified}`,
+    `Kategorie: ${category}`,
+    `Pfad: ${String(item?.path || "Nicht verfügbar")}`,
+    target ? `Ziel: ${target}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function ensureFileBrowserTooltip() {
+  let tooltip = document.getElementById("file-browser-tooltip");
+  if (tooltip) return tooltip;
+  tooltip = document.createElement("div");
+  tooltip.id = "file-browser-tooltip";
+  tooltip.className = "file-browser-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+  return tooltip;
+}
+
+function showFileBrowserTooltip(item, event) {
+  const tooltip = ensureFileBrowserTooltip();
+  tooltip.textContent = fileBrowserTooltipText(item);
+  tooltip.hidden = false;
+  const margin = 14;
+  const rect = tooltip.getBoundingClientRect();
+  const left = Math.min(event.clientX + margin, window.innerWidth - rect.width - margin);
+  const top = Math.min(event.clientY + margin, window.innerHeight - rect.height - margin);
+  tooltip.style.left = `${Math.max(margin, left)}px`;
+  tooltip.style.top = `${Math.max(margin, top)}px`;
+}
+
+function hideFileBrowserTooltip() {
+  const tooltip = document.getElementById("file-browser-tooltip");
+  if (tooltip) tooltip.hidden = true;
+}
+
+const currentDisplayLayout = (...args) => window.edexDesktopLayout.currentDisplayLayout(...args);
+const persistLayout = (...args) => window.edexDesktopLayout.persistLayout(...args);
+
+function clearSnapGuides() {
+  const box = document.getElementById("snap-guides");
+  if (!box) return;
+  box.classList.remove("on");
+  box.innerHTML = "";
+  const zone = document.getElementById("zone-overlay");
+  if (zone) {
+    zone.classList.remove("on");
+    zone.classList.remove("edge");
+  }
+}
+
+function showPanelZone(el) {
+  const overlay = document.getElementById("zone-overlay");
+  if (!overlay) return;
+  const edge = panelZoneMode(el) === "edge" && state.settings.windowZoneEnabled !== false;
+  const zone = edge ? centralZoneRect() : panelZoneRect(el);
+  overlay.classList.toggle("edge", edge);
+  overlay.classList.add("on");
+  overlay.style.left = `${zone.x}px`;
+  overlay.style.top = `${zone.y}px`;
+  overlay.style.width = `${zone.width}px`;
+  overlay.style.height = `${zone.height}px`;
+}
+
+function showWindowZonePreview(settingsModal) {
+  const overlay = document.getElementById("zone-overlay");
+  const guides = document.getElementById("snap-guides");
+  if (!overlay || !guides) return;
+  const enabled = Boolean(settingsModal.querySelector("#set-window-zone-enabled")?.checked);
+  if (!enabled) {
+    overlay.classList.remove("on", "edge", "preview");
+    guides.classList.remove("on");
+    return;
+  }
+  const readMargin = (id, fallback) => {
+    const value = Number(settingsModal.querySelector(id)?.value);
+    return Number.isFinite(value) ? Math.max(0, Math.min(45, value)) : fallback;
+  };
+  const zone = window.edexDesktopLayout.centralZoneRect({
+    left: readMargin("#set-zone-left", 18),
+    top: readMargin("#set-zone-top", 8),
+    right: readMargin("#set-zone-right", 18),
+    bottom: readMargin("#set-zone-bottom", 8)
+  });
+  overlay.classList.remove("edge");
+  overlay.classList.add("on", "preview");
+  overlay.style.left = `${zone.x}px`;
+  overlay.style.top = `${zone.y}px`;
+  overlay.style.width = `${zone.width}px`;
+  overlay.style.height = `${zone.height}px`;
+  guides.classList.add("on");
+  const grid = gridSize();
+  guides.style.backgroundSize = `${grid}px ${grid}px`;
+}
+
+const showSnapGuides = (...args) => window.edexDesktopLayout.showSnapGuides(...args);
+const collectSnapTargets = (...args) => window.edexDesktopLayout.collectSnapTargets(...args);
+const referenceGuides = (...args) => window.edexDesktopLayout.referenceGuides(...args);
+
+const neighborDisplay = (...args) => window.edexDesktopLayout.neighborDisplay(...args);
+const maybeTransferCard = (...args) => window.edexDesktopLayout.maybeTransferCard(...args);
+
+const magneticSnap = (...args) => window.edexDesktopLayout.magneticSnap(...args);
+const gridMinSize = (...args) => window.edexDesktopLayout.gridMinSize(...args);
+const magneticResize = (...args) => window.edexDesktopLayout.magneticResize(...args);
+
+function isCardLocked(el) {
+  return el?.classList.contains("locked");
+}
+
+function makeInteractive(el, opts) {
+  const handle = el.classList.contains("clock-bare") ? el : (el.querySelector(".card-title") || el);
+  const resize = el.querySelector(".resize-handle");
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(
+      "button, .resize-handle, .view-toggle, .card-tools, .card-tool, input, " +
+      ".cockpit-root, .cockpit-knob, .cockpit-pad-btn, .cockpit-fader, .cockpit-radar-wrap, .cockpit-sector, " +
+      "#mod_ddj, .ddj-jog, .ddj-knob, .ddj-tempo, .ddj-ch-fader, .ddj-h-fader, .ddj-xfader, .ddj-pad, .ddj-round, .ddj-chcue, " +
+      "#mod_cassette, .cass-btn, .cass-reel"
+    )) return;
+    if (isCardLocked(el)) return;
+    event.preventDefault();
+    el.classList.add("dragging");
+    showPanelZone(el);
+    el.style.zIndex = String(++state.zTop);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origX = alignGrid(el.offsetLeft);
+    const origY = alignGrid(el.offsetTop);
+    const w = alignGridSpan(el.offsetWidth, 2);
+    const h = alignGridSpan(el.offsetHeight, 2);
+    document.body.classList.add("is-card-dragging");
+    el.style.left = `${origX}px`;
+    el.style.top = `${origY}px`;
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+    let lastRawX = 0;
+    let lastClientX = startX;
+    let lastClientY = startY;
+    let lastX = origX;
+    let lastY = origY;
+
+    const move = (ev) => {
+      let x = origX + (ev.clientX - startX);
+      let y = origY + (ev.clientY - startY);
+      lastRawX = ev.clientX - startX;
+      lastClientX = ev.clientX;
+      lastClientY = ev.clientY;
+      const snapped = magneticSnap(el, x, y, w, h, { x: ev.clientX, y: ev.clientY });
+      lastX = snapped.x;
+      lastY = snapped.y;
+      el.style.left = `${snapped.x}px`;
+      el.style.top = `${snapped.y}px`;
+      showSnapGuides(snapped.guides);
+      opts.onMove?.(snapped.x, snapped.y, w, h);
+    };
+    const up = async () => {
+      el.classList.remove("dragging");
+      document.body.classList.remove("is-card-dragging");
+      clearSnapGuides();
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const x = lastX;
+      const y = lastY;
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      const transferred = await maybeTransferCard(el, x, y, w, h, {
+        rawX: lastRawX,
+        clientX: lastClientX,
+        clientY: lastClientY,
+        widgetType: opts.widgetType,
+        widgetId: opts.widgetId,
+        widgetData: opts.widgetData?.(),
+        onTransferred: opts.onTransferred
+      });
+      if (!transferred) {
+        opts.onEnd?.();
+        persistLayout();
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+
+  if (resize && opts.resizable !== false) {
+    resize.addEventListener("pointerdown", (event) => {
+      if (isCardLocked(el)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      window.edex?.setMouseIgnore?.(false);
+      el.style.zIndex = String(++state.zTop);
+      el.classList.add("dragging");
+      showPanelZone(el);
+      document.body.classList.add("is-card-dragging");
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const g = gridSize();
+      const left = alignGrid(el.offsetLeft);
+      const top = alignGrid(el.offsetTop);
+      const minW = gridMinSize(opts.minW || g * 4);
+      const minH = gridMinSize(opts.minH || g * 3);
+      const origW = alignGridSpan(el.offsetWidth, gridCells(minW));
+      const origH = alignGridSpan(el.offsetHeight, gridCells(minH));
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.width = `${origW}px`;
+      el.style.height = `${origH}px`;
+      let lastW = origW;
+      let lastH = origH;
+
+      const move = (ev) => {
+        const right = snapExclusiveEdge(left + origW + (ev.clientX - startX));
+        const bottom = snapExclusiveEdge(top + origH + (ev.clientY - startY));
+        const snapped = magneticResize(el, right - left, bottom - top, left, top, minW, minH);
+        lastW = snapped.w;
+        lastH = snapped.h;
+        el.style.width = `${snapped.w}px`;
+        el.style.height = `${snapped.h}px`;
+        showSnapGuides(snapped.guides);
+        opts.onMove?.(left, top, snapped.w, snapped.h);
+      };
+      const up = () => {
+        el.classList.remove("dragging");
+        document.body.classList.remove("is-card-dragging");
+        clearSnapGuides();
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        const finalW = snapExclusiveEdge(left + lastW) - left;
+        const finalH = snapExclusiveEdge(top + lastH) - top;
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+        el.style.width = `${Math.max(minW, finalW)}px`;
+        el.style.height = `${Math.max(minH, finalH)}px`;
+        opts.onMove?.(left, top, Math.max(minW, finalW), Math.max(minH, finalH));
+        opts.onEnd?.();
+        persistLayout();
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  }
+}
+
+function bootBytes(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return "?";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let amount = bytes;
+  let index = 0;
+  while (amount >= 1024 && index < units.length - 1) {
+    amount /= 1024;
+    index += 1;
+  }
+  return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+async function loadBootSnapshot() {
+  const api = window.edex;
+  if (!api) return null;
+  const results = await Promise.allSettled([
+    api.getCpuMetrics?.(),
+    api.getMemMetrics?.(),
+    api.getHardwareInfo?.(),
+    api.getTopProcesses?.(),
+    api.getNetStatus?.(),
+    api.listDrives?.()
+  ]);
+  const value = (result) => result?.status === "fulfilled" ? result.value : null;
+  return {
+    cpu: value(results[0]),
+    mem: value(results[1]),
+    hardware: value(results[2]),
+    processes: value(results[3]),
+    network: value(results[4]),
+    drives: value(results[5])
+  };
+}
+
+async function boot() {
+  const bootScreen = document.getElementById("boot_screen");
+  if (!bootScreen) return;
+
+  const started = performance.now();
+  let fast = false;
+  let resolveSkip;
+  const skipPromise = new Promise((resolve) => {
+    resolveSkip = resolve;
+  });
+  let done = 0;
+  let total = 1;
+  const withTimeout = (promise) => Promise.race([promise, delay(9000).then(() => null)]);
+  const snapshotPromise = withTimeout(loadBootSnapshot());
+  const diagPromise = withTimeout(Promise.resolve(window.edex?.getBootDiagnostics?.()).catch(() => null));
+
+  bootScreen.className = "boot_terminal";
+  bootScreen.innerHTML = `
+    <button type="button" class="boot-skip" data-boot-skip>SKIP &gt;</button>
+    <div class="boot-shell">
+      <section class="boot-terminal-pane">
+        <div class="boot-pane-title">SYSTEM INITIALIZATION <span>LIVE CHANNEL</span></div>
+        <div class="boot-log" data-boot-log aria-live="polite"></div>
+      </section>
+      <aside class="boot-brand-pane">
+        <img class="boot-logo" src="../assets/icons/branding/logo.webp" alt="Bockis eDEX">
+        <pre class="boot-ascii">${BOOT_ASCII_LOGO}</pre>
+        <div class="boot-tagline">DESKTOP UI / TRON SYSTEM</div>
+        <div class="boot-progress-panel">
+          <div class="boot-progress-meta">
+            <span data-boot-percent>BOOT 0%</span>
+            <span>${state.primary ? "PRIMARY" : "SECONDARY"} / DISPLAY ${state.displayIndex + 1}</span>
+          </div>
+          <div class="boot-track" role="progressbar" aria-label="Boot-Fortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i data-boot-fill></i></div>
+        </div>
+      </aside>
+    </div>
+    <div class="boot-final" data-boot-final>
+      <img src="../assets/icons/branding/logo.webp" alt="Bockis eDEX">
+      <h1>BOCKIS-eDEX</h1>
+      <div class="sub">SYSTEM ONLINE</div>
+      <div class="count" data-boot-count>starte Dashboard ...</div>
+    </div>`;
+
+  const log = bootScreen.querySelector("[data-boot-log]");
+  const fill = bootScreen.querySelector("[data-boot-fill]");
+  const percent = bootScreen.querySelector("[data-boot-percent]");
+  const finalScreen = bootScreen.querySelector("[data-boot-final]");
+  const countdown = bootScreen.querySelector("[data-boot-count]");
+
+  const wait = (ms) => (fast ? Promise.resolve() : delay(ms));
+  let bootAudioContext = null;
+  let bootAudioOut = null;
+  let bootNoise = null;
+  let bootVoices = 0;
+  const bootLast = {};
+  const bootAudio = () => {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return null;
+    if (!bootAudioContext) {
+      const ctx = new AudioContextCtor();
+      const master = ctx.createGain();
+      master.gain.value = 0.55;
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.value = 4800;
+      // Compressor catches overlapping voices so peaks cannot clip.
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -22;
+      compressor.knee.value = 24;
+      compressor.ratio.value = 8;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.15;
+      master.connect(lowpass).connect(compressor).connect(ctx.destination);
+      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.4), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+      bootNoise = buffer;
+      bootAudioOut = master;
+      bootAudioContext = ctx;
+    }
+    if (bootAudioContext.state === "suspended") bootAudioContext.resume().catch(() => {});
+    return bootAudioContext;
+  };
+  // Linear attack avoids the click of an instant start; exponential decay avoids a hard cut-off.
+  const bootEnvelope = (ctx, node, peak, start, attack, duration) => {
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(peak, start + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    node.connect(gain).connect(bootAudioOut);
+  };
+  const bootTone = (freq, duration, { type = "sine", peak = 0.12, attack = 0.006, to = freq, delay: offset = 0 } = {}) => {
+    const ctx = fast ? null : bootAudio();
+    if (!ctx || bootVoices > 14) return;
+    const start = ctx.currentTime + offset;
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    if (to !== freq) osc.frequency.exponentialRampToValueAtTime(to, start + duration);
+    bootEnvelope(ctx, osc, peak, start, attack, duration);
+    bootVoices += 1;
+    osc.onended = () => { bootVoices -= 1; };
+    osc.start(start);
+    osc.stop(start + duration + 0.02);
+  };
+  const bootNoiseBurst = (duration, freq, q, peak, offset = 0, attack = 0.002) => {
+    const ctx = fast ? null : bootAudio();
+    if (!ctx || bootVoices > 14) return;
+    const start = ctx.currentTime + offset;
+    const source = ctx.createBufferSource();
+    source.buffer = bootNoise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = freq;
+    filter.Q.value = q;
+    source.connect(filter);
+    bootEnvelope(ctx, filter, peak, start, attack, duration);
+    bootVoices += 1;
+    source.onended = () => { bootVoices -= 1; };
+    source.start(start, Math.random() * 0.15, duration + 0.02);
+  };
+  const bootThrottle = (name, gap) => {
+    const now = performance.now();
+    if (now - (bootLast[name] || 0) < gap) return false;
+    bootLast[name] = now;
+    return true;
+  };
+  const bootSfx = {
+    key() {
+      if (!bootThrottle("key", 38)) return;
+      bootNoiseBurst(0.022, 2400 + Math.random() * 900, 1.4, 0.16);
+      bootTone(150 + Math.random() * 30, 0.03, { peak: 0.07, to: 100 });
+    },
+    seek() {
+      if (!bootThrottle("seek", 90)) return;
+      const clicks = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < clicks; i += 1) {
+        const at = i * (0.035 + Math.random() * 0.03);
+        bootNoiseBurst(0.04, 700 + Math.random() * 500, 2.5, 0.2, at);
+        bootTone(95, 0.05, { peak: 0.1, to: 60, delay: at });
+      }
+    },
+    ok() { bootTone(1175, 0.09, { peak: 0.07 }); },
+    warn() {
+      bootTone(554, 0.12, { type: "triangle", peak: 0.1, to: 494 });
+      bootTone(466, 0.14, { type: "triangle", peak: 0.1, to: 415, delay: 0.14 });
+    },
+    error() {
+      for (let i = 0; i < 3; i += 1) bootTone(220, 0.14, { type: "triangle", peak: 0.14, to: 196, delay: i * 0.2 });
+    },
+    section() {
+      bootTone(659.25, 0.1, { peak: 0.08 });
+      bootTone(880, 0.16, { peak: 0.08, delay: 0.09 });
+      bootSfx.seek();
+    },
+    power() {
+      bootTone(55, 1.1, { peak: 0.2, attack: 0.25, to: 110 });
+      bootTone(110.5, 1.1, { peak: 0.08, attack: 0.3, to: 220 });
+      bootNoiseBurst(0.9, 260, 0.8, 0.08, 0, 0.3);
+    },
+    online() {
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, index) => {
+        bootTone(freq, 0.9, { peak: 0.1, attack: 0.02, delay: index * 0.12 });
+        bootTone(freq / 2, 0.9, { type: "triangle", peak: 0.04, attack: 0.03, delay: index * 0.12 });
+      });
+    }
+  };
+  const bootSound = (name) => {
+    try { bootSfx[name]?.(); } catch { /* boot audio is optional */ }
+  };
+  const span = (cls, text) => `<span class="${cls}">${escapeHtml(text)}</span>`;
+  const stamp = () => `<span class="d">[${((performance.now() - started) / 1000).toFixed(6).padStart(11, " ")}]</span> `;
+  const setProgress = (value) => {
+    const clamped = Math.max(0, Math.min(100, value));
+    if (fill) fill.style.width = `${clamped}%`;
+    if (percent) percent.textContent = `BOOT ${Math.round(clamped)}%`;
+  };
+  const tick = (count = 1) => {
+    done = Math.min(done + count, total);
+    setProgress((done / total) * 100);
+  };
+  const line = (html = "") => {
+    const row = document.createElement("div");
+    row.className = "boot-line";
+    row.innerHTML = html;
+    log?.appendChild(row);
+    while (log && log.scrollHeight > log.clientHeight + 4 && log.firstChild && log.firstChild !== row) {
+      log.removeChild(log.firstChild);
+    }
+    return row;
+  };
+  const typeCmd = async (command, speed = 20) => {
+    const row = line(`${span("ok", "root")}${span("d", "@bockis-edex")}:${span("w", "~")}# `);
+    const typed = document.createElement("span");
+    row.appendChild(typed);
+    for (const char of command) {
+      if (fast) {
+        typed.textContent = command;
+        return;
+      }
+      typed.textContent += char;
+      if (char.trim()) bootSound("key");
+      await delay(speed + Math.random() * 12);
+    }
+  };
+
+  bootScreen.querySelector("[data-boot-skip]")?.addEventListener("click", () => {
+    fast = true;
+    resolveSkip();
+  });
+
+  bootSound("power");
+  applyTheme(state.theme || state.bootstrap?.theme, state.settings.wallpaper || "grid");
+  document.documentElement.dataset.ramGaugeMode = ramGaugeMode();
+
+  line(`${stamp()}Bockis-eDEX Boot-Loader  ${span("d", new Date().toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }))}`);
+  line(`${stamp()}Electron IPC-Bridge: ${window.edex ? span("ok", "online") : span("er", "nicht verfügbar")}`);
+  const size = state.physicalSize || {};
+  line(`${stamp()}Anzeige: ${span("b", `Monitor ${state.displayIndex + 1}`)} ${state.primary ? "(Hauptmonitor)" : "(Zusatzmonitor)"} ${span("d", `${size.width || "?"}x${size.height || "?"}`)}`);
+  const pending = line(`${stamp()}Sammle Systemdaten (live) ...`);
+  await wait(450);
+
+  const [snapshot, diag] = await Promise.race([
+    Promise.all([snapshotPromise, diagPromise]),
+    skipPromise.then(() => [null, null])
+  ]);
+  pending.innerHTML = `${stamp()}Sammle Systemdaten (live) ... ${snapshot ? span("ok", "fertig") : span("w", "keine Daten")}`;
+
+  const cpu = snapshot?.cpu || {};
+  const mem = snapshot?.mem || {};
+  const hardware = snapshot?.hardware || {};
+  const processes = Array.isArray(snapshot?.processes?.list) ? snapshot.processes.list : [];
+  const network = snapshot?.network || {};
+  const drives = Array.isArray(snapshot?.drives?.items) ? snapshot.drives.items : [];
+  const sys = diag?.system || {};
+  const versions = diag?.versions || {};
+  const deps = Array.isArray(diag?.deps) ? diag.deps : [];
+  const packages = Array.isArray(diag?.packages) ? diag.packages : [];
+  const modules = [
+    ["EFFECTS", Boolean(window.edexEffects)],
+    ["I18N", Boolean(window.edexI18n)],
+    ["COCKPIT", Boolean(window.cockpitPanel)],
+    ["CPU RAIL", Boolean(window.cpuRailPanel)],
+    ["DOCK", Boolean(window.dockPanel)]
+  ];
+  const liveChecks = 3;
+
+  total = 8 + modules.length + 2 + 1 + Math.max(1, drives.length) + Math.min(5, processes.length)
+    + deps.length + liveChecks + packages.length + 2;
+  done = 0;
+
+  // Phase 1: Hardware
+  bootSound("section");
+  line(`${stamp()}Kernel: ${span("b", sys.kernel || "?")}  Host: ${span("b", sys.hostname || hardware.model || "?")}`); tick();
+  await wait(60);
+  line(`${stamp()}OS: ${span("b", sys.os || "Windows")}  Build ${span("d", sys.build || "?")}  ${sys.arch || ""}`); tick();
+  await wait(60);
+  line(`${stamp()}Board: ${span("b", `${hardware.manufacturer || "UNKNOWN"} ${hardware.model || ""}`.trim())}  ${span("d", hardware.chassis || "")}`); tick();
+  await wait(50);
+  if (sys.bios) line(`${stamp()}BIOS: ${escapeHtml(sys.bios)}`);
+  tick();
+  await wait(50);
+  const cpuSpeed = Number.isFinite(cpu.speedMax) ? ` ${cpu.speedMax.toFixed(1)} GHz` : "";
+  line(`${stamp()}CPU:  ${span("b", cpu.fullName || cpu.name || "unbekannt")}  ${cpu.cores || "?"} Threads${cpuSpeed}  ${span("d", `Last ${Number(cpu.avg || 0).toFixed(1)}%`)}`); tick();
+  await wait(70);
+  const memFilled = mem.total ? Math.round((Number(mem.used || 0) / Number(mem.total)) * 20) : 0;
+  const memBar = `${span("boot-bar ok", "▓".repeat(memFilled))}${span("boot-bar d", "░".repeat(20 - memFilled))}`;
+  line(`${stamp()}RAM:  [${memBar}]  ${span("b", `${bootBytes(mem.used)} / ${bootBytes(mem.total)}`)}  ${span("d", `${bootBytes(mem.free)} frei`)}`); tick();
+  await wait(60);
+  if (sys.gpu) {
+    line(`${stamp()}GPU:  ${span("b", sys.gpu)}${sys.vram > 0 ? `  ${bootBytes(sys.vram)} VRAM` : ""}${sys.gpuDriver ? `  ${span("d", `Treiber ${sys.gpuDriver}`)}` : ""}`);
+  }
+  tick();
+  await wait(60);
+  bootSound(snapshot ? "ok" : "warn");
+  line(`${stamp()}Daten: ${snapshot ? span("ok", "echte Systemdaten via window.edex") : span("w", "keine Systemdaten verfügbar")}`); tick();
+  await wait(80);
+  line();
+
+  // Phase 2: Module und Dienste
+  bootSound("section");
+  const services = [
+    ["Loading HUD effects", modules[0]],
+    ["Loading i18n bridge", modules[1]],
+    ["Loading cockpit radar", modules[2]],
+    ["Loading CPU supply rail", modules[3]],
+    ["Loading task dock", modules[4]]
+  ];
+  for (const [label, [, loaded]] of services) {
+    bootSound(loaded ? "ok" : "warn");
+    line(`[${loaded ? span("ok", "  OK  ") : span("w", " WAIT ")}] ${span("d", label)}`);
+    tick();
+    await wait(70 + Math.random() * 90);
+  }
+  bootSound("ok");
+  line(`[${span("ok", "  OK  ")}] ${span("d", `Theme ${String(state.themeName || "tron").toUpperCase()} synchronisiert`)}`); tick();
+  await wait(80);
+  bootSound("ok");
+  line(`[${span("ok", "  OK  ")}] ${span("d", `Workspace Display ${state.displayIndex + 1} (${state.primary ? "primary" : "secondary"})`)}`); tick();
+  await wait(80);
+  line();
+
+  // Phase 3: Netzwerk
+  bootSound("section");
+  line(span("w", ":: Netzwerk-Schnittstelle"));
+  bootSound(network.iface && network.ip4 ? "ok" : "warn");
+  if (network.iface && network.ip4) {
+    const ping = Number.isFinite(network.ping) ? `  ${network.ping} ms` : "";
+    line(`   ${span("ok", "↑")}  ${escapeHtml(String(network.iface).padEnd(16, " "))} ${span("b", String(network.ip4).padEnd(16, " "))} ${span("d", `${network.mac ? `MAC ${network.mac}` : ""}${ping}  ${network.state || ""}`)}`);
+  } else {
+    line(`   ${span("w", "keine aktive Schnittstelle")}`);
+  }
+  tick();
+  await wait(120);
+  line();
+
+  // Phase 4: Laufwerke
+  bootSound("section");
+  line(span("w", ":: Dateisystem / Laufwerke"));
+  if (drives.length) {
+    for (const drive of drives) {
+      const usedPct = Math.max(0, Math.min(100, Number(drive.pct) || 0));
+      const filled = Math.round((usedPct / 100) * 22);
+      const tone = usedPct > 85 ? "er" : usedPct > 65 ? "w" : "ok";
+      line(`   ${span("b", String(drive.letter || "").padEnd(4, " "))}  [${span(`boot-bar ${tone}`, "▓".repeat(filled))}${span("boot-bar d", "░".repeat(22 - filled))}] ${span(tone, `${String(usedPct).padStart(3, " ")}%`)}  ${span("d", `${drive.usedLabel || bootBytes(drive.used)} / ${drive.totalLabel || bootBytes(drive.total)}  ${drive.volumeName ? `(${drive.volumeName})` : ""}  ${drive.fs || ""}`)}`);
+      bootSound("seek");
+      tick();
+      await wait(65);
+    }
+  } else {
+    bootSound("warn");
+    line(`   ${span("w", "keine Laufwerke gefunden")}`);
+    tick();
+  }
+  line();
+  await wait(120);
+
+  // Phase 5: Prozesse
+  if (processes.length) {
+    bootSound("section");
+    line(span("w", `:: Top-Prozesse (RAM)  ${snapshot?.processes?.tasks || processes.length} aktiv`));
+    for (const proc of processes.slice(0, 5)) {
+      bootSound("key");
+      line(`   ${span("d", String(proc.pid ?? 0).padStart(6, " "))}  ${span("b", String(proc.name || "?").padEnd(20, " "))} MEM ${span("ok", `${Number(proc.mem || 0).toFixed(1).padStart(5, " ")}%`)}  ${span("d", `${proc.conn || 0} conn`)}`);
+      tick();
+      await wait(40);
+    }
+    line();
+  }
+
+  // Phase 6: Systemdiagnose
+  bootSound("section");
+  line(span("w", ":: Systemdiagnose"));
+  if (!deps.length) line(`   ${span("w", "Diagnose nicht verfügbar")}`);
+  for (const dep of deps) {
+    bootSound(dep.ok ? "ok" : "error");
+    line(`   prüfe ${span("d", dep.label.padEnd(32, " "))} ${dep.ok ? span("ok", "bestanden") : span("er", "FEHLT")}`);
+    tick();
+    await wait(80 + Math.random() * 80);
+  }
+  const liveResults = [
+    ["Electron IPC-Bridge", Boolean(window.edex)],
+    ["Netzwerk-Interface", Boolean(network.iface)],
+    ["Dateisystem-Zugriff", drives.length > 0]
+  ];
+  for (const [label, ok] of liveResults) {
+    bootSound(ok ? "ok" : "warn");
+    line(`   prüfe ${span("d", label.padEnd(32, " "))} ${ok ? span("ok", "bestanden") : span("w", "WARNUNG")}`);
+    tick();
+    await wait(80 + Math.random() * 80);
+  }
+  line();
+  await wait(180);
+
+  // Phase 7: Komponenten
+  bootSound("section");
+  await typeCmd("bockis-install --verify --source bundle", 20);
+  await wait(220);
+  line(span("d", "Reading component manifest... Done"));
+  line(span("d", `Resolving dependencies... Done${versions.electron ? `  (Electron ${versions.electron} / Chromium ${versions.chrome} / Node ${versions.node})` : ""}`));
+  await wait(180);
+
+  for (const pkg of packages) {
+    bootSound("seek");
+    const row = line();
+    const label = pkg.name.padEnd(18, " ");
+    const detail = pkg.version ? `v${pkg.version}` : bootBytes(pkg.size);
+    for (let step = 0; step <= 20; step += 1) {
+      if (fast) step = 20;
+      else await delay(10 + Math.random() * 16);
+      row.innerHTML = `Verifiziere ${span("b", label)} [${span("ok", "#".repeat(step))}${span("d", ".".repeat(20 - step))}] ${String(step * 5).padStart(3, " ")}%  ${span("d", detail)}`;
+    }
+    row.innerHTML = pkg.ok
+      ? `Verifiziere ${span("b", label)} [${span("ok", "#".repeat(20))}] ${span("ok", "fertig")}  ${span("d", `${detail}  sha256:${pkg.sha}`)}`
+      : `Verifiziere ${span("b", label)} [${span("er", "!".repeat(20))}] ${span("er", "FEHLT")}`;
+    bootSound(pkg.ok ? "ok" : "error");
+    tick();
+    await wait(25);
+  }
+
+  const missing = packages.filter((pkg) => !pkg.ok).length;
+  const failedDeps = deps.filter((dep) => !dep.ok).length;
+  line();
+  bootSound(missing || failedDeps ? "warn" : "ok");
+  line(missing || failedDeps
+    ? `${span("w", "Abhängigkeiten geprüft.")}  ${span("d", `${missing} Komponenten fehlen, ${failedDeps} Systemvoraussetzungen nicht erfüllt`)}`
+    : `${span("ok", "Abhängigkeiten installiert und verifiziert.")}  ${span("d", "0 Fehler  0 Warnungen")}`);
+  await wait(300);
+  await typeCmd("systemctl start bockis-edex", 22);
+  tick(2);
+  setProgress(100);
+  await wait(600);
+
+  // Abschluss
+  bootSound("online");
+  finalScreen?.classList.add("is-visible");
+  for (let seconds = 2; seconds > 0 && !fast; seconds -= 1) {
+    if (countdown) countdown.textContent = `starte Dashboard in ${seconds} ...`;
+    await delay(550);
+  }
+  if (countdown) countdown.textContent = "bereit.";
+  if (!fast) await delay(250);
+  try { await bootAudioContext?.close?.(); } catch { /* optional audio cleanup */ }
+  bootScreen.remove();
+}
+
+const BOOT_ASCII_LOGO = [
+  "██████╗  ██████╗  ██████╗██╗  ██╗██╗███████╗",
+  "██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██║██╔════╝",
+  "██████╔╝██║   ██║██║     █████╔╝ ██║███████╗",
+  "██╔══██╗██║   ██║██║     ██╔═██╗ ██║╚════██║",
+  "██████╔╝╚██████╔╝╚██████╗██║  ██╗██║███████║",
+  "╚═════╝  ╚═════╝  ╚═════╝╚═╝  ╚═╝╚═╝╚══════╝"
+].join("\n");
+
+let shutdownInProgress = false;
+
+async function shutdown() {
+  if (shutdownInProgress) return;
+  shutdownInProgress = true;
+  document.getElementById("boot_screen")?.remove();
+  document.getElementById("shutdown_screen")?.remove();
+
+  const shutdownScreen = document.createElement("section");
+  shutdownScreen.id = "shutdown_screen";
+  shutdownScreen.innerHTML = `
+    <div class="shutdown-shell">
+      <div class="shutdown-terminal">
+        <div class="shutdown-terminal-head">
+          <span>BOCKIS-eDEX / SHUTDOWN CONSOLE</span>
+          <strong>POWER MANAGEMENT</strong>
+        </div>
+        <div class="shutdown-log" data-shutdown-log aria-live="polite"></div>
+      </div>
+      <aside class="shutdown-brand">
+        <img src="../assets/icons/branding/logo.webp" alt="Bockis eDEX">
+        <strong>BOCKIS-eDEX</strong>
+        <span>SYSTEM POWER DOWN</span>
+      </aside>
+    </div>
+    <div class="crt-beam" aria-hidden="true"></div>
+    <div class="crt-dot" aria-hidden="true"></div>
+    <div class="shutdown-final" data-shutdown-final>
+      <img src="../assets/icons/branding/logo.webp" alt="Bockis eDEX">
+      <strong>BOCKIS-eDEX</strong>
+      <span>SYSTEM POWER DOWN</span>
+    </div>`;
+  document.body.appendChild(shutdownScreen);
+
+  const log = shutdownScreen.querySelector("[data-shutdown-log]");
+  const line = (label, message, status = "OK") => {
+    const row = document.createElement("div");
+    row.className = status === "WAIT" ? "shutdown-row wait" : "shutdown-row";
+    row.innerHTML = `<span>${new Date().toLocaleTimeString([], { hour12: false })}</span><b>${escapeHtml(label)}</b><span>${escapeHtml(message)}</span><strong>[${escapeHtml(status)}]</strong>`;
+    log?.appendChild(row);
+  };
+  const step = async (label, message, status = "OK") => {
+    line(label, message, status);
+    await delay(145);
+  };
+
+  document.body.classList.add("is-shutting-down");
+  await step("STOP", "User interface input locked");
+  try { window.edexEffects?.stop?.(); } catch { /* ignore visual cleanup errors */ }
+  await step("EFFECTS", "HUD effects stopped");
+  try { window.dockPanel?.unbind?.(state); } catch { /* ignore visual cleanup errors */ }
+  await step("DOCK", "Task dock detached");
+  try { await closeTaskDockApp(); } catch { /* ignore stale embedded windows */ }
+  await step("EMBED", "Embedded windows released");
+  await step("PANELS", "Workspace panels released");
+  await step("IPC", "Electron shutdown request queued", "WAIT");
+  await delay(180);
+  shutdownScreen.classList.add("is-crt-off");
+  window.setTimeout(() => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const audio = new AudioContext();
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(1280, audio.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(420, audio.currentTime + 0.07);
+      gain.gain.setValueAtTime(0.035, audio.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.09);
+      oscillator.connect(gain).connect(audio.destination);
+      oscillator.start();
+      oscillator.stop(audio.currentTime + 0.1);
+      oscillator.addEventListener("ended", () => audio.close().catch(() => {}), { once: true });
+    } catch { /* audio is optional */ }
+  }, 2720);
+  await delay(3300);
+  window.edex.quitApp();
+}
+
+function styleFromBox(box) {
+  const px = boxToPx(box);
+  return `left:${px.x}px;top:${px.y}px;width:${px.w}px;height:${px.h}px;box-sizing:border-box`;
+}
+
+function panelHtml(id) {
+  if (!state.layout[id] || !PANEL_META[id] || id === "status" || state.layout[id].minimized) return "";
+  const locked = Boolean(state.layout[id].locked);
+  const extra = id === "clock" && state.settings.clockPanelFrame !== true
+    ? " clock-bare"
+    : id === "dock" ? " dock-bare" : "";
+  const forceLocked = locked || id === "dock";
+  return `
+    <section class="hud-card${extra}${forceLocked ? " locked" : ""}" id="card_${id}" data-panel-id="${id}" style="${styleFromBox(state.layout[id])}">
+      <h3 class="card-title">
+        <span class="card-title-text">${escapeHtml(panelDisplayTitle(id))}</span>
+        ${cardToolsHtml({ allowMinimize: id !== "dock" })}
+      </h3>
+      <div class="card-body">${panelBody(id)}</div>
+      <div class="resize-handle"></div>
+    </section>`;
+}
+
+const PANEL_ICON_CHOICES = [
+  { id: "desktop", label: "Desktop" },
+  { id: "calendar", label: "Kalender" },
+  { id: "calculator", label: "Rechner" },
+  { id: "clock", label: "Uhr" },
+  { id: "cpu", label: "Prozessor" },
+  { id: "ram", label: "Arbeitsspeicher" },
+  { id: "network", label: "Netzwerk" },
+  { id: "world", label: "Welt" },
+  { id: "drive", label: "Laufwerk" },
+  { id: "directories", label: "Verzeichnisse" },
+  { id: "folders", label: "Ordner" },
+  { id: "search", label: "Suche" },
+  { id: "browser", label: "Browser" },
+  { id: "cloud", label: "Cloud" },
+  { id: "terminal", label: "Terminal" },
+  { id: "log", label: "Log" },
+  { id: "weather", label: "Wetter" },
+  { id: "processes", label: "Prozesse" }
+];
+
+function setPanelIcon(id, icon) {
+  if (!state.layout[id] || !PANEL_ICON_CHOICES.some((item) => item.id === icon)) return;
+  state.layout[id] = { ...state.layout[id], icon };
+  persistLayout();
+  renderDockItems();
+  toast(`Icon für „${PANEL_META[id]?.title || id}“ geändert`);
+}
+
+function dockIcon(kind, id) {
+  if (kind === "desktop" || kind === "path") return "folders";
+  const icons = {
+    desktop: "desktop",
+    clock: "clock", cpu: "cpu", ram: "ram", toplist: "processes", globe: "world", conninfo: "network",
+    calendar: "clock", drives: "drive", filesearch: "search", terminal: "terminal", weather: "weather", log: "log",
+    cockpit: "world", cassette: "drive", ddj: "cpu", cpuRail: "cpu", calculator: "terminal",
+    hwinfo: "cpu", autostart: "processes"
+  };
+  return state.layout[id]?.icon || PANEL_META[id]?.icon || icons[id] || "fallback";
+}
+
+function renderDockItems() {
+  const host = document.querySelector("[data-dock-items]");
+  if (!host) {
+    renderTaskDockItems();
+    loadTaskbarDockItems();
+    return;
+  }
+  const items = [];
+  Object.keys(PANEL_META).forEach((id) => {
+    if (id !== "dock" && state.layout[id]?.minimized) {
+      items.push({ kind: "panel", id, label: panelDisplayTitle(id) });
+    }
+  });
+  if (state.desktopEnabled !== false && state.desktopStage?.minimized) {
+    items.push({ kind: "desktop", id: "desktop", label: "系統桌面" });
+  }
+  state.pathCards.forEach((card, index) => {
+    if (card.minimized) {
+      const tabs = Array.isArray(card.tabs) ? card.tabs : [];
+      const tabNames = tabs.map((tab) => tab.name || folderTabTitle(tab.path)).filter(Boolean);
+      items.push({
+        kind: "path",
+        id: card.id,
+        label: pathTitle(card, index),
+        tabs: tabNames
+      });
+    }
+  });
+  host.innerHTML = items.map((item) => `
+    <button type="button" class="dock-item${item.tabs?.length > 1 ? ` has-tab-group dock-tab-count-${Math.min(9, item.tabs.length)}` : ""}" data-dock-kind="${item.kind}" data-dock-restore="${escapeHtml(item.id)}"${item.path ? ` data-dock-taskbar-path="${escapeHtml(item.path)}"` : ""}${item.tabs?.length > 1 ? ` data-dock-tabs="${escapeHtml(item.tabs.join(" • "))}" aria-label="${escapeHtml(`${item.label}: ${item.tabs.join(", ")}`)}"` : ""} title="${escapeHtml(item.label)}">
+      ${item.iconDataUrl ? `<img class="dock-item-icon dock-item-icon-image" src="${escapeHtml(item.iconDataUrl)}" alt="" draggable="false">` : `<span class="dock-item-icon dock-item-icon-${dockIcon(item.kind, item.id)}" aria-hidden="true"></span>`}
+      <span class="dock-item-label">${escapeHtml(item.label)}</span>
+      ${item.tabs?.length > 1 ? `<span class="dock-tab-count" aria-hidden="true">${item.tabs.length}</span>` : ""}
+    </button>`).join("");
+  window.edexI18n?.translatePage?.(host);
+  window.dockPanel?.refresh?.(state);
+  host.querySelectorAll("[data-dock-restore]").forEach((button) => {
+      button.addEventListener("click", async () => {
+      const kind = button.dataset.dockKind;
+      const id = button.dataset.dockRestore;
+      if (!id) return;
+      if (kind === "panel" && state.layout[id]) {
+        state.layout[id] = { ...state.layout[id], minimized: false };
+      } else if (kind === "desktop" && state.desktopStage) {
+        state.desktopStage = { ...state.desktopStage, minimized: false };
+      } else if (kind === "path") {
+        const card = state.pathCards.find((item) => item.id === id);
+        if (!card) return;
+        card.minimized = false;
+      } else {
+        return;
+      }
+      state.dockForeground = true;
+      await window.edex?.raiseOverlay?.();
+      persistLayout();
+      rebuildWorkspace();
+    });
+  });
+  renderTaskDockItems();
+  loadTaskbarDockItems();
+}
+
+function applyTaskDockSizing(host) {
+  const card = host.closest("#card_taskdock");
+  const savedBox = state.layout.taskdock;
+  if (!card || !savedBox) return;
+
+  const autoGrow = state.settings?.taskDockAutoGrow !== false;
+  const tileSize = ["compact", "standard", "large"].includes(state.settings?.taskDockTileSize)
+    ? state.settings.taskDockTileSize
+    : "standard";
+  card.classList.toggle("taskdock-auto-grow", autoGrow);
+  card.classList.toggle("taskdock-fixed-size", !autoGrow);
+  card.classList.toggle("taskdock-labels-off", state.settings?.taskDockShowLabels === false);
+  card.dataset.taskdockTileSize = tileSize;
+
+  const current = boxToPx(savedBox);
+  if (!autoGrow) {
+    card.style.left = `${current.x}px`;
+    card.style.top = `${current.y}px`;
+    card.style.width = `${current.w}px`;
+    card.style.height = `${current.h}px`;
+    return;
+  }
+
+  const workspace = workspaceRect();
+  const grid = gridSize();
+  const defaults = boxToPx(PANEL_META.taskdock.box);
+  const collapsed = current.w < defaults.w * 0.35 || current.h < defaults.h * 0.45;
+  const anchor = collapsed ? defaults : current;
+  const maxWidthPercent = Math.max(50, Math.min(100, Number(state.settings?.taskDockMaxWidth) || 90));
+  const maxWidth = Math.max(grid * 4, Math.min(workspace.width, Math.floor(workspace.width * maxWidthPercent / 100)));
+  const items = [...host.querySelectorAll(":scope > .dock-item")];
+  const hostStyle = getComputedStyle(host);
+  const cardStyle = getComputedStyle(card);
+  const bodyStyle = getComputedStyle(card.querySelector(".card-body"));
+  const gap = parseFloat(hostStyle.columnGap || hostStyle.gap) || 0;
+  const horizontalPadding = (style) => (
+    (parseFloat(style.paddingLeft) || 0)
+    + (parseFloat(style.paddingRight) || 0)
+    + (parseFloat(style.borderLeftWidth) || 0)
+    + (parseFloat(style.borderRightWidth) || 0)
+  );
+  const contentWidth = items.reduce((total, item) => total + item.getBoundingClientRect().width, 0)
+    + gap * Math.max(0, items.length - 1)
+    + horizontalPadding(hostStyle)
+    + horizontalPadding(bodyStyle)
+    + horizontalPadding(cardStyle);
+  const maxWidthGrid = Math.max(4, Math.floor(maxWidth / grid));
+  const maxGridWidth = maxWidthGrid * grid;
+  const targetWidth = Math.min(
+    maxGridWidth,
+    Math.ceil(Math.max(anchor.w, defaults.w, contentWidth) / grid) * grid
+  );
+  card.style.width = `${targetWidth}px`;
+  card.style.height = "auto";
+  const contentHeight = card.getBoundingClientRect().height;
+  const maxGridHeight = Math.max(2, Math.floor(workspace.height / grid)) * grid;
+  const targetHeight = Math.min(
+    maxGridHeight,
+    Math.ceil(Math.max(anchor.h, contentHeight) / grid) * grid
+  );
+  const centerX = anchor.x + anchor.w / 2;
+  const bottom = anchor.y + anchor.h;
+  const left = Math.max(0, Math.min(workspace.width - targetWidth, centerX - targetWidth / 2));
+  const top = Math.max(0, Math.min(workspace.height - targetHeight, bottom - targetHeight));
+  const rawBox = pxToGridFields(left, top, targetWidth, targetHeight);
+  const maxGridX = Math.max(0, Math.floor(workspace.width / grid) - rawBox.gw);
+  const maxGridY = Math.max(0, Math.floor(workspace.height / grid) - rawBox.gh);
+  const next = pxToGridFields(
+    Math.max(0, Math.min(maxGridX, rawBox.gx)) * grid,
+    Math.max(0, Math.min(maxGridY, rawBox.gy)) * grid,
+    targetWidth,
+    targetHeight
+  );
+  const placed = boxToPx(next);
+  const changed = next.gx !== savedBox.gx || next.gy !== savedBox.gy
+    || next.gw !== savedBox.gw || next.gh !== savedBox.gh;
+
+  card.style.left = `${placed.x}px`;
+  card.style.top = `${placed.y}px`;
+  card.style.width = `${placed.w}px`;
+  card.style.height = `${placed.h}px`;
+  if (!changed) return;
+
+  state.layout.taskdock = { ...savedBox, ...next };
+  persistLayout().catch((error) => {
+    logUiAction("taskdock.layout_save_failed", "Task-Panel-Größe konnte nicht gespeichert werden", {
+      message: error?.message || String(error)
+    });
+    toast("Task-Panel-Größe konnte nicht gespeichert werden");
+  });
+}
+
+function renderTaskDockItems() {
+  const host = document.querySelector("[data-task-dock-items]");
+  if (!host) return;
+  if (state.settings?.taskbarIntegrationEnabled === true) startTaskbarWindowSync();
+  else taskbarWindowItems = [];
+  const root = host.closest("#task-dock-panel");
+  const card = host.closest(".hud-card");
+  if (card) card.hidden = false;
+  if (root) root.hidden = false;
+  const pinnedHtml = taskbarDockItems.map((item) => `
+    <button type="button" class="dock-item taskbar-pinned-item" data-task-dock-path="${escapeHtml(item.path || "")}" title="${escapeHtml(item.name)}">
+      ${item.iconDataUrl ? `<img class="dock-item-icon dock-item-icon-image" src="${escapeHtml(item.iconDataUrl)}" alt="" draggable="false">` : `<span class="dock-item-icon dock-item-icon-fallback" aria-hidden="true"></span>`}
+      <span class="dock-item-label">${escapeHtml(item.name)}</span>
+    </button>`).join("");
+  const runningHtml = taskbarWindowItems.map((item) => `
+    <button type="button" class="dock-item taskbar-window-item${item.active ? " active" : ""}${item.minimized ? " minimized" : ""}" data-task-window-hwnd="${escapeHtml(item.hwnd)}" title="${escapeHtml(item.title)}">
+      ${item.iconDataUrl ? `<img class="dock-item-icon dock-item-icon-image" src="${escapeHtml(item.iconDataUrl)}" alt="" draggable="false">` : '<span class="dock-item-icon dock-item-icon-fallback" aria-hidden="true"></span>'}
+      <span class="dock-item-label">${escapeHtml(item.title)}</span>
+    </button>`).join("");
+  host.innerHTML = `${pinnedHtml}${runningHtml || (!pinnedHtml ? '<span class="task-dock-empty">Keine Windows-Fenster erkannt</span>' : "")}`;
+  applyTaskDockSizing(host);
+  window.edexI18n?.translatePage?.(host);
+  host.querySelectorAll("[data-task-dock-path]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const item = taskbarDockItems.find((candidate) => candidate.path === button.dataset.taskDockPath);
+      if (item) await openTaskDockItem(item);
+    });
+  });
+  host.querySelectorAll("[data-task-window-hwnd]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const hwnd = button.dataset.taskWindowHwnd;
+      if (!hwnd) return;
+      if (button.classList.contains("active")) {
+        await window.edex?.minimizeTaskbarWindow?.(hwnd);
+      } else {
+        await window.edex?.activateTaskbarWindow?.(hwnd);
+      }
+    });
+  });
+}
+
+function taskEmbedNativeBounds(frame) {
+  const header = Math.max(34, Math.round(gridSize() * 1.35));
+  return {
+    x: frame.x,
+    y: frame.y + header,
+    w: frame.w,
+    h: Math.max(80, frame.h - header)
+  };
+}
+
+function removeTaskEmbedFrame() {
+  state.taskEmbedResizeHandler && window.removeEventListener("resize", state.taskEmbedResizeHandler);
+  state.taskEmbedResizeHandler = null;
+  document.getElementById("task-embed-frame")?.remove();
+}
+
+async function closeTaskDockApp() {
+  const hwnd = state.taskDockEmbed?.hwnd;
+  if (hwnd) await window.edex?.embedRelease?.({ hwnd });
+  delete state.taskDockEmbed;
+  removeTaskEmbedFrame();
+}
+
+async function openTaskDockItem(item) {
+  const target = String(item.path || "").trim();
+  if (!target) return;
+  await closeTaskDockApp();
+  const result = await window.edex?.openPath?.(target);
+  if (result?.ok === false) toast(result.message || "Programm konnte nicht geöffnet werden");
+}
+
+function loadTaskbarDockItems() {
+  if (taskbarDockLoaded || taskbarDockLoadPromise || !window.edex?.listTaskbarPinned) return;
+  taskbarDockLoadPromise = window.edex.listTaskbarPinned()
+    .then((result) => {
+      if (result?.error) throw new Error(result.error);
+      taskbarDockItems = Array.isArray(result?.items) ? result.items : [];
+      taskbarDockLoaded = true;
+      taskbarDockLoadAttempts = 0;
+      logUiAction("taskdock.loaded", "Task-Dock geladen", { items: taskbarDockItems.length });
+      renderTaskDockItems();
+      startTaskbarWindowSync();
+    })
+    .catch((error) => {
+      taskbarDockItems = [];
+      taskbarDockLoadAttempts += 1;
+      logUiAction("taskdock.load_failed", "Task-Dock konnte nicht geladen werden", {
+        attempt: taskbarDockLoadAttempts,
+        message: error?.message || String(error)
+      });
+      renderTaskDockItems();
+      if (taskbarDockLoadAttempts < 3 && !taskbarDockRetryTimer) {
+        taskbarDockRetryTimer = setTimeout(() => {
+          taskbarDockRetryTimer = null;
+          loadTaskbarDockItems();
+        }, 3000);
+      }
+
+    })
+    .finally(() => {
+      taskbarDockLoadPromise = null;
+    });
+}
+
+function startTaskbarWindowSync() {
+  if (state.settings?.taskbarIntegrationEnabled !== true || taskbarWindowTimer || !window.edex?.listTaskbarWindows) return;
+  const loadWindowIcon = async (item) => {
+    const path = String(item.processPath || "").trim();
+    if (!path || !window.edex?.getPathIcon) return "";
+    const key = path.toLowerCase();
+    if (!taskbarWindowIconCache.has(key)) {
+      taskbarWindowIconCache.set(
+        key,
+        window.edex.getPathIcon(path)
+          .then((result) => result?.dataUrl || "")
+          .catch((error) => {
+            logUiAction("taskbar.icon_failed", "Fenster-Icon konnte nicht geladen werden", {
+              process: item.process || "",
+              message: error?.message || String(error)
+            });
+            return "";
+          })
+      );
+    }
+    return taskbarWindowIconCache.get(key);
+  };
+  const refresh = async () => {
+    try {
+      const result = await window.edex.listTaskbarWindows();
+      const foreground = String(result?.foreground || "");
+      const next = await Promise.all((Array.isArray(result?.items) ? result.items : []).map(async (item) => ({
+        ...item,
+        active: String(item.hwnd) === foreground,
+        iconDataUrl: await loadWindowIcon(item)
+      })));
+      const changed = JSON.stringify(next) !== JSON.stringify(taskbarWindowItems);
+      taskbarWindowItems = next;
+      if (changed) renderTaskDockItems();
+    } catch (error) {
+      logUiAction("taskbar.windows_failed", "Windows-Taskbar konnte nicht synchronisiert werden", {
+        message: error?.message || String(error)
+      });
+    }
+  };
+  refresh();
+  taskbarWindowTimer = setInterval(refresh, 1200);
+}
+
+function setCardLocked(el, locked) {
+  el.classList.toggle("locked", locked);
+  toast(locked ? "已鎖定容器" : "已解鎖容器");
+}
+
+async function setClockScale(value) {
+  const next = Math.max(0.25, Math.min(2, Math.round(Number(value) * 20) / 20));
+  if (!Number.isFinite(next)) {
+    toast("請輸入 0.25–2.0 之間的數字");
+    return;
+  }
+  state.settings = { ...state.settings, clockScale: next };
+  applyClockMetrics();
+  renderClock();
+  try {
+    const result = await window.edex.saveSettings({ clockScale: next });
+    if (result?.settings) state.settings = { ...result.settings, clockScale: next };
+  } catch {
+    // Keep local value if save fails.
+  }
+  toast(`Uhr-Raster ${next.toFixed(2)}×`);
+}
+
+async function setClockShowDate(show) {
+  const next = Boolean(show);
+  state.settings = { ...state.settings, clockShowDate: next };
+  const host = document.getElementById("mod_clock_led");
+  if (host) host.dataset.ledLayout = "";
+  renderClock();
+  try {
+    const result = await window.edex.saveSettings({ clockShowDate: next });
+    if (result?.settings) state.settings = { ...result.settings, clockShowDate: next };
+  } catch {
+    // keep local
+  }
+  toast(next ? "Datum angezeigt" : "Datum ausgeblendet");
+}
+
+async function setClockLedColor(color) {
+  const next = toHex6(color);
+  state.settings = { ...state.settings, clockLedColor: next };
+  applyClockMetrics();
+  renderClock();
+  try {
+    const result = await window.edex.saveSettings({ clockLedColor: next });
+    if (result?.settings) state.settings = { ...result.settings, clockLedColor: next };
+  } catch {
+    // Keep local value if save fails.
+  }
+  toast(`Uhr-Hervorhebung auf ${next} geändert`);
+}
+
+function fabBarHtml() {
+  const addBtn = `<button type="button" class="round-fab" id="add-fab" title="Container hinzufügen">+</button>`;
+  return `
+    ${addBtn}
+    <button type="button" class="round-fab" id="settings-fab" title="Einstellungen">⚙</button>
+    ${state.primary ? '<button type="button" class="round-fab danger" id="quit-fab" title="Programm beenden">⏻</button>' : ""}
+  `;
+}
+
+function snapCardToQuarter(kind, ctx, slot) {
+  if (ctx.locked) {
+    toast("Bitte zuerst entsperren");
+    return;
+  }
+  const box = kind === "panel"
+    ? state.layout[ctx.widgetId]
+    : kind === "desktop"
+      ? state.desktopStage
+      : state.pathCards.find((card) => card.id === ctx.id);
+  if (!box) return;
+  delete box.gx;
+  delete box.gy;
+  delete box.gw;
+  delete box.gh;
+  const bounds = panelZoneRect(ctx.el);
+  applyBoxPx(
+    box,
+    bounds.x + bounds.width * (slot.x / 100),
+    bounds.y + bounds.height * (slot.y / 100),
+    bounds.width * ((slot.w ?? 50) / 100),
+    bounds.height * ((slot.h ?? 50) / 100)
+  );
+  persistLayout();
+  rebuildWorkspace();
+  toast(`${slot.label} angewendet`);
+}
+
+function snapSlotForLayout(layout) {
+  if (layout === "half-left") return { x: 0, y: 0, w: 50, h: 100 };
+  if (layout === "half-right") return { x: 50, y: 0, w: 50, h: 100 };
+  if (layout === "quarter-tl") return { x: 0, y: 0, w: 50, h: 50 };
+  if (layout === "quarter-tr") return { x: 50, y: 0, w: 50, h: 50 };
+  if (layout === "quarter-bl") return { x: 0, y: 50, w: 50, h: 50 };
+  if (layout === "quarter-br") return { x: 50, y: 50, w: 50, h: 50 };
+  return null;
+}
+
+function resizePanelPreset(kind, ctx, preset) {
+  if (ctx.locked) {
+    toast("Bitte zuerst entsperren");
+    return;
+  }
+  const box = kind === "panel"
+    ? state.layout[ctx.widgetId]
+    : kind === "desktop"
+      ? state.desktopStage
+      : state.pathCards.find((card) => card.id === ctx.id);
+  if (!box) return;
+  const zone = panelZoneRect(ctx.el);
+  const ratio = preset === "compact" ? 0.36 : preset === "large" ? 0.82 : 0.58;
+  const g = gridSize();
+  const w = Math.max(g * 2, Math.min(zone.width, alignGridSpan(zone.width * ratio, 2)));
+  const h = Math.max(g * 2, Math.min(zone.height, alignGridSpan(zone.height * ratio, 2)));
+  const current = pxFromBox(box);
+  const x = current.x + (current.w - w) / 2;
+  const y = current.y + (current.h - h) / 2;
+  const position = constrainPanelPosition(ctx.el, x, y, w, h);
+  applyBoxPx(box, position.x, position.y, w, h);
+  rebuildWorkspace();
+  persistLayout();
+  toast(`Panelgröße: ${preset === "compact" ? "kompakt" : preset === "large" ? "groß" : "Standard"}`);
+}
+
+function snapRectCoverage(target, panel) {
+  const overlapWidth = Math.max(0, Math.min(target.right, panel.right) - Math.max(target.left, panel.left));
+  const overlapHeight = Math.max(0, Math.min(target.bottom, panel.bottom) - Math.max(target.top, panel.top));
+  const overlapArea = overlapWidth * overlapHeight;
+  const targetArea = Math.max(1, (target.right - target.left) * (target.bottom - target.top));
+  const panelCenterX = panel.left + (panel.right - panel.left) / 2;
+  const panelCenterY = panel.top + (panel.bottom - panel.top) / 2;
+  const centerInside = panelCenterX >= target.left
+    && panelCenterX < target.right
+    && panelCenterY >= target.top
+    && panelCenterY < target.bottom;
+  return centerInside || overlapArea / targetArea >= 0.45;
+}
+
+function occupiedSnapLayouts(ctx, items) {
+  const zone = panelZoneRect(ctx.el);
+  const workspace = document.getElementById("workspace")?.getBoundingClientRect?.() || { left: 0, top: 0 };
+  const otherPanels = [...document.querySelectorAll(".hud-card, .path-card, .program-card, .desktop-card")]
+    .filter((el) => el !== ctx.el && !el.classList.contains("minimized"));
+  return items.map((item) => {
+    const slot = snapSlotForLayout(item.layout);
+    if (!slot) return item;
+    const target = {
+      left: workspace.left + zone.x + zone.width * slot.x / 100,
+      top: workspace.top + zone.y + zone.height * slot.y / 100,
+      right: workspace.left + zone.x + zone.width * (slot.x + slot.w) / 100,
+      bottom: workspace.top + zone.y + zone.height * (slot.y + slot.h) / 100
+    };
+    const occupied = otherPanels.some((panel) => snapRectCoverage(target, panel.getBoundingClientRect()));
+    return { ...item, occupied };
+  });
+}
+
+function openSnapLayoutPicker(anchor, items, ctx) {
+  closeCardMenus();
+  const markedItems = occupiedSnapLayouts(ctx, items);
+  const picker = document.createElement("div");
+  picker.className = "snap-layout-picker";
+  picker.setAttribute("role", "menu");
+  picker.innerHTML = markedItems.map((item, index) => `
+    <button type="button" class="snap-layout-option${item.occupied ? " occupied" : ""}" data-snap-option="${index}" role="menuitem" aria-label="${escapeHtml(item.label)}${item.occupied ? " (bereits belegt)" : ""}">
+      <span class="snap-layout-preview ${escapeHtml(item.layout || "quarter")}" >
+        <i></i><i></i><i></i><i></i>
+      </span>
+    </button>
+  `).join("");
+  document.body.appendChild(picker);
+  const rect = anchor.getBoundingClientRect();
+  const pickerRect = picker.getBoundingClientRect();
+  picker.style.left = `${Math.max(4, Math.min(window.innerWidth - pickerRect.width - 4, rect.right - pickerRect.width))}px`;
+  picker.style.top = `${Math.max(4, rect.bottom + 6)}px`;
+  picker.querySelectorAll("[data-snap-option]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      markedItems[Number(button.dataset.snapOption)]?.action?.();
+      closeCardMenus();
+    });
+  });
+  const dismiss = (event) => {
+    if (picker.contains(event.target) || event.target === anchor) return;
+    closeCardMenus();
+    window.removeEventListener("pointerdown", dismiss, true);
+  };
+  setTimeout(() => window.addEventListener("pointerdown", dismiss, true), 0);
+}
+
+function menuItemsForCard(kind, ctx) {
+  const locked = Boolean(ctx.locked);
+  const fixedDisplayId = Number.isFinite(Number(ctx.fixedDisplayId)) ? Number(ctx.fixedDisplayId) : null;
+  const currentDisplay = state.displays.find((display) => display.id === state.displayId);
+  const items = [
+    {
+      label: locked ? "Entsperren" : "Sperren",
+      action: () => ctx.onLock?.()
+    },
+    ...(ctx.setFixedDisplay ? [{
+      label: fixedDisplayId === state.displayId
+        ? `Monitorbindung lösen (${currentDisplay?.label || "aktueller Monitor"})`
+        : `Auf ${currentDisplay?.label || "aktuellen Monitor"} fixieren`,
+      action: () => {
+        ctx.setFixedDisplay(fixedDisplayId === state.displayId ? null : state.displayId);
+        toast(fixedDisplayId === state.displayId ? "Monitorbindung gelöst" : "Auf diesem Monitor fixiert");
+      }
+    }] : []),
+    {
+      label: "Container hinzufügen",
+      action: () => openAddPicker()
+    }
+  ];
+  if (kind === "panel" && ctx.widgetId === "cpuRail") {
+    const effectLabels = {
+      flow: "Lichtpunkte / Leiterbahnen",
+      cores: "Kernlast-Pulsieren",
+      glow: "Chip-Glow",
+      waveforms: "Live-Wellenformen",
+      scan: "Diagnose-Scanlinie",
+      temperature: "Temperaturwarnung",
+      hover: "Mouseover-Details",
+      railMeter: "CPU-Lastbalken",
+      pins: "I/O-Pin-Aktivität"
+    };
+    items.push({ sep: true });
+    Object.entries(effectLabels).forEach(([key, label]) => {
+      items.push({
+        label: `${state.settings?.cpuRailEffects?.[key] === false ? "Aktivieren" : "Deaktivieren"}: ${label}`,
+        action: async () => {
+          const nextEffects = {
+            ...(state.settings?.cpuRailEffects || {}),
+            [key]: state.settings?.cpuRailEffects?.[key] === false
+          };
+          state.settings = { ...state.settings, cpuRailEffects: nextEffects };
+          window.cpuRailPanel?.setEffects?.(nextEffects);
+          const result = await window.edex?.saveSettings?.({ cpuRailEffects: nextEffects });
+          if (result?.settings) state.settings = result.settings;
+        }
+      });
+    });
+    items.push({
+      label: "CPU-Panel aktualisieren",
+      action: () => window.cpuRailPanel?.refresh?.()
+    });
+  }
+  if (kind === "panel" || kind === "desktop" || kind === "path") {
+    items.push(
+      { sep: true },
+      { label: "1/2 links", layout: "half-left", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 0, w: 50, h: 100, label: "Halb links" }) },
+      { label: "1/2 rechts", layout: "half-right", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 0, w: 50, h: 100, label: "Halb rechts" }) },
+      { label: "1/4 links oben", layout: "quarter-tl", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 0, label: "Links oben" }) },
+      { label: "1/4 rechts oben", layout: "quarter-tr", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 0, label: "Rechts oben" }) },
+      { label: "1/4 links unten", layout: "quarter-bl", action: () => snapCardToQuarter(kind, ctx, { x: 0, y: 50, label: "Links unten" }) },
+      { label: "1/4 rechts unten", layout: "quarter-br", action: () => snapCardToQuarter(kind, ctx, { x: 50, y: 50, label: "Rechts unten" }) }
+    );
+    items.push(
+      { sep: true },
+      { label: "Panelgröße: kompakt", action: () => resizePanelPreset(kind, ctx, "compact") },
+      { label: "Panelgröße: Standard", action: () => resizePanelPreset(kind, ctx, "standard") },
+      { label: "Panelgröße: groß", action: () => resizePanelPreset(kind, ctx, "large") }
+    );
+  }
+  if ((kind === "panel" && ctx.widgetId !== "dock") || kind === "desktop" || kind === "path") {
+    items.splice(2, 0, {
+      label: "Ins Dock minimieren",
+      action: () => minimizeContainer(kind, ctx.widgetId)
+    });
+  }
+  const others = (state.displays || []).filter((d) => {
+    if (d.id === state.displayId) return false;
+    // 系統桌面 only on the primary monitor.
+    if (ctx.widgetType === "desktop" && !d.primary) return false;
+    return true;
+  });
+  if (others.length && ctx.widgetType) {
+    items.push({ sep: true });
+    others.forEach((d) => {
+      items.push({
+        label: `Zu ${d.label || `Monitor ${d.id}`}`,
+        action: async () => {
+          const el = ctx.el;
+          if (!el) return;
+          if (isCardLocked(el)) {
+            toast("Bitte zuerst entsperren");
+            return;
+          }
+          const box = pxToGridFields(el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight);
+          const result = await window.edex.transferWidget(d.id, {
+            type: ctx.widgetType,
+            id: ctx.widgetId,
+            data: ctx.widgetData?.(),
+            ...box
+          });
+          if (result?.ok) {
+            ctx.onTransferred?.();
+            toast(`Zu ${d.label} verschoben`);
+          } else {
+            toast(result?.message || "Verschieben auf diesen Monitor nicht möglich");
+          }
+        }
+      });
+    });
+    loadTaskbarDockItems();
+  }
+  if (kind === "panel" && ctx.widgetId === "clock") {
+    const accent = rgbToHex(state.theme?.colors?.r, state.theme?.colors?.g, state.theme?.colors?.b);
+    items.push(
+      { sep: true },
+      {
+        label: clockShowDate() ? "Datum ausblenden" : "Datum anzeigen",
+        action: () => setClockShowDate(!clockShowDate())
+      },
+      { label: "Hervorhebung: Weiß", action: () => setClockLedColor("#ffffff") },
+      { label: "Hervorhebung: Theme-Farbe", action: () => setClockLedColor(accent) },
+      { label: "Hervorhebung: Rot", action: () => setClockLedColor("#ff3c3c") },
+      { label: "Hervorhebung: Gelb", action: () => setClockLedColor("#ffd23c") },
+      { label: "Hervorhebung: Cyan", action: () => setClockLedColor("#2ee6c7") },
+      {
+        label: `Benutzerdefinierte Hervorhebung (${clockLedColor()})`,
+        action: () => openInputDialog("Uhr-Hervorhebung", [
+          { id: "value", label: "Farbe (#RRGGBB)", value: clockLedColor() }
+        ]).then((result) => {
+          if (result?.value != null) setClockLedColor(result.value);
+        })
+      },
+      {
+        label: "Uhr kleiner",
+        action: () => setClockScale(clockScale() - 0.05)
+      },
+      {
+        label: "Uhr größer",
+        action: () => setClockScale(clockScale() + 0.05)
+      },
+      {
+        label: `Raster ${clockScale().toFixed(2)}× (verkleinerbar)`,
+        action: () => openInputDialog("Uhr-Rasterfaktor", [
+          { id: "value", label: "Faktor (0,25–2,0)", value: String(clockScale()) }
+        ]).then((result) => {
+          if (result?.value != null) setClockScale(Number(result.value));
+        })
+      }
+    );
+  }
+  if (kind === "panel" && ctx.widgetId === "drives") {
+    items.push(
+      { sep: true },
+      {
+        label: "Aktualisieren",
+        action: () => fillDrivesStage()
+      }
+    );
+  }
+  if (kind === "panel" && ctx.widgetId === "filesearch") {
+    items.push(
+      { sep: true },
+      { label: "Ordner/Netzlaufwerk hinzufügen", action: () => addSearchFolder() },
+      { label: "LAN-Pfad hinzufügen", action: () => openLanPathPrompt() },
+      { label: "Suchpfade verwalten", action: () => openSearchRootsEditor() },
+      { label: "Index neu erstellen", action: () => rebuildFileSearch() }
+    );
+  }
+  if (kind === "desktop") {
+    items.push(
+      { sep: true },
+      {
+        label: state.iconView === "list" ? "Als Raster anzeigen" : "Als Liste anzeigen",
+        action: () => toggleIconView("desktop")
+      },
+      {
+        label: "Erneut scannen",
+        action: () => doScan()
+      },
+      {
+        label: "Desktop-Ordner in VS Code öffnen",
+        action: () => openInVsCode(state.bootstrap?.desktop)
+      },
+      {
+        label: "Organisation anzeigen",
+        action: async () => {
+          try {
+            const scan = await window.edex.scan(state.bootstrap.desktop);
+            state.scan = scan;
+            await refreshPlan();
+            const migrate = Boolean(state.settings?.migrateFiles);
+            toast(migrate
+              ? `Vorschau: ${state.plan?.count || 0} Elemente verschieben`
+              : `Vorschau: ${desktopItems().length} Elemente filtern (Dateien werden nicht verschoben)`);
+          } catch (err) {
+            toast(err.message || "Vorschau nicht möglich");
+          }
+        }
+      },
+      {
+        label: "Organisation ausführen",
+        action: () => runOrganize()
+      },
+      {
+        label: "Organisation konfigurieren",
+        action: () => openOrganizerSettings()
+      },
+      {
+        label: "Desktop-Layout speichern",
+        action: () => saveDesktopLayout()
+      },
+      {
+        label: "Desktop-Layout zurücksetzen",
+        action: () => resetDesktopLayout()
+      },
+      {
+        label: "Letzte Organisation zurücksetzen",
+        action: async () => {
+          const result = await window.edex.undo();
+          toast(result.message);
+          await doScan();
+        }
+      }
+    );
+  }
+  if (kind === "path") {
+    const view = ctx.iconView === "list" ? "list" : "grid";
+    items.push(
+      { sep: true },
+      {
+        label: view === "list" ? "Als Raster anzeigen" : "Als Liste anzeigen",
+        action: () => toggleIconView("path", ctx.id)
+      },
+      { label: "Diesen Ordner aktivieren", action: () => setActivePath(ctx.id) },
+      { label: "Als eDEX-Ordnerfenster öffnen", action: () => setActivePath(ctx.id) },
+      { label: "In VS Code öffnen", action: () => openInVsCode(ctx.path) },
+      { label: "Pfad ändern", action: () => changePath(ctx.id) },
+      { label: "Panel-Namen ändern", action: () => renamePathPanel(ctx.id) },
+      { label: "Erneut scannen", action: () => scanCard(state.pathCards.find((c) => c.id === ctx.id)) }
+    );
+  }
+  items.push(
+    { sep: true },
+    {
+      label: "Container schließen",
+      action: () => {
+        if (locked) {
+          toast("Bitte zuerst entsperren, bevor der Container geschlossen wird");
+          return;
+        }
+        ctx.onClose?.();
+      }
+    }
+  );
+  return items;
+}
+
+function panelSetupId(el) {
+  if (el?.dataset?.panelId) return el.dataset.panelId;
+  if (el?.id === "card_desktop") return "desktop";
+  if (el?.id?.startsWith("path_")) return "path";
+  return "panel";
+}
+
+// Ephemeral visual preview used exclusively by the trusted Panel Tour.
+// Never edits settings, layout or disk; all effects have a reversible token.
+function previewPanelTourControl(target, value) {
+  const panel = document.getElementById(`card_${({
+    "setup:#panel-clock-mode": "clock", "setup:#panel-ram-mode": "ram",
+    "setup:#panel-weather-location": "weather", "setup:#panel-search-font": "filesearch",
+    "setup:#panel-taskdock-tile-size": "taskdock"
+  })[target] || ""}`);
+  if (!panel) return null;
+  if (target === "setup:#panel-clock-mode") {
+    if (!["digital", "analog"].includes(value)) return null;
+    const prior = panelTourClockPreview;
+    panelTourClockPreview = value;
+    renderClock();
+    return () => { panelTourClockPreview = prior; renderClock(); };
+  }
+  if (target === "setup:#panel-ram-mode") {
+    if (!["used", "free", "cached", "available", "total"].includes(value)) return null;
+    const root = document.documentElement;
+    const prior = root.dataset.ramGaugeMode;
+    root.dataset.ramGaugeMode = value;
+    return () => { if (prior === undefined) delete root.dataset.ramGaugeMode; else root.dataset.ramGaugeMode = prior; };
+  }
+  if (target === "setup:#panel-search-font") {
+    const num = Number(value);
+    if (!Number.isInteger(num) || num < 8 || num > 72) return null;
+    const root = document.documentElement;
+    const prior = root.style.getPropertyValue("--search-font");
+    const priority = root.style.getPropertyPriority("--search-font");
+    root.style.setProperty("--search-font", `${num}px`);
+    return () => { if (prior) root.style.setProperty("--search-font", prior, priority); else root.style.removeProperty("--search-font"); };
+  }
+  if (target === "setup:#panel-taskdock-tile-size") {
+    if (!["compact", "standard", "large"].includes(value)) return null;
+    const prior = panel.getAttribute("data-taskdock-tile-size");
+    panel.setAttribute("data-taskdock-tile-size", value);
+    return () => { if (prior === null) panel.removeAttribute("data-taskdock-tile-size"); else panel.setAttribute("data-taskdock-tile-size", prior); };
+  }
+  if (target === "setup:#panel-weather-location") {
+    if (!WEATHER_LOCATION_PRESETS.includes(value)) return null;
+    // A location badge is honest preview feedback: fetching real weather would be a side effect.
+    const badge = document.createElement("div");
+    badge.className = "bockis-weather-location-preview";
+    badge.textContent = value;
+    badge.setAttribute("aria-label", `Preview location: ${value}`);
+    panel.append(badge);
+    return () => badge.remove();
+  }
+  return null;
+}
+
+// Refresh visuals from persisted settings after a successful guided save.
+function syncPanelTourSavedVisual(target) {
+  if (target === "setup:#panel-clock-mode") renderClock();
+  else if (target === "setup:#panel-ram-mode") document.documentElement.dataset.ramGaugeMode = ramGaugeMode();
+  else if (target === "setup:#panel-search-font") document.documentElement.style.setProperty("--search-font", `${searchFontSize()}px`);
+  else if (target === "setup:#panel-taskdock-tile-size") {
+    const card = document.getElementById("card_taskdock");
+    if (card) card.dataset.taskdockTileSize = state.settings.taskDockTileSize || "standard";
+  }
+  // Weather location is reloaded by the standard panel save/rebuild flow.
+}
+
+function openPanelSetup(el) {
+  closeCardMenus();
+  const id = panelSetupId(el);
+  const pathCard = id === "path"
+    ? state.pathCards.find((card) => card.id === el?.id?.slice(5))
+    : null;
+  const title = id === "desktop"
+    ? "Systemdesktop"
+    : id === "path"
+      ? "Ordner-Panel"
+      : panelDisplayTitle(id);
+  const currentPanelBg = id !== "desktop" && id !== "path" ? colorToFill(state.layout[id]?.bg) : "";
+  const bgChoices = [...themeColorSwatches(), { label: "Standard", color: "" }];
+  const bgOptions = bgChoices.map((item) => {
+    const color = colorToFill(item.color);
+    return `<option value="${escapeHtml(item.color || "__default__")}" ${color === currentPanelBg ? "selected" : ""}>${escapeHtml(item.label)}</option>`;
+  }).join("");
+  const nameSetup = PANEL_META[id] && id !== "desktop"
+    ? `<tr><td>Panel-Name / Dock-Beschriftung</td><td><input id="panel-name" type="text" maxlength="48" spellcheck="false" placeholder="${escapeHtml(PANEL_META[id].title)}"></td></tr>`
+    : "";
+  const body = id === "desktop"
+    ? `<tr><td>Ansicht</td><td><select id="panel-desktop-view"><option value="grid">Raster</option><option value="list">Liste</option></select></td></tr>
+      <tr><td>Filter</td><td><select id="panel-desktop-filter">
+        <option value="all">Alle</option>
+        <option value="folders">Ordner</option>
+        <option value="icons">Symbole</option>
+        <option value="documents">Dokumente</option>
+        <option value="images">Bilder</option>
+        <option value="videos">Videos</option>
+        <option value="audio">Audio</option>
+        <option value="archives">Archive</option>
+        <option value="apps">Anwendungen</option>
+        <option value="other">Sonstige</option>
+      </select></td></tr>
+      <tr><td>Gruppierung</td><td><input id="panel-desktop-grouped" type="checkbox"> Kategorien gruppieren</td></tr>`
+      + `<tr><td>Icongröße</td><td><input id="panel-desktop-icon-scale" type="number" min="0.6" max="2" step="0.1"></td></tr>`
+    : id === "clock"
+    ? `
+      <tr><td>Darstellung</td><td><select id="panel-clock-mode"><option value="digital">Digital</option><option value="analog">Analog</option></select></td></tr>
+      <tr><td>Datum</td><td><input id="panel-clock-date" type="checkbox"></td></tr>
+      <tr><td>Skalierung</td><td><input id="panel-clock-scale" type="number" min="0.25" max="2" step="0.05"></td></tr>
+      <tr><td>Zeitformat</td><td><select id="panel-clock-time-format">
+        <option value="24h-seconds">24h · HH:MM:SS</option>
+        <option value="24h-short">24h · HH:MM</option>
+        <option value="12h-seconds">12h · hh:MM:SS</option>
+        <option value="12h-short">12h · hh:MM</option>
+      </select></td></tr>
+      <tr><td>Datumsformat</td><td><select id="panel-clock-date-format">
+        <option value="yy/m/d">YY/M/D</option>
+        <option value="dd/mm/yy">DD/MM/YY</option>
+        <option value="mm/dd/yy">MM/DD/YY</option>
+        <option value="dd.mm.yy">DD.MM.YY</option>
+        <option value="yyyy/mm/dd">YYYY/MM/DD</option>
+      </select></td></tr>
+      <tr><td>Uhr-Hervorhebung</td><td><input id="panel-clock-led" type="color"><input id="panel-clock-led-hex" type="text" spellcheck="false"></td></tr>
+      <tr><td>Rastergröße</td><td>${gridSize()} × ${gridSize()} px</td></tr>
+      <tr><td>Mindestgröße analog</td><td>${analogClockMinimum().cells} × ${analogClockMinimum().cells} Rasterfelder (${analogClockMinimum().px} × ${analogClockMinimum().px} px)</td></tr>`
+    : id === "ram"
+      ? `<tr><td>Anzeige</td><td><select id="panel-ram-mode"><option value="used">USED</option><option value="free">FREE</option><option value="cached">CACHED</option><option value="available">AVAILABLE</option><option value="total">TOTAL</option></select></td></tr>`
+      : id === "path"
+        ? `<tr><td>Icongröße</td><td><input id="panel-path-icon-scale" type="number" min="0.6" max="2" step="0.1"></td></tr>
+      <tr><td>Schriftgröße</td><td><input id="panel-path-font-scale" type="number" min="0.7" max="1.8" step="0.1"></td></tr>`
+      : id === "filesearch"
+        ? `<tr><td>Schriftgröße</td><td><input id="panel-search-font" type="number" min="8" max="72" step="1"></td></tr>`
+        : id === "taskdock"
+          ? `<tr><td>Automatisch wachsen</td><td><input id="panel-taskdock-auto-grow" type="checkbox"> Inhalt vergrößern, nicht automatisch verkleinern</td></tr>
+      <tr><td>Maximale Breite</td><td><input id="panel-taskdock-max-width" type="number" min="50" max="100" step="5"> % der Arbeitsfläche</td></tr>
+      <tr><td>Kachelgröße</td><td><select id="panel-taskdock-tile-size">
+        <option value="compact">Kompakt</option>
+        <option value="standard">Standard</option>
+        <option value="large">Groß</option>
+      </select></td></tr>
+      <tr><td>Beschriftungen</td><td><input id="panel-taskdock-show-labels" type="checkbox"> Namen unter den Icons anzeigen</td></tr>`
+        : id === "weather"
+          ? `<tr><td>Wetter-Standort</td><td><select id="panel-weather-location">
+        ${WEATHER_LOCATION_PRESETS.map((location) => `<option value="${escapeHtml(location)}">${escapeHtml(location)}</option>`).join("")}
+        <option value="__custom__">Benutzerdefiniert</option>
+      </select><input id="panel-weather-location-custom" type="text" maxlength="128" placeholder="Ort, Stadt oder Region" hidden></td></tr>`
+        : `<tr><td>Panel-Einstellungen</td><td>Für dieses Panel sind derzeit keine individuellen Optionen vorhanden.</td></tr>`;
+  const panelFontScale = id === "desktop"
+    ? state.desktopFontScale || state.settings.desktopFontScale || 1
+    : state.layout[id]?.fontScale || 1;
+  const zoneSetup = PANEL_META[id]
+    ? `<tr><td>Positionierungszone</td><td><select id="panel-zone">
+        <option value="workspace" ${state.layout[id]?.zone !== "edge" ? "selected" : ""}>Skalierzone</option>
+        <option value="edge" ${state.layout[id]?.zone === "edge" ? "selected" : ""}>Randzone</option>
+      </select></td></tr>`
+    : "";
+  const tourAvailable = Boolean(PANEL_META[id] && id !== "dock");
+  const tourDisabled = Boolean(state.settings?.panelTours?.disabled?.[id]);
+  const tourSetup = tourAvailable
+    ? `<tr><td data-i18n="panelGuide.section.title">Hilfe & Einführung</td><td><label><input type="checkbox" id="panel-tour-auto" ${tourDisabled ? "" : "checked"}> <span data-i18n="panelGuide.auto">Einführung für diesen Panel-Typ beim ersten Hinzufügen anzeigen</span></label><div class="panel-tour-help-actions"><button type="button" id="panel-tour-replay" data-i18n="panelGuide.replaySpecific">Panel-Funktionen erklären</button><button type="button" id="panel-tour-replay-all" data-i18n="panelGuide.replayCommon">Tour mit Zonen-Grundlagen starten</button></div><small data-i18n="panelGuide.commonAuto">Die Zonen-Grundlagen werden nur einmal für alle Panel-Typen gezeigt.</small></td></tr>`
+    : "";
+  const backgroundSetup = id !== "desktop" && id !== "path"
+    ? `<tr><td>Hintergrundfarbe</td><td><select id="panel-bg-select">${bgOptions}<option value="__custom__" ${currentPanelBg && !bgChoices.some((item) => colorToFill(item.color) === currentPanelBg) ? "selected" : ""}>Benutzerdefiniert</option></select><input id="panel-bg-custom" type="color" value="${escapeHtml(toHex6(currentPanelBg) || "#05080d")}" title="Benutzerdefinierte Farbe"></td></tr>`
+    : "";
+  const iconSetup = id !== "desktop" && id !== "path"
+    ? `<tr><td>Panel-Icon</td><td><select id="panel-icon-select">${PANEL_ICON_CHOICES.map((icon) => `<option value="${escapeHtml(icon.id)}" ${dockIcon("panel", id) === icon.id ? "selected" : ""}>${escapeHtml(icon.label)}</option>`).join("")}</select></td></tr>`
+    : "";
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info panel-setup-modal";
+  modal.innerHTML = `
+    <h1>${escapeHtml(title)} - Setup</h1>
+    <table><tr><th>Option</th><th>Wert</th></tr>${nameSetup}${zoneSetup}${tourSetup}${backgroundSetup}${iconSetup}${body}
+      <tr><td>Panel-Schriftgröße</td><td><input id="panel-font-scale" type="number" min="0.7" max="1.8" step="0.1"></td></tr></table>
+    <div class="settings-footer">
+      <button type="button" id="panel-setup-save">Speichern</button>
+      <button type="button" id="panel-setup-close">Schließen</button>
+    </div>`;
+  document.body.appendChild(modal);
+  placeCentered(modal);
+  window.edexI18n?.translatePage?.(modal);
+  const clockMode = modal.querySelector("#panel-clock-mode");
+  const clockDate = modal.querySelector("#panel-clock-date");
+  const clockScaleInput = modal.querySelector("#panel-clock-scale");
+  const clockTimeFormatInput = modal.querySelector("#panel-clock-time-format");
+  const clockDateFormatInput = modal.querySelector("#panel-clock-date-format");
+  const clockLedInput = modal.querySelector("#panel-clock-led");
+  const clockLedHexInput = modal.querySelector("#panel-clock-led-hex");
+  if (clockMode) clockMode.value = state.settings.clockDisplayMode || "digital";
+  if (clockDate) clockDate.checked = state.settings.clockShowDate !== false;
+  if (clockScaleInput) clockScaleInput.value = String(state.settings.clockScale || 1);
+  if (clockTimeFormatInput) clockTimeFormatInput.value = clockTimeFormat();
+  if (clockDateFormatInput) clockDateFormatInput.value = clockDateFormat();
+  if (clockLedInput) clockLedInput.value = clockLedColor();
+  if (clockLedHexInput) clockLedHexInput.value = clockLedColor();
+  const ramMode = modal.querySelector("#panel-ram-mode");
+  if (ramMode) ramMode.value = state.settings.ramGaugeMode || "used";
+  const searchFont = modal.querySelector("#panel-search-font");
+  if (searchFont) searchFont.value = String(state.settings.searchFontSize || 12);
+  const taskDockAutoGrow = modal.querySelector("#panel-taskdock-auto-grow");
+  const taskDockMaxWidth = modal.querySelector("#panel-taskdock-max-width");
+  const taskDockTileSize = modal.querySelector("#panel-taskdock-tile-size");
+  const taskDockShowLabels = modal.querySelector("#panel-taskdock-show-labels");
+  if (taskDockAutoGrow) taskDockAutoGrow.checked = state.settings.taskDockAutoGrow !== false;
+  if (taskDockMaxWidth) taskDockMaxWidth.value = String(state.settings.taskDockMaxWidth || 90);
+  if (taskDockTileSize) taskDockTileSize.value = state.settings.taskDockTileSize || "standard";
+  if (taskDockShowLabels) taskDockShowLabels.checked = state.settings.taskDockShowLabels !== false;
+  const weatherLocationSelect = modal.querySelector("#panel-weather-location");
+  const weatherLocationCustom = modal.querySelector("#panel-weather-location-custom");
+  const configuredWeatherLocation = String(state.settings.weatherLocation || "Berlin").trim() || "Berlin";
+  const weatherLocationIsPreset = WEATHER_LOCATION_PRESETS.includes(configuredWeatherLocation);
+  if (weatherLocationSelect) weatherLocationSelect.value = weatherLocationIsPreset ? configuredWeatherLocation : "__custom__";
+  if (weatherLocationCustom) weatherLocationCustom.value = weatherLocationIsPreset ? "" : configuredWeatherLocation;
+  const updateWeatherLocationControls = () => {
+    if (!weatherLocationCustom) return;
+    const custom = weatherLocationSelect?.value === "__custom__";
+    weatherLocationCustom.hidden = !custom;
+    weatherLocationCustom.disabled = !custom;
+  };
+  weatherLocationSelect?.addEventListener("change", updateWeatherLocationControls);
+  updateWeatherLocationControls();
+  const pathIconScale = modal.querySelector("#panel-path-icon-scale");
+  const pathFontScale = modal.querySelector("#panel-path-font-scale");
+  if (pathIconScale) pathIconScale.value = String(pathCard?.fileIconScale || state.settings.pathIconScale || 1);
+  if (pathFontScale) pathFontScale.value = String(pathCard?.fileFontScale || state.settings.pathFontScale || 1);
+  const desktopView = modal.querySelector("#panel-desktop-view");
+  const desktopFilter = modal.querySelector("#panel-desktop-filter");
+  const desktopGrouped = modal.querySelector("#panel-desktop-grouped");
+  const desktopIconScale = modal.querySelector("#panel-desktop-icon-scale");
+  const panelFontScaleInput = modal.querySelector("#panel-font-scale");
+  if (desktopView) desktopView.value = state.iconView === "list" ? "list" : "grid";
+  if (desktopFilter) desktopFilter.value = state.desktopFilter || "all";
+  if (desktopGrouped) desktopGrouped.checked = Boolean(state.desktopGrouped);
+  if (desktopIconScale) desktopIconScale.value = String(state.desktopIconScale || state.settings.desktopIconScale || 1);
+  if (panelFontScaleInput) panelFontScaleInput.value = String(panelFontScale);
+  const panelZoneInput = modal.querySelector("#panel-zone");
+  const panelNameInput = modal.querySelector("#panel-name");
+  const panelIconSelect = modal.querySelector("#panel-icon-select");
+  const panelBgSelect = modal.querySelector("#panel-bg-select");
+  const panelBgCustom = modal.querySelector("#panel-bg-custom");
+  if (panelNameInput) panelNameInput.value = panelDisplayTitle(id);
+  panelBgCustom?.addEventListener("input", () => {
+    if (panelBgSelect) panelBgSelect.value = "__custom__";
+  });
+  modal.querySelector("#panel-tour-replay")?.addEventListener("click", () => {
+    modal.remove();
+    window.edexPanelTour?.show?.(id, () => document.getElementById(`card_${id}`), { includeCommon: false, openSetup: () => openPanelSetup(document.getElementById(`card_${id}`)), preview: previewPanelTourControl, onSaved: syncPanelTourSavedVisual });
+  });
+  modal.querySelector("#panel-tour-replay-all")?.addEventListener("click", () => {
+    modal.remove();
+    window.edexPanelTour?.show?.(id, () => document.getElementById(`card_${id}`), { includeCommon: true, openSetup: () => openPanelSetup(document.getElementById(`card_${id}`)), preview: previewPanelTourControl, onSaved: syncPanelTourSavedVisual });
+  });
+  modal.querySelector("#panel-setup-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#panel-setup-save")?.addEventListener("click", async () => {
+    const patch = {};
+    const tourAutoInput = modal.querySelector("#panel-tour-auto");
+    const tourDisabledNext = tourAutoInput ? !tourAutoInput.checked : null;
+    const tourDisabledCurrent = Boolean(state.settings?.panelTours?.disabled?.[id]);
+    const tourOptionChanged = tourAutoInput && tourDisabledNext !== tourDisabledCurrent;
+    if (tourOptionChanged) {
+      const previous = state.settings?.panelTours || { seen: {}, disabled: {} };
+      const disabled = { ...previous.disabled };
+      if (tourDisabledNext) disabled[id] = true;
+      else delete disabled[id];
+      patch.panelTours = { seen: { ...previous.seen }, disabled, commonSeen: previous.commonSeen === true };
+    }
+    let weatherLocation = "";
+    if (id === "weather") {
+      weatherLocation = weatherLocationSelect?.value === "__custom__"
+        ? weatherLocationCustom?.value.trim() || ""
+        : weatherLocationSelect?.value || "";
+      if (!weatherLocation) {
+        toast("Bitte einen Wetter-Standort auswählen oder eingeben.");
+        return;
+      }
+    }
+    const panelName = panelNameInput?.value.trim().replace(/\s+/g, " ") || "";
+    const previousPanelName = panelDisplayTitle(id);
+    const defaultPanelName = PANEL_META[id]?.title || id;
+    const nextPanelName = panelName || defaultPanelName;
+    const panelNameChanged = Boolean(panelNameInput && nextPanelName !== previousPanelName);
+    if (panelNameChanged) {
+      state.layout[id] = { ...state.layout[id] };
+      if (nextPanelName === defaultPanelName) delete state.layout[id].title;
+      else state.layout[id].title = nextPanelName.slice(0, 48);
+    }
+    const previousZone = state.layout[id]?.zone === "edge" ? "edge" : "workspace";
+    const nextZone = panelZoneInput?.value === "edge" ? "edge" : "workspace";
+    const zoneChanged = Boolean(PANEL_META[id] && panelZoneInput && nextZone !== previousZone);
+    if (zoneChanged) {
+      state.layout[id] = { ...state.layout[id], zone: nextZone };
+      const zonePosition = findPanelZonePosition(el);
+      if (!zonePosition && nextZone === "edge") {
+        const movedPanelTitle = panelDisplayTitle(id);
+        const target = (state.displays || []).find((display) => display.id !== state.displayId);
+        const targetLabel = target?.label || "dem zweiten Monitor";
+        const moveToOtherDisplay = Boolean(target && window.confirm(
+          `In der Randzone ist kein ausreichender Platz für „${panelDisplayTitle(id)}“. Auf ${targetLabel} verschieben?`
+        ));
+        if (moveToOtherDisplay) {
+          const box = pxToGridFields(el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight);
+          const result = await window.edex.transferWidget(target.id, {
+            type: "panel",
+            id,
+            data: { ...state.layout[id] },
+            ...box
+          });
+          if (result?.ok) {
+            delete state.layout[id];
+            await persistLayout();
+            modal.remove();
+            rebuildWorkspace();
+            toast(`„${movedPanelTitle}“ zu ${targetLabel} verschoben`);
+            return;
+          }
+          toast(result?.message || "Verschieben auf den zweiten Monitor nicht möglich");
+        } else {
+          toast("Nicht genügend Platz in der Randzone");
+        }
+        state.layout[id] = { ...state.layout[id], zone: previousZone };
+        return;
+      }
+      repositionPanelInZone(el);
+    }
+    const previousPanelIcon = id !== "desktop" && id !== "path" ? dockIcon("panel", id) : "";
+    const selectedPanelIcon = panelIconSelect?.value || previousPanelIcon;
+    const panelIconChanged = selectedPanelIcon && selectedPanelIcon !== previousPanelIcon;
+    const nextPanelFontScale = Math.max(0.7, Math.min(1.8, Number(panelFontScaleInput?.value) || 1));
+    const previousPanelFontScale = id === "desktop"
+      ? Number(state.desktopFontScale) || 1
+      : Number(state.layout[id]?.fontScale) || 1;
+    const panelFontScaleChanged = nextPanelFontScale !== previousPanelFontScale;
+    if (panelFontScaleChanged) {
+      if (id === "desktop") state.desktopFontScale = nextPanelFontScale;
+      else state.layout[id] = { ...state.layout[id], fontScale: nextPanelFontScale };
+    }
+    let pathAppearanceChanged = false;
+    let nextIconScale = null;
+    let nextFontScale = null;
+    if (pathCard && pathIconScale && pathFontScale) {
+      nextIconScale = Math.max(0.6, Math.min(2, Number(pathIconScale.value) || 1));
+      nextFontScale = Math.max(0.7, Math.min(1.8, Number(pathFontScale.value) || 1));
+      pathAppearanceChanged = nextIconScale !== (Number(pathCard.fileIconScale) || 1)
+        || nextFontScale !== (Number(pathCard.fileFontScale) || 1);
+      pathCard.fileIconScale = nextIconScale;
+      pathCard.fileFontScale = nextFontScale;
+    }
+    const selectedBg = panelBgSelect?.value === "__custom__"
+      ? (panelBgCustom?.value || "")
+      : panelBgSelect?.value === "__default__" ? "" : (panelBgSelect?.value || "");
+    const backgroundChanged = id !== "desktop" && id !== "path" && selectedBg !== (state.layout[id]?.bg || "");
+    if (backgroundChanged) state.layout[id] = { ...state.layout[id], bg: selectedBg };
+    if (id === "clock") {
+      patch.clockDisplayMode = clockMode?.value === "analog" ? "analog" : "digital";
+      patch.clockShowDate = Boolean(clockDate?.checked);
+      patch.clockScale = Math.max(0.25, Math.min(2, Number(clockScaleInput?.value) || 1));
+      patch.clockTimeFormat = ["24h-seconds", "24h-short", "12h-seconds", "12h-short"].includes(clockTimeFormatInput?.value)
+        ? clockTimeFormatInput.value
+        : "24h-seconds";
+      patch.clockDateFormat = ["yy/m/d", "dd/mm/yy", "mm/dd/yy", "dd.mm.yy", "yyyy/mm/dd"].includes(clockDateFormatInput?.value)
+        ? clockDateFormatInput.value
+        : "yy/m/d";
+      patch.clockLedColor = toHex6(clockLedHexInput?.value || clockLedInput?.value || clockLedColor());
+    } else if (id === "ram") {
+      patch.ramGaugeMode = ["used", "free", "cached", "available", "total"].includes(ramMode?.value)
+        ? ramMode.value
+        : "used";
+    } else if (id === "filesearch") {
+      patch.searchFontSize = Math.max(8, Math.min(72, Math.round(Number(searchFont?.value) || 12)));
+    } else if (id === "taskdock") {
+      patch.taskDockAutoGrow = Boolean(taskDockAutoGrow?.checked);
+      patch.taskDockMaxWidth = Math.max(50, Math.min(100, Math.round(Number(taskDockMaxWidth?.value) || 90)));
+      patch.taskDockTileSize = ["compact", "standard", "large"].includes(taskDockTileSize?.value)
+        ? taskDockTileSize.value
+        : "standard";
+      patch.taskDockShowLabels = Boolean(taskDockShowLabels?.checked);
+    } else if (id === "weather") {
+      patch.weatherLocation = weatherLocation.slice(0, 128);
+    } else if (id === "desktop") {
+      state.iconView = desktopView?.value === "list" ? "list" : "grid";
+      state.desktopFilter = desktopFilter?.value || "all";
+      state.desktopGrouped = Boolean(desktopGrouped?.checked);
+      state.desktopIconScale = Math.max(0.6, Math.min(2, Number(desktopIconScale?.value) || 1));
+    }
+    if (panelIconChanged) setPanelIcon(id, selectedPanelIcon);
+    if (pathCard && pathAppearanceChanged) {
+      patch.pathIconScale = nextIconScale;
+      patch.pathFontScale = nextFontScale;
+    }
+    const desktopChanged = id === "desktop";
+    if (!Object.keys(patch).length && !zoneChanged && !backgroundChanged && !panelIconChanged && !panelNameChanged && !pathAppearanceChanged && !panelFontScaleChanged && !desktopChanged) {
+      modal.dispatchEvent(new Event("edex:panel-setup-saved"));
+      modal.remove();
+      return;
+    }
+    try {
+      if (Object.keys(patch).length) {
+        const result = await window.edex.saveSettings(patch);
+        state.settings = result.settings || { ...state.settings, ...patch };
+      }
+      if (zoneChanged) persistLayout();
+      if (backgroundChanged || panelIconChanged || panelNameChanged) persistLayout();
+      if (pathAppearanceChanged) persistLayout();
+      if (panelFontScaleChanged || desktopChanged) persistLayout();
+      if (id === "clock" && patch.clockDisplayMode === "analog" && state.layout.clock) {
+        const minimum = analogClockMinimum().px;
+        const box = pxFromBox(state.layout.clock);
+        applyBoxPx(state.layout.clock, box.x, box.y, Math.max(box.w, minimum), Math.max(box.h, minimum));
+        persistLayout();
+      }
+      modal.dispatchEvent(new Event("edex:panel-setup-saved"));
+      modal.remove();
+      rebuildWorkspace();
+    } catch (error) {
+      modal.dispatchEvent(new Event("edex:panel-setup-error"));
+      toast(error?.message || "Panel-Einstellungen konnten nicht gespeichert werden");
+    }
+  });
+  return modal;
+}
+
+function bindCardTools(el, getItems) {
+  el.querySelectorAll('[data-card-act="minimize"]').forEach((btn) => {
+    btn.addEventListener("pointerdown", (event) => event.stopPropagation());
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const cardId = el.id || "";
+      if (cardId === "card_desktop") {
+        minimizeContainer("desktop", "desktop");
+      } else if (cardId.startsWith("path_")) {
+        minimizeContainer("path", cardId.slice(5));
+      } else if (cardId.startsWith("card_")) {
+        minimizeContainer("panel", cardId.slice(5));
+      }
+    });
+  });
+  el.querySelectorAll('[data-card-act="snap"]').forEach((btn) => {
+    btn.addEventListener("pointerdown", (event) => event.stopPropagation());
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const snapItems = getItems().filter((item) => item.label && /^(1\/2|1\/3|1\/4) /.test(item.label));
+      openSnapLayoutPicker(btn, snapItems, { el });
+    });
+  });
+  el.querySelectorAll('[data-card-act="settings"]').forEach((btn) => {
+    btn.addEventListener("pointerdown", (event) => event.stopPropagation());
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPanelSetup(el);
+    });
+  });
+  el.querySelectorAll('[data-card-act="more"]').forEach((btn) => {
+    btn.addEventListener("pointerdown", (event) => event.stopPropagation());
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openCardMenu(btn, getItems());
+    });
+  });
+  el.addEventListener("contextmenu", (event) => {
+    if (event.target.closest(".path-stage, #desktop-stage, #shortcuts-stage, .desk-icon, .fs-row, .drives-stage, .drive-row")) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  });
+}
+
+function applyCardBg(el, color) {
+  if (!el) return;
+  const value = colorToFill(color);
+  el.classList.toggle("has-custom-bg", Boolean(value));
+  if (!value) {
+    el.style.removeProperty("--card-bg");
+    el.style.removeProperty("background");
+    el.style.removeProperty("background-color");
+    el.querySelectorAll(".card-title, .card-body, .path-stage, #desktop-stage").forEach((node) => {
+      node.style.removeProperty("background");
+      node.style.removeProperty("background-color");
+    });
+    return;
+  }
+  el.style.setProperty("--card-bg", value);
+  el.style.background = value;
+  el.style.backgroundColor = value;
+  el.querySelectorAll(":scope > .card-title, :scope > .card-body").forEach((node) => {
+    node.style.background = value;
+    node.style.backgroundColor = value;
+  });
+}
+
+function colorToFill(color) {
+  if (color == null || color === false) return "";
+  const s = String(color).trim();
+  if (!s || s === "transparent" || s === "none") return "";
+  const rgba = s.match(/^rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/i);
+  if (rgba) {
+    return `rgba(${Math.round(Number(rgba[1]))}, ${Math.round(Number(rgba[2]))}, ${Math.round(Number(rgba[3]))}, ${Number(rgba[4])})`;
+  }
+  const rgb = s.match(/^rgb\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/i);
+  if (rgb) {
+    return `rgb(${Math.round(Number(rgb[1]))}, ${Math.round(Number(rgb[2]))}, ${Math.round(Number(rgb[3]))})`;
+  }
+  const hex = s.replace("#", "");
+  if (hex.length === 3) {
+    const r = hex[0] + hex[0];
+    const g = hex[1] + hex[1];
+    const b = hex[2] + hex[2];
+    return `#${r}${g}${b}`;
+  }
+  if (hex.length === 6 || hex.length === 8) return `#${hex.slice(0, 6)}`;
+  const parsed = parseLedColor(s);
+  if (parsed) return rgbToHex(parsed.r, parsed.g, parsed.b);
+  return s;
+}
+
+function rgbToHex(r, g, b) {
+  const h = (n) => Math.max(0, Math.min(255, Number(n) || 0)).toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+function themeColorSwatches() {
+  const colors = state.theme?.colors || {};
+  const term = state.theme?.terminal || {};
+  const globe = state.theme?.globe || {};
+  const accent = rgbToHex(colors.r, colors.g, colors.b);
+  const list = [
+    { label: "Theme-Farbe", color: accent },
+    { label: "Theme-Farbe 55%", color: `rgba(${Number(colors.r) || 170}, ${Number(colors.g) || 207}, ${Number(colors.b) || 209}, 0.55)` },
+    { label: "Dunkler Hintergrund", color: colors.light_black || "#05080d" },
+    { label: "Schwarz", color: colors.black || "#000000" },
+    { label: "Grau", color: colors.grey || "#262828" },
+    { label: "Terminal-Vordergrund", color: term.foreground },
+    { label: "Terminal-Hintergrund", color: term.background },
+    { label: "Globus", color: globe.base },
+    { label: "Markierung", color: globe.marker },
+    { label: "Rot", color: "#ff3c3c" },
+    { label: "Gelb", color: "#ffd23c" }
+  ].filter((item) => item.color);
+  const seen = new Set();
+  return list.filter((item) => {
+    const key = String(item.color).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function bindFileDrop(el, getDest, onDone) {
+  el.addEventListener("dragover", (event) => {
+    if (![...event.dataTransfer.types].includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    el.classList.add("drop-target");
+  });
+  el.addEventListener("dragleave", (event) => {
+    if (!el.contains(event.relatedTarget)) el.classList.remove("drop-target");
+  });
+  el.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    el.classList.remove("drop-target");
+    const dest = getDest?.();
+    const files = [...(event.dataTransfer.files || [])]
+      .map((f) => window.edex.pathForFile?.(f) || f.path)
+      .filter(Boolean);
+    if (!dest || !files.length) {
+      toast("此容器無法接收檔案");
+      return;
+    }
+    try {
+      const result = await window.edex.importFiles(dest, files);
+      toast(`已加入 ${result.count} 個項目`);
+      // Refresh immediately so dropped files appear without waiting on a slow full scan.
+      await onDone?.(result);
+    } catch (err) {
+      toast(err.message || "加入失敗");
+    }
+  });
+}
+
+function closePanel(id) {
+  if (id === "cockpit") {
+    if (state.cockpitRaf) cancelAnimationFrame(state.cockpitRaf);
+    if (state.cockpitMatrixTimer) clearInterval(state.cockpitMatrixTimer);
+    state.cockpitRaf = null;
+    state.cockpitMatrixTimer = null;
+  }
+  if (id === "cassette" && state.cassetteRaf) {
+    cancelAnimationFrame(state.cassetteRaf);
+    state.cassetteRaf = null;
+  }
+  if (id === "ddj") {
+    if (state.ddjRaf) cancelAnimationFrame(state.ddjRaf);
+    state.ddjRaf = null;
+    try { state.ddjResizeObs?.disconnect?.(); } catch { /* ignore */ }
+    state.ddjResizeObs = null;
+  }
+  if (id === "cpuRail") {
+    if (state.cpuRailRaf) {
+      cancelAnimationFrame(state.cpuRailRaf);
+      state.cpuRailRaf = null;
+    }
+    if (state.cpuRailTimer) {
+      clearInterval(state.cpuRailTimer);
+      state.cpuRailTimer = null;
+    }
+    try { state.cpuRailResizeObs?.disconnect?.(); } catch { /* ignore */ }
+    state.cpuRailResizeObs = null;
+    if (state.cpuRailResizeHandler) {
+      window.removeEventListener("resize", state.cpuRailResizeHandler);
+      state.cpuRailResizeHandler = null;
+    }
+    if (state.cpuRailVisHandler) {
+      document.removeEventListener("visibilitychange", state.cpuRailVisHandler);
+      state.cpuRailVisHandler = null;
+    }
+    if (window.cpuRailPanel) {
+      window.cpuRailPanel.setEffects = () => {};
+      window.cpuRailPanel.refresh = () => {};
+    }
+  }
+  if (id === "dock") {
+    window.dockPanel?.unbind?.(state);
+    state.settings = { ...state.settings, dockEnabled: false };
+    window.edex?.saveSettings?.({ dockEnabled: false }).catch?.(() => {});
+  }
+  delete state.layout[id];
+  document.querySelectorAll(`#card_${id}, [data-panel-id="${id}"]`).forEach((el) => el.remove());
+  // Persist current display first, then strip this id from every saved layout.
+  Promise.resolve(persistLayout())
+    .then(() => purgePanelFromSavedLayouts(id))
+    .catch(() => {});
+  toast(`已關閉「${PANEL_META[id]?.title || id}」`);
+}
+
+function minimizeContainer(kind, id) {
+  if (kind === "panel") {
+    if (!state.layout[id] || id === "dock") return;
+    state.layout[id] = { ...state.layout[id], minimized: true };
+  } else if (kind === "desktop") {
+    if (!state.desktopStage) return;
+    state.desktopStage = { ...state.desktopStage, minimized: true };
+  } else if (kind === "path") {
+    const card = state.pathCards.find((item) => item.id === id);
+    if (!card) return;
+    card.minimized = true;
+  } else {
+    return;
+  }
+  persistLayout();
+  rebuildWorkspace();
+  const label = kind === "panel" ? PANEL_META[id]?.title : kind === "desktop" ? "系統桌面" : pathTitle(state.pathCards.find((item) => item.id === id), 0);
+  toast(`已最小化「${label || id}」`);
+}
+
+function closeDesktopCard() {
+  state.desktopEnabled = false;
+  document.getElementById("card_desktop")?.remove();
+  persistLayout();
+  toast("已關閉桌面容器");
+}
+
+/** Reopen the picker only after the folder chooser returns. */
+let keepAddPicker = false;
+
+function closeAddPicker() {
+  keepAddPicker = false;
+  document.getElementById("addPickerModal")?.remove();
+}
+
+function ensureDesktopCard() {
+  if (!state.primary) {
+    toast("系統桌面僅能顯示在主顯示器");
+    return;
+  }
+  if (state.desktopEnabled !== false) {
+    toast("桌面容器已存在");
+    return;
+  }
+  closeAddPicker();
+  state.desktopEnabled = true;
+  state.desktopStage = findEmptyBox(state.desktopStage || defaultDesktop(), { desktop: true });
+  persistLayout();
+  rebuildWorkspace();
+  toast("Desktop-Container hinzugefügt");
+}
+
+function dockEnabled() {
+  return state.displayDockEnabled == null
+    ? state.settings?.dockEnabled !== false
+    : state.displayDockEnabled;
+}
+
+function syncDockLayout(enabled) {
+  if (!PANEL_META.dock) {
+    if (state.layout.dock) delete state.layout.dock;
+    window.dockPanel?.unbind?.(state);
+    return;
+  }
+  if (enabled) {
+    if (!state.layout.dock) {
+      state.layout.dock = { ...PANEL_META.dock.box, locked: true };
+    } else {
+      state.layout.dock = { ...state.layout.dock, locked: true };
+    }
+    if (!state.layout.taskdock) state.layout.taskdock = { ...PANEL_META.taskdock.box };
+  } else if (state.layout.dock) {
+    delete state.layout.dock;
+    delete state.layout.taskdock;
+    window.dockPanel?.unbind?.(state);
+  }
+}
+
+async function setDockEnabled(on) {
+  const enabled = Boolean(on);
+  state.displayDockEnabled = enabled;
+  if (state.primary) state.settings = { ...state.settings, dockEnabled: enabled };
+  syncDockLayout(enabled);
+  try {
+    if (state.primary) await window.edex.saveSettings({ dockEnabled: enabled });
+  } catch {
+    // keep local
+  }
+  await persistLayout();
+  rebuildWorkspace();
+  toast(enabled ? `${state.settings.dockPosition === "top" ? "Oberes" : "Unteres"} Dock aktiviert` : "Dock deaktiviert");
+}
+
+async function addPanel(id) {
+  if (!PANEL_META[id]) return;
+  if (id === "dock") {
+    await setDockEnabled(true);
+    return;
+  }
+  if (state.layout[id]) {
+    toast("此顯示器已有該插件");
+    return;
+  }
+  closeAddPicker();
+  state.layout[id] = findEmptyBox({ ...PANEL_META[id].box }, { panelId: id });
+  try {
+    await persistLayout();
+  } catch (error) {
+    delete state.layout[id];
+    toast(error?.message || "Panel konnte nicht gespeichert werden");
+    return;
+  }
+  rebuildWorkspace();
+  toast(`Panel „${PANEL_META[id].title}“ hinzugefügt`);
+  // A tour is offered only after the panel was successfully saved and rendered.
+  // The seen flag is per panel type and is shared across displays.
+  const tours = state.settings?.panelTours || { seen: {}, disabled: {}, commonSeen: false };
+  if (!tours.seen?.[id] && !tours.disabled?.[id] && state.settings?.firstRun?.completed !== false) {
+    // Zone basics are presented only once across every panel type.
+    const includeCommon = tours.commonSeen !== true;
+    try {
+      const started = window.edexPanelTour?.show?.(id, () => document.getElementById(`card_${id}`), { includeCommon, openSetup: () => openPanelSetup(document.getElementById(`card_${id}`)), preview: previewPanelTourControl, onSaved: syncPanelTourSavedVisual });
+      if (started) {
+        const updated = { seen: { ...tours.seen, [id]: true }, disabled: { ...tours.disabled }, commonSeen: true };
+        const result = await window.edex.saveSettings({ panelTours: updated });
+        state.settings = result.settings || { ...state.settings, panelTours: updated };
+      }
+    } catch (error) {
+      // Optional help must never prevent adding a panel.
+      console.warn("Panel introduction could not be recorded:", error);
+    }
+  }
+
+}
+
+function openAddPicker() {
+  document.getElementById("addPickerModal")?.remove();
+  document.getElementById("addPicker")?.closest(".modal_popup")?.remove();
+  keepAddPicker = true;
+  // Dock is toggled separately — not listed as a placeable panel.
+  const panelExistsOnDisplay = (id) => Boolean(
+    state.layout[id] || document.getElementById(`card_${id}`)
+  );
+  const missing = Object.keys(PANEL_META).filter((id) => {
+    if (id === "status" || id === "dock" || panelExistsOnDisplay(id)) return false;
+    return true;
+  });
+  const deskDisabled = !state.primary || state.desktopEnabled !== false;
+  const dockOn = dockEnabled();
+  const dockFrame = String(state.settings?.dockFrameStyle || "rounded");
+  const dockPosition = String(state.settings?.dockPosition || "bottom");
+  const dockW = window.dockPanel?.dockWidth?.(state)
+    ?? (Number(state.settings?.dockWidth) || 720);
+  const dockH = window.dockPanel?.dockHeight?.(state)
+    ?? (Number(state.settings?.dockHeight) || 72);
+  const modal = document.createElement("div");
+  modal.id = "addPickerModal";
+  modal.className = "modal_popup info central-settings-modal";
+  modal.innerHTML = `
+    <h1>Container hinzufügen</h1>
+    <h2>Plugin-Schalter</h2>
+    <div class="action-row" style="align-items:center;gap:0.8rem;flex-wrap:wrap;">
+      ${`<label style="display:inline-flex;align-items:center;gap:0.45rem;cursor:pointer;">
+            <input type="checkbox" id="toggle-dock" ${dockOn ? "checked" : ""}>
+            <span data-dock-label>${dockPosition === "top" ? "Oberes Dock (am oberen Bildschirmrand)" : "Unteres Dock (am unteren Bildschirmrand)"}</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
+            <span>Position</span>
+            <select id="dock-position" ${dockOn ? "" : "disabled"}>
+              <option value="bottom" ${dockPosition === "bottom" ? "selected" : ""}>Unten</option>
+              <option value="top" ${dockPosition === "top" ? "selected" : ""}>Oben</option>
+            </select>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
+            <span>Rahmen</span>
+            <select id="dock-frame-style" ${dockOn ? "" : "disabled"}>
+              <option value="rounded" ${dockFrame === "rounded" ? "selected" : ""}>Abgerundet</option>
+              <option value="trapezoid" ${dockFrame === "trapezoid" ? "selected" : ""}>Trapez</option>
+              <option value="rect" ${dockFrame === "rect" ? "selected" : ""}>Rechteckig</option>
+            </select>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
+            <span>Breite</span>
+            <input id="dock-width" type="number" min="200" max="2400" step="10" value="${dockW}" ${dockOn ? "" : "disabled"} style="width:5.5rem;">
+            <span>px</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.35rem;opacity:${dockOn ? 1 : 0.45};">
+            <span>Höhe</span>
+            <input id="dock-height" type="number" min="40" max="160" step="2" value="${dockH}" ${dockOn ? "" : "disabled"} style="width:4.5rem;">
+            <span>px</span>
+          </label>`}
+    </div>
+    <h2>Windows-Fenstereinbettung</h2>
+    <div class="action-row" style="align-items:center;gap:0.5rem;flex-wrap:wrap;">
+      <button type="button" id="embed-refresh">Fenster laden</button>
+      <select id="embed-window" aria-label="Fenster auswählen" style="min-width:16rem;max-width:100%;">
+        <option value="">Noch keine Fenster geladen</option>
+      </select>
+      <button type="button" id="embed-attach">Andocken</button>
+      <button type="button" id="embed-release">Freigeben</button>
+    </div>
+    <h2>Plugin-Panels${state.primary ? "" : " (für diesen Bildschirm auswählbar)"}</h2>
+    <div class="action-row" id="addPicker">
+      ${missing.length
+        ? missing.map((id) =>
+          `<button type="button" data-add-panel="${id}">${escapeHtml(PANEL_META[id].title)}</button>`
+        ).join("")
+        : "<span style='opacity:.6'>Alle Plugin-Panels wurden bereits hinzugefügt</span>"}
+    </div>
+    <h2>Sonstige</h2>
+    <div class="action-row">
+      ${state.primary
+        ? `<button type="button" id="add-desktop" ${deskDisabled ? "disabled" : ""}>Desktop-Container</button>`
+        : `<span style="opacity:.6">Systemdesktop nur auf dem Hauptbildschirm</span>`}
+      <button type="button" id="add-path">Ordner-Panel</button>
+    </div>
+    <p style="opacity:.55;margin:1vh 0 0;font-size:0.85em;">Du kannst mehrere Elemente hinzufügen und danach schließen.</p>
+    <div style="margin-top:1.2vh;display:flex;justify-content:flex-end;">
+      <button type="button" id="add-cancel">Schließen</button>
+    </div>
+  `;
+
+  const wrapSettingsSection = (title, table, open = false) => {
+    const details = document.createElement("details");
+    details.className = "settings-section";
+    details.open = open;
+    const summary = document.createElement("summary");
+    summary.textContent = title;
+    details.append(summary, table);
+    return details;
+  };
+  const languageHeading = modal.querySelector("h2");
+  const languageTable = languageHeading?.nextElementSibling;
+  if (languageHeading && languageTable?.tagName === "TABLE") {
+    languageHeading.replaceWith(wrapSettingsSection(languageHeading.textContent, languageTable, true));
+  }
+  const appearanceHeading = modal.querySelector("h2");
+  const editor = modal.querySelector("#settingsEditor");
+  if (appearanceHeading && editor) {
+    const rows = [...editor.querySelectorAll("tbody > tr")];
+    const header = rows.shift();
+    const rowContains = (row, id) => Boolean(row.querySelector(`#${id}`));
+    const windowsStart = rows.findIndex((row) => row.id === "set-windows-sync-row");
+    const displayEnd = rows.findIndex((row) => rowContains(row, "set-grid"));
+    const clockEnd = rows.findIndex((row) => rowContains(row, "set-search-font"));
+    const cuts = [
+      ["Anzeige & Theme", 0, windowsStart < 0 ? displayEnd : windowsStart, true],
+      ["Windows-Integration", windowsStart < 0 ? displayEnd : windowsStart, displayEnd < 0 ? rows.length : displayEnd, false],
+      ["Uhr", displayEnd < 0 ? rows.length : displayEnd, clockEnd < 0 ? rows.length : clockEnd, false],
+      ["Interface & Code-Hintergrund", clockEnd < 0 ? rows.length : clockEnd, rows.length, false]
+    ];
+    const fragment = document.createDocumentFragment();
+    for (const [title, start, end, open] of cuts) {
+      const table = editor.cloneNode(false);
+      table.removeAttribute("id");
+      table.classList.add("settings-section-table");
+      const body = document.createElement("tbody");
+      if (header) body.appendChild(header.cloneNode(true));
+      rows.slice(start, end).forEach((row) => body.appendChild(row));
+      table.appendChild(body);
+      if (start === 0) table.id = "settingsEditor";
+      fragment.appendChild(wrapSettingsSection(title, table, open));
+    }
+    appearanceHeading.replaceWith(fragment);
+    editor.remove();
+  }
+  document.body.appendChild(modal);
+  window.edexI18n?.translatePage?.(modal);
+  placeCentered(modal, { width: Math.min(520, window.innerWidth * 0.45), topRatio: 0.18 });
+  modal.querySelector("#add-cancel").onclick = () => {
+    closeAddPicker();
+  };
+  modal.querySelector("#toggle-dock")?.addEventListener("change", (event) => {
+    setDockEnabled(event.target.checked);
+  });
+  modal.querySelector("#dock-position")?.addEventListener("change", (event) => {
+    const next = event.target.value === "top" ? "top" : "bottom";
+    window.dockPanel?.setPosition?.(state, next);
+    persistLayout();
+    const label = modal.querySelector("[data-dock-label]");
+    if (label) label.textContent = next === "top" ? "Oberes Dock (am oberen Bildschirmrand)" : "Unteres Dock (am unteren Bildschirmrand)";
+    toast(`Dock-Position: ${next === "top" ? "oben" : "unten"}`);
+  });
+  modal.querySelector("#dock-frame-style")?.addEventListener("change", (event) => {
+    window.dockPanel?.setFrameStyle?.(state, event.target.value);
+    persistLayout();
+    toast(`Dock 外框：${event.target.selectedOptions?.[0]?.text || event.target.value}`);
+  });
+  const applyDockSizeFromInputs = () => {
+    const wEl = modal.querySelector("#dock-width");
+    const hEl = modal.querySelector("#dock-height");
+    window.dockPanel?.setSize?.(state, {
+      width: Number(wEl?.value),
+      height: Number(hEl?.value)
+    });
+    persistLayout();
+  };
+  modal.querySelector("#dock-width")?.addEventListener("change", applyDockSizeFromInputs);
+  modal.querySelector("#dock-height")?.addEventListener("change", applyDockSizeFromInputs);
+  const embedSelect = modal.querySelector("#embed-window");
+  const refreshEmbedWindows = async () => {
+    if (!embedSelect) return;
+    embedSelect.replaceChildren(new Option("Fenster werden geladen ...", ""));
+    try {
+      const result = await window.edex?.listEmbedWindows?.();
+      embedSelect.replaceChildren();
+      for (const item of result?.items || []) {
+        const option = new Option(`${item.title} (${item.process || "unbekannt"})`, item.hwnd);
+        option.dataset.pid = String(item.pid || 0);
+        embedSelect.append(option);
+      }
+      if (!embedSelect.options.length) embedSelect.append(new Option("Keine Fenster gefunden", ""));
+    } catch {
+      embedSelect.replaceChildren(new Option("Fensterliste nicht verfügbar", ""));
+    }
+  };
+  modal.querySelector("#embed-refresh")?.addEventListener("click", refreshEmbedWindows);
+  modal.querySelector("#embed-attach")?.addEventListener("click", async () => {
+    const option = embedSelect?.selectedOptions?.[0];
+    const bounds = window.dockPanel?.embedBounds?.();
+    if (!option?.value || !bounds) return toast("Bitte zuerst ein Fenster laden und auswählen");
+    if (state.dockEmbed?.hwnd) await window.edex?.embedRelease?.({ hwnd: state.dockEmbed.hwnd });
+    try {
+      const result = await window.edex.embedAttach({
+        hwnd: option.value,
+        pid: Number(option.dataset.pid) || 0,
+        bounds
+      });
+      if (!result?.ok) throw new Error("Andocken fehlgeschlagen");
+      state.dockEmbed = { hwnd: option.value, pid: Number(option.dataset.pid) || 0 };
+      toast("Fenster im Dock angedockt");
+      window.dockPanel?.syncEmbedBounds?.(state);
+    } catch (error) {
+      toast(error?.message || "Andocken fehlgeschlagen");
+    }
+  });
+  modal.querySelector("#embed-release")?.addEventListener("click", async () => {
+    const hwnd = state.dockEmbed?.hwnd;
+    if (!hwnd) return toast("Kein Fenster angedockt");
+    await window.edex?.embedRelease?.({ hwnd });
+    delete state.dockEmbed;
+    toast("Fenster freigegeben");
+  });
+  modal.querySelectorAll("[data-add-panel]").forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      await addPanel(btn.dataset.addPanel);
+    };
+  });
+  modal.querySelector("#add-desktop")?.addEventListener("click", () => {
+    ensureDesktopCard();
+  });
+  modal.querySelector("#add-path").onclick = async () => {
+    // Folder dialog steals focus; reopen picker after pick completes.
+    modal.style.visibility = "hidden";
+    await addPathCard();
+    if (keepAddPicker) openAddPicker();
+  };
+}
+
+function stopPluginRuntimes() {
+  if (taskbarWindowTimer) {
+    clearInterval(taskbarWindowTimer);
+    taskbarWindowTimer = null;
+  }
+  if (state.cockpitRaf) {
+    cancelAnimationFrame(state.cockpitRaf);
+    state.cockpitRaf = null;
+  }
+  if (state.cockpitMatrixTimer) {
+    clearInterval(state.cockpitMatrixTimer);
+    state.cockpitMatrixTimer = null;
+  }
+  if (state.cassetteRaf) {
+    cancelAnimationFrame(state.cassetteRaf);
+    state.cassetteRaf = null;
+  }
+  if (state.ddjRaf) {
+    cancelAnimationFrame(state.ddjRaf);
+    state.ddjRaf = null;
+  }
+  try { state.ddjResizeObs?.disconnect?.(); } catch { /* ignore */ }
+  state.ddjResizeObs = null;
+  if (state.cpuRailRaf) {
+    cancelAnimationFrame(state.cpuRailRaf);
+    state.cpuRailRaf = null;
+  }
+  if (state.cpuRailTimer) {
+    clearInterval(state.cpuRailTimer);
+    state.cpuRailTimer = null;
+  }
+  try { state.cpuRailResizeObs?.disconnect?.(); } catch { /* ignore */ }
+  state.cpuRailResizeObs = null;
+  if (state.cpuRailResizeHandler) {
+    window.removeEventListener("resize", state.cpuRailResizeHandler);
+    state.cpuRailResizeHandler = null;
+  }
+  if (state.cpuRailVisHandler) {
+    document.removeEventListener("visibilitychange", state.cpuRailVisHandler);
+    state.cpuRailVisHandler = null;
+  }
+  if (window.cpuRailPanel) {
+    window.cpuRailPanel.setEffects = () => {};
+    window.cpuRailPanel.refresh = () => {};
+  }
+  window.dockPanel?.unbind?.(state);
+  if (state.weatherTimer) {
+    clearInterval(state.weatherTimer);
+    state.weatherTimer = null;
+  }
+  if (state.dockRaf) {
+    cancelAnimationFrame(state.dockRaf);
+    state.dockRaf = null;
+  }
+}
+
+function weatherLabel(code) {
+  const labels = {
+    de: {
+      0: "Klar", 1: "Überwiegend klar", 2: "Teilweise bewölkt", 3: "Bedeckt",
+      45: "Nebel", 48: "Reifnebel", 51: "Leichter Nieselregen", 53: "Nieselregen",
+      55: "Starker Nieselregen", 61: "Leichter Regen", 63: "Regen", 65: "Starker Regen",
+      71: "Leichter Schneefall", 73: "Schneefall", 75: "Starker Schneefall",
+      80: "Regenschauer", 81: "Regenschauer", 82: "Starke Regenschauer",
+      95: "Gewitter", 96: "Gewitter mit Hagel", 99: "Gewitter mit Hagel"
+    },
+    en: {
+      0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+      45: "Fog", 48: "Rime fog", 51: "Light drizzle", 53: "Drizzle",
+      55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain",
+      71: "Light snow", 73: "Snow", 75: "Heavy snow",
+      80: "Rain showers", 81: "Rain showers", 82: "Heavy rain showers",
+      95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Thunderstorm with hail"
+    },
+    "zh-Hant": {
+      0: "晴朗", 1: "大致晴朗", 2: "局部多雲", 3: "陰天",
+      45: "霧", 48: "霜霧", 51: "小毛毛雨", 53: "毛毛雨",
+      55: "大毛毛雨", 61: "小雨", 63: "下雨", 65: "大雨",
+      71: "小雪", 73: "降雪", 75: "大雪",
+      80: "陣雨", 81: "陣雨", 82: "大陣雨",
+      95: "雷雨", 96: "雷雨伴隨冰雹", 99: "雷雨伴隨冰雹"
+    }
+  };
+  const locale = window.edexI18n?.locale?.() || "en";
+  return labels[locale]?.[Number(code)] || labels.de[Number(code)] || (locale === "en" ? "Unknown" : locale === "zh-Hant" ? "未知" : "Unbekannt");
+}
+
+function weatherIcon(code) {
+  const value = Number(code);
+  if (value === 0) return "☀";
+  if (value <= 3) return "☁";
+  if (value >= 71 && value <= 77) return "❄";
+  if (value >= 95) return "⚡";
+  if (value >= 51) return "☂";
+  return "◌";
+}
+
+function bindWeatherPanel() {
+  const root = document.querySelector(".weather-root");
+  if (!root || !window.edex?.getWeather) return;
+  const locationInput = root.querySelector("[data-weather-location]");
+  if (locationInput) locationInput.value = String(state.settings.weatherLocation || locationInput.value || "Berlin");
+  const status = root.querySelector("[data-weather-status]");
+  const current = root.querySelector("[data-weather-current]");
+  const days = root.querySelector("[data-weather-days]");
+  let request = 0;
+  const load = async () => {
+    const token = ++request;
+    const location = locationInput?.value?.trim() || state.settings.weatherLocation || "Berlin";
+    const locale = window.edexI18n?.locale?.() || "en";
+    const text = locale === "en"
+      ? { loading: "Loading weather …", updated: "updated", unavailable: "Weather unavailable", search: "Search location …", refresh: "Refresh weather", felt: "Feels like", wind: "Wind" }
+      : locale === "zh-Hant"
+        ? { loading: "正在載入天氣…", updated: "更新於", unavailable: "無法取得天氣", search: "搜尋地點…", refresh: "更新天氣", felt: "體感", wind: "風速" }
+        : { loading: "Wetter wird geladen …", updated: "aktualisiert", unavailable: "Wetter nicht verfügbar", search: "Ort suchen …", refresh: "Wetter aktualisieren", felt: "Gefühlt", wind: "Wind" };
+    if (locationInput) locationInput.placeholder = text.search;
+    root.querySelector("[data-weather-refresh]")?.setAttribute("title", text.refresh);
+    status.textContent = text.loading;
+    try {
+      const data = await window.edex.getWeather(location);
+      if (token !== request) return;
+      const now = data.current || {};
+      const dateLocale = locale === "en" ? "en-US" : locale === "zh-Hant" ? "zh-TW" : "de-DE";
+      const todayLabel = new Date().toLocaleDateString(dateLocale, { weekday: "long" });
+      current.innerHTML = `
+        <div class="weather-current-day">${escapeHtml(todayLabel)}</div>
+        <div class="weather-main"><span class="weather-icon">${weatherIcon(now.weather_code)}</span><strong>${Math.round(Number(now.temperature_2m) || 0)}°</strong></div>
+        <div class="weather-condition">${escapeHtml(weatherLabel(now.weather_code))}</div>
+        <div class="weather-meta">${text.felt} ${Math.round(Number(now.apparent_temperature) || 0)}° · ${Math.round(Number(now.relative_humidity_2m) || 0)}% · ${text.wind} ${Math.round(Number(now.wind_speed_10m) || 0)} km/h</div>`;
+      const daily = data.daily || {};
+      const dates = daily.time || [];
+      days.innerHTML = dates.slice(0, 4).map((date, index) => {
+        const day = new Date(`${date}T12:00:00`).toLocaleDateString(dateLocale, { weekday: "short" }).toUpperCase();
+        return `<div class="weather-day"><span>${escapeHtml(day)}</span><b>${weatherIcon(daily.weather_code?.[index])}</b><strong>${Math.round(Number(daily.temperature_2m_max?.[index]) || 0)}°</strong><small>${Math.round(Number(daily.temperature_2m_min?.[index]) || 0)}°</small></div>`;
+      }).join("");
+      const timeLocale = locale === "en" ? "en-US" : locale === "zh-Hant" ? "zh-TW" : "de-DE";
+      status.textContent = `${data.location} · ${text.updated} ${new Date().toLocaleTimeString(timeLocale, { hour: "2-digit", minute: "2-digit" })}`;
+    } catch (error) {
+      status.textContent = error?.message || text.unavailable;
+      current.innerHTML = "";
+      days.innerHTML = "";
+    }
+  };
+  locationInput?.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const location = locationInput.value.trim();
+      if (location) {
+        try {
+          const result = await window.edex.saveSettings({ weatherLocation: location.slice(0, 128) });
+          state.settings = result?.settings || { ...state.settings, weatherLocation: location.slice(0, 128) };
+        } catch (error) {
+          toast(error?.message || "Wetter-Standort konnte nicht gespeichert werden");
+        }
+      }
+      load();
+    }
+  });
+  root.querySelector("[data-weather-refresh]")?.addEventListener("click", load);
+  load();
+  state.weatherTimer = setInterval(load, 15 * 60 * 1000);
+}
+
+function buildLayout() {
+  if (state.clockTimer) {
+    clearInterval(state.clockTimer);
+    cancelAnimationFrame(state.clockTimer);
+    state.clockTimer = null;
+  }
+  stopPluginRuntimes();
+  window.edexEffects?.stop?.();
+  if (state.taskDockEmbed?.hwnd) {
+    window.edex?.embedRelease?.({ hwnd: state.taskDockEmbed.hwnd });
+    delete state.taskDockEmbed;
+    removeTaskEmbedFrame();
+  }
+  delete state.layout.status;
+
+  const panels = Object.keys(PANEL_META).map((id) => panelHtml(id)).join("");
+  const deskLocked = Boolean(state.desktopLocked);
+  const desktop = state.desktopEnabled === false || state.desktopStage?.minimized ? "" : `
+      <section class="desktop-card${deskLocked ? " locked" : ""}" id="card_desktop" style="${styleFromBox(state.desktopStage)}">
+        <h3 class="card-title">
+          <span class="card-title-text">Systemdesktop</span>
+          ${cardToolsHtml()}
+        </h3>
+        <div class="card-body">
+          <p class="path-text" id="desktop-path-text" title="${escapeHtml(state.bootstrap?.desktop || "")}">${escapeHtml(state.bootstrap?.desktop || "")}</p>
+          <div class="desk-tab-bar" id="desk-tab-bar"></div>
+          <div class="desk-filter-bar" id="desk-filter-bar">
+            ${DESK_FILTERS.map((item) => `<button type="button" data-desk-filter="${item.id}">${item.label}</button>`).join("")}
+          </div>
+          <div id="desktop-stage" class="view-${state.iconView}"></div>
+        </div>
+        <div class="resize-handle"></div>
+      </section>`;
+
+  document.body.innerHTML = `
+    <div id="workspace">
+      <div id="zone-overlay" aria-hidden="true"></div>
+      <div id="snap-guides"></div>
+      ${desktop}
+      ${panels}
+    </div>
+    <div id="fab-bar">${fabBarHtml()}</div>
+    <div id="app-version-badge" title="Installierte App-Version">v${escapeHtml(state.appVersion || "unbekannt")}</div>
+  `;
+  // Translate all freshly generated panel markup before its interactive handlers start.
+  // Existing data-i18n attribute keys are stable across locale switches.
+  window.edexI18n?.translatePage?.(document.getElementById("workspace"));
+  renderDockItems();
+
+  let zoneAdjusted = false;
+  Object.keys(state.layout).forEach((id) => {
+    if (id === "status") return;
+    const el = document.getElementById(`card_${id}`);
+    if (!el) return;
+    zoneAdjusted = clampPanelToZone(el) || zoneAdjusted;
+    bindCardTools(el, () => menuItemsForCard("panel", {
+      el,
+      locked: Boolean(state.layout[id]?.locked),
+      widgetType: "panel",
+      widgetId: id,
+      fixedDisplayId: state.layout[id]?.fixedDisplayId,
+      widgetData: () => ({ panelId: id, box: state.layout[id] }),
+      getBg: () => state.layout[id]?.bg || "",
+      setBg: (color) => {
+        state.layout[id] = { ...state.layout[id], bg: color };
+        persistLayout();
+      },
+      onTransferred: () => {
+        delete state.layout[id];
+        el.remove();
+        persistLayout();
+        window.edexEffects?.stop?.();
+        window.edexEffects?.start?.();
+      },
+      onLock: () => {
+        state.layout[id] = { ...state.layout[id], locked: !state.layout[id].locked };
+        setCardLocked(el, Boolean(state.layout[id].locked));
+        persistLayout();
+      },
+          setFixedDisplay: (displayId) => {
+            state.layout[id] = { ...state.layout[id], fixedDisplayId: displayId };
+            persistLayout();
+          },
+      onClose: () => closePanel(id)
+    }));
+    applyCardBg(el, state.layout[id]?.bg);
+    el.style.setProperty("--panel-font-scale", `${Math.max(0.7, Math.min(1.8, Number(state.layout[id]?.fontScale) || 1))}`);
+    makeInteractive(el, {
+      widgetType: "panel",
+      widgetId: id,
+      resizable: id !== "taskdock" || state.settings?.taskDockAutoGrow === false,
+      minW: id === "clock" && clockDisplayMode() === "analog" ? analogClockMinimum().px : undefined,
+      minH: id === "clock" && clockDisplayMode() === "analog" ? analogClockMinimum().px : undefined,
+      widgetData: () => ({ panelId: id, box: state.layout[id] }),
+      onTransferred: () => {
+        delete state.layout[id];
+        el.remove();
+        persistLayout();
+        window.edexEffects?.stop?.();
+        window.edexEffects?.start?.();
+      },
+      onMove: (x, y, w, h) => {
+        applyBoxPx(state.layout[id], x, y, w, h);
+      }
+    });
+  });
+  if (zoneAdjusted) persistLayout();
+
+  const desk = document.getElementById("card_desktop");
+  if (desk) {
+    bindCardTools(desk, () => menuItemsForCard("desktop", {
+      el: desk,
+      locked: state.desktopLocked,
+      widgetType: "desktop",
+      widgetId: "desktop",
+      widgetData: () => ({ box: state.desktopStage }),
+      getBg: () => state.desktopStage?.bg || "",
+      setBg: (color) => {
+        state.desktopStage = { ...state.desktopStage, bg: color };
+        persistLayout();
+      },
+      onTransferred: () => {
+        state.desktopEnabled = false;
+        persistLayout();
+        desk.remove();
+      },
+      onLock: () => {
+        state.desktopLocked = !state.desktopLocked;
+        setCardLocked(desk, state.desktopLocked);
+        persistLayout();
+      },
+      onClose: () => closeDesktopCard()
+    }));
+    applyCardBg(desk, state.desktopStage?.bg);
+    desk.style.setProperty("--panel-font-scale", `${Math.max(0.7, Math.min(1.8, Number(state.desktopFontScale) || 1))}`);
+    bindDeskTabs(desk);
+    bindDeskFilters(desk);
+    bindFileDrop(desk, () => activeDesktopDropDir(), async () => {
+      await refreshActiveDesktopView();
+    });
+    makeInteractive(desk, {
+      minW: 280,
+      minH: 200,
+      widgetType: "desktop",
+      widgetId: "desktop",
+      widgetData: () => ({ box: state.desktopStage }),
+      onTransferred: () => {
+        state.desktopEnabled = false;
+        persistLayout();
+        desk.remove();
+      },
+      onMove: (x, y, w, h) => {
+        applyBoxPx(state.desktopStage, x, y, w, h);
+      },
+      onEnd: () => persistLayout()
+    });
+  }
+
+  document.getElementById("add-fab")?.addEventListener("click", () => openAddPicker());
+  document.getElementById("settings-fab")?.addEventListener("click", () => openSettings());
+  if (state.primary) {
+    document.getElementById("quit-fab")?.addEventListener("click", () => {
+      if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?")) shutdown();
+    });
+  }
+
+  applyClockMetrics();
+  renderClock();
+  if (state.clockTimer) {
+    clearInterval(state.clockTimer);
+    cancelAnimationFrame(state.clockTimer);
+  }
+  // 4Hz is enough for LED tenths; 10Hz was rewriting hundreds of DOM nodes.
+  state.clockTimer = setInterval(renderClock, 250);
+  window.__edexTheme = state.theme;
+  applyRainMetrics();
+  window.edexEffects?.start?.();
+  applyRainMetrics();
+  bindCalendar();
+  fillDrivesStage();
+  bindFileSearch();
+  bindPluginPanels();
+}
+
+/** Wire optional plugin modules after their card DOM exists. */
+function bindPluginPanels() {
+  if (state.layout.cockpit) window.cockpitPanel?.bind?.(state);
+  if (state.layout.cassette) window.cassettePanel?.bind?.(state);
+  if (state.layout.ddj) window.ddjPanel?.bind?.(state);
+  if (state.layout.cpuRail) window.cpuRailPanel?.bind?.(state);
+  if (state.layout.calculator) window.calculatorPanel?.bind?.(state);
+  if (state.layout.dock) window.dockPanel?.bind?.(state);
+  else window.dockPanel?.unbind?.(state);
+  if (state.layout.weather) bindWeatherPanel();
+  bindLogPanel();
+  bindAutostartPanel();
+}
+
+let logPanelTimer = null;
+
+function formatLogTimestamp(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return String(value || "");
+  const pad = (part, length = 2) => String(part).padStart(length, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+    + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+}
+
+function bindLogPanel() {
+  if (logPanelTimer) clearInterval(logPanelTimer);
+  logPanelTimer = null;
+  const root = document.getElementById("mod_log");
+  if (!root || !window.edex?.getAppLog) return;
+  const list = root.querySelector("[data-log-list]");
+  const level = root.querySelector("[data-log-level]");
+  const file = root.querySelector("[data-log-file]");
+  const load = async () => {
+    try {
+      const result = await window.edex.getAppLog(300);
+      if (file) file.textContent = result.file || "Log-Datei nicht verfügbar";
+      const selected = level?.value || "all";
+      const entries = (result.entries || []).filter((entry) => selected === "all" || entry.level === selected);
+      if (!list) return;
+      list.innerHTML = entries.map((entry) => {
+        const details = entry.details == null ? "" : ` ${JSON.stringify(entry.details)}`;
+        return `<div class="log-entry log-${escapeHtml(entry.level || "info")}"><time>${escapeHtml(formatLogTimestamp(entry.time))}</time><b>${escapeHtml(String(entry.level || "INFO").toUpperCase())}</b><span>${escapeHtml(String(entry.event || ""))}</span><em>${escapeHtml(`${entry.message || ""}${details}`)}</em></div>`;
+      }).join("") || `<div class="log-empty">Keine Einträge für diesen Filter</div>`;
+      list.scrollTop = list.scrollHeight;
+    } catch (error) {
+      if (list) list.innerHTML = `<div class="log-empty">${escapeHtml(error.message || "Log konnte nicht gelesen werden")}</div>`;
+    }
+  };
+  level?.addEventListener("change", load);
+  root.querySelector("[data-log-refresh]")?.addEventListener("click", load);
+  load();
+  logPanelTimer = setInterval(load, 3000);
+}
+
+let autostartPanelTimer = null;
+
+function bindAutostartPanel() {
+  if (autostartPanelTimer) clearInterval(autostartPanelTimer);
+  autostartPanelTimer = null;
+  const root = document.getElementById("mod_autostart");
+  if (!root || !window.edex?.listAutostartItems) return;
+  const list = root.querySelector("[data-autostart-list]");
+  const count = root.querySelector("[data-autostart-count]");
+  const load = async () => {
+    try {
+      const result = await window.edex.listAutostartItems();
+      const entries = Array.isArray(result?.items) ? result.items : [];
+      if (count) count.textContent = `${entries.length} Autostart-Einträge`;
+      if (!list) return;
+      list.innerHTML = entries.map((entry) => `
+        <div class="autostart-entry" title="${escapeHtml(entry.command || "")}">
+          <strong>${escapeHtml(entry.name || "Unbenannt")}</strong>
+          <span>${escapeHtml(entry.location || "Unbekannte Quelle")}</span>
+          <small>${escapeHtml(entry.user || "")}</small>
+          <em>${escapeHtml(entry.command || "Kein Befehl hinterlegt")}</em>
+        </div>`).join("") || `<div class="log-empty">Keine Autostart-Einträge gefunden</div>`;
+    } catch (error) {
+      if (list) list.innerHTML = `<div class="log-empty">${escapeHtml(error.message || "Autostart konnte nicht gelesen werden")}</div>`;
+    }
+  };
+  root.querySelector("[data-autostart-refresh]")?.addEventListener("click", load);
+  load();
+  autostartPanelTimer = setInterval(load, 10000);
+}
+
+function toggleIconView(kind, pathId) {
+  if (kind === "path") {
+    const card = state.pathCards.find((item) => item.id === pathId);
+    if (!card) return;
+    card.iconView = card.iconView === "list" ? "grid" : "list";
+    fillPathStage(card);
+    persistLayout();
+    toast(card.iconView === "list" ? "已切換為列表" : "已切換為網格");
+    return;
+  }
+  state.iconView = state.iconView === "list" ? "grid" : "list";
+  arrangeDesktop();
+  persistLayout();
+  toast(state.iconView === "list" ? "已切換為列表" : "已切換為網格");
+}
+
+function localBounds() {
+  return {
+    x: 0,
+    y: 0,
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+}
+
+function modalDialogWidth() {
+  return Math.min(760, window.innerWidth * 0.62);
+}
+
+function placeCentered(el, opts = {}) {
+  if (!el) return;
+  const b = localBounds();
+  const width = Math.min(opts.width || modalDialogWidth(), b.width * 0.92);
+  const maxH = Math.floor(b.height * 0.9);
+  el.style.width = `${width}px`;
+  el.style.maxWidth = "92vw";
+  el.style.maxHeight = `${maxH}px`;
+  el.style.left = `${(b.width - width) / 2}px`;
+  el.style.top = `${Math.max(16, (b.height - Math.min(el.offsetHeight || maxH, maxH)) / 2)}px`;
+  el.style.transform = "none";
+  el.classList.add("scrollable");
+  // After layout, re-center using real height.
+  requestAnimationFrame(() => {
+    const h = Math.min(el.offsetHeight, maxH);
+    el.style.top = `${Math.max(16, (b.height - h) / 2)}px`;
+  });
+}
+
+function pathTitle(card, index) {
+  return card?.name?.trim() || (card?.path ? card.path.split(/[/\\]/).filter(Boolean).pop() : `路徑 ${index + 1}`);
+}
+
+function ensurePathTabs(card) {
+  if (!card) return [];
+  if (!Array.isArray(card.tabs) || !card.tabs.length) {
+    card.tabs = [{
+      id: `${card.id}:root`,
+      path: card.path,
+      name: card.name,
+      listing: card.listing,
+      scan: card.scan,
+      listingError: card.listingError
+    }];
+    card.activeTabId = card.tabs[0].id;
+  }
+  return card.tabs;
+}
+
+function syncPathTab(card) {
+  const tab = ensurePathTabs(card).find((item) => item.id === card.activeTabId) || ensurePathTabs(card)[0];
+  if (!tab) return;
+  card.activeTabId = tab.id;
+  Object.assign(tab, {
+    path: card.path,
+    name: card.name,
+    listing: card.listing,
+    scan: card.scan,
+    listingError: card.listingError
+  });
+}
+
+function activatePathTab(card, tabId) {
+  syncPathTab(card);
+  const tab = ensurePathTabs(card).find((item) => item.id === tabId);
+  if (!tab) return;
+  card.activeTabId = tab.id;
+  card.path = tab.path;
+  card.name = tab.name;
+  card.listing = tab.listing;
+  card.scan = tab.scan;
+  card.listingError = tab.listingError || "";
+  state.activePathId = card.id;
+  renderPathCards();
+  scanCard(card);
+}
+
+function closePathTab(card, tabId) {
+  const tabs = ensurePathTabs(card);
+  const index = tabs.findIndex((tab) => tab.id === tabId);
+  if (index < 0) return;
+  if (tabs.length === 1) {
+    removePath(card.id);
+    return;
+  }
+
+  const closingActive = card.activeTabId === tabId;
+  tabs.splice(index, 1);
+  if (closingActive) {
+    const next = tabs[Math.min(index, tabs.length - 1)];
+    card.activeTabId = next.id;
+    card.path = next.path;
+    card.name = next.name;
+    card.listing = next.listing;
+    card.scan = next.scan;
+    card.listingError = next.listingError || "";
+  }
+  persistLayout();
+  renderPathCards();
+  if (closingActive) scanCard(card);
+}
+
+function listingItems(listing) {
+  if (!listing) return [];
+  return [...(listing.destFolders || []), ...(listing.items || [])];
+}
+
+function fillPathTree(card) {
+  const tree = document.querySelector(`[data-path-tree="${card.id}"]`);
+  if (!tree) return;
+  const folders = listingItems(card.listing || card.scan).filter((item) => item.isDirectory);
+  const rootLabel = card.name || folderTabTitle(card.path);
+  tree.innerHTML = `
+    <button type="button" class="path-tree-node root${card.path === card.tabs?.find((tab) => tab.id === card.activeTabId)?.path ? " current" : ""}" data-tree-path="${escapeHtml(card.path)}">
+      <span class="path-tree-chevron">⌄</span><span class="path-tree-icon">${fileBrowserTreeIcon(rootLabel, true)}</span><span>${escapeHtml(rootLabel)}</span>
+    </button>
+    <div class="path-tree-children">
+      ${folders.map((folder) => `
+        <button type="button" class="path-tree-node${folder.path === card.path ? " current" : ""}" data-tree-path="${escapeHtml(folder.path)}">
+          <span class="path-tree-chevron">›</span><span class="path-tree-icon">${fileBrowserTreeIcon(folder.displayName || folder.name)}</span><span>${escapeHtml(folder.displayName || folder.name)}</span>
+        </button>`).join("")}
+    </div>`;
+  tree.querySelectorAll("[data-tree-path]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const target = button.dataset.treePath;
+      if (target && target !== card.path) {
+        navigatePathCard(card, target, button.textContent.trim());
+      }
+    });
+  });
+}
+
+function navigatePathCard(card, targetPath, name = "") {
+  const tab = ensurePathTabs(card).find((item) => item.id === card.activeTabId) || ensurePathTabs(card)[0];
+  if (!tab) return;
+  if (tab.path && tab.path !== targetPath) {
+    tab.backStack = [...(tab.backStack || []), { path: tab.path, name: tab.name }].slice(-50);
+    tab.forwardStack = [];
+  }
+  tab.path = targetPath;
+  tab.name = name || folderTabTitle(targetPath);
+  tab.listing = null;
+  tab.scan = null;
+  tab.listingError = "";
+  card.path = tab.path;
+  card.name = tab.name;
+  card.listing = null;
+  card.scan = null;
+  card.listingError = "";
+  syncPathTab(card);
+  renderPathCards();
+  scanCard(card);
+}
+
+function navigatePathCardHistory(card, direction) {
+  const tab = ensurePathTabs(card).find((item) => item.id === card.activeTabId);
+  if (!tab) return;
+  const source = direction === "back" ? tab.backStack : tab.forwardStack;
+  const target = source?.pop();
+  if (!target) return;
+  const current = { path: tab.path, name: tab.name };
+  const other = direction === "back" ? tab.forwardStack : tab.backStack;
+  other.push(current);
+  tab.path = target.path;
+  tab.name = target.name;
+  tab.listing = null;
+  tab.scan = null;
+  tab.listingError = "";
+  card.path = tab.path;
+  card.name = tab.name;
+  card.listing = null;
+  card.scan = null;
+  card.listingError = "";
+  syncPathTab(card);
+  renderPathCards();
+  scanCard(card);
+}
+
+function navigatePathCardUp(card) {
+  const current = String(card?.path || "").replace(/[\\/]+$/, "");
+  const parent = current.replace(/[\\/][^\\/]+$/, "");
+  if (!parent || parent === current) return;
+  navigatePathCard(card, parent, folderTabTitle(parent));
+}
+
+function fillPathStage(card) {
+  const stage = document.querySelector(`[data-path-stage="${card.id}"]`);
+  if (!stage) return;
+  fillPathTree(card);
+  const query = String(card.fileSearch || "").trim().toLocaleLowerCase();
+  const items = listingItems(card.listing || card.scan)
+    .filter((item) => !query || String(item.displayName || item.name || "").toLocaleLowerCase().includes(query));
+  const updateInfo = () => {
+    const info = document.querySelector(`[data-path-info="${card.id}"]`);
+    if (!info) return;
+    const selected = selectedPathsInStage(stage).length;
+    info.querySelector("[data-path-info-total]").textContent = `${items.length} Element${items.length === 1 ? "" : "e"}`;
+    info.querySelector("[data-path-info-selected]").textContent = `${selected} ausgewählt`;
+  };
+  const view = card.iconView === "list" ? "list" : "grid";
+  const iconScale = Math.max(0.6, Math.min(2, Number(card.fileIconScale) || Number(state.settings.pathIconScale) || 1));
+  const fontScale = Math.max(0.7, Math.min(1.8, Number(card.fileFontScale) || Number(state.settings.pathFontScale) || 1));
+  const browserBody = stage.closest(".path-browser-body");
+  browserBody?.style.setProperty("--path-font-size", `${fontScale}em`);
+  stage.style.setProperty("--path-icon-size", `${3.2 * iconScale}rem`);
+  stage.style.setProperty("--path-list-icon-size", `${2 * iconScale}rem`);
+  stage.style.setProperty("--path-grid-min", `${6.6 * iconScale}rem`);
+  stage.style.setProperty("--path-font-size", `${fontScale}em`);
+  stage.style.setProperty("--path-label-size", `${0.78 * fontScale}rem`);
+  const fileOpts = {
+    destDir: card.path,
+    pathCardId: card.id,
+    onRefresh: () => scanCard(card),
+    onSelectionChange: updateInfo
+  };
+  stage.classList.toggle("view-list", view === "list");
+  stage.classList.toggle("view-grid", view === "grid");
+  if (!items.length) {
+    stage.innerHTML = card.listingError
+      ? `<p class="path-empty">${escapeHtml(card.listingError)}</p>`
+      : `<p class="path-empty">${card.scanning ? "讀取中…" : "此資料夾沒有可顯示的項目"}</p>`;
+    window.edexI18n?.translatePage?.(stage);
+    bindFileStage(stage, fileOpts);
+    updateInfo();
+    return;
+  }
+  fillIconStage(stage, items, { draggable: false, view, ...fileOpts });
+  window.edexI18n?.translatePage?.(stage);
+  updateInfo();
+}
+
+async function scanCard(card) {
+  if (!card?.path) return;
+  if (card.scanning) {
+    while (card.scanning) await delay(40);
+    return;
+  }
+  card.scanning = true;
+  card.listingError = "";
+  fillPathStage(card);
+    try {
+    card.listing = await window.edex.listFolder(card.path);
+      if (card.listing?.readError) throw new Error(card.listing.readError);
+      syncPathTab(card);
+    fillPathStage(card);
+    if (card.id === state.activePathId) {
+      try {
+        card.scan = await window.edex.scan(card.path);
+        syncPathTab(card);
+        state.scan = card.scan;
+        await refreshPlan();
+        renderStats();
+        arrangeDesktop();
+      } catch {
+        // Listing can still show even if organize scan fails.
+      }
+      log(`掃描 ${card.path}：${card.listing.total} 個項目`);
+    }
+  } catch (err) {
+    card.listing = { items: [], total: 0 };
+    card.listingError = err.message || "無法讀取資料夾";
+    syncPathTab(card);
+    fillPathStage(card);
+    toast(card.listingError);
+    log(`讀取失敗：${card.listingError}`);
+  } finally {
+    card.scanning = false;
+    fillPathStage(card);
+  }
+}
+
+function activeCard() {
+  return state.pathCards.find((card) => card.id === state.activePathId) || state.pathCards[0];
+}
+
+function renderPathCards() {
+  document.querySelectorAll(".path-card").forEach((el) => el.remove());
+  const workspace = document.getElementById("workspace");
+  state.pathCards.forEach((card, index) => {
+    if (card.minimized) return;
+    ensurePathTabs(card);
+    const el = document.createElement("section");
+    const locked = Boolean(card.locked);
+    el.className = `path-card${card.id === state.activePathId ? " active-path" : ""}${locked ? " locked" : ""}`;
+    el.id = `path_${card.id}`;
+    el.style.cssText = styleFromBox(card);
+    el.innerHTML = `
+      <h3 class="card-title path-card-header">
+        <button type="button" class="path-tab-scroll" data-path-tab-scroll="-1" aria-label="Tabs nach links scrollen" title="Tabs nach links scrollen">‹</button>
+        <div class="path-tab-bar" role="tablist">${ensurePathTabs(card).map((tab) => `<div class="path-tab${tab.id === card.activeTabId ? " active" : ""}" data-path-tab="${escapeHtml(tab.id)}" role="tab" aria-selected="${tab.id === card.activeTabId ? "true" : "false"}" title="${escapeHtml(tab.path || "")}"><span class="path-tab-label">${escapeHtml(tab.name || pathTitle(tab, 0))}</span><button type="button" class="path-tab-close" data-close-path-tab="${escapeHtml(tab.id)}" aria-label="Tab schließen" title="Tab schließen">×</button></div>`).join("")}</div>
+        <button type="button" class="path-tab-scroll" data-path-tab-scroll="1" aria-label="Tabs nach rechts scrollen" title="Tabs nach rechts scrollen">›</button>
+        ${cardToolsHtml()}
+      </h3>
+      <div class="path-browser-toolbar">
+        <button type="button" data-path-back title="Zurück" ${ensurePathTabs(card).find((tab) => tab.id === card.activeTabId)?.backStack?.length ? "" : "disabled"}>←</button>
+        <button type="button" data-path-forward title="Vorwärts" ${ensurePathTabs(card).find((tab) => tab.id === card.activeTabId)?.forwardStack?.length ? "" : "disabled"}>→</button>
+        <button type="button" data-path-up title="Übergeordneten Ordner öffnen">↑</button>
+        <button type="button" data-path-refresh title="Ordner aktualisieren">↻</button>
+        <input type="search" data-path-search placeholder="Dateien suchen …" value="${escapeHtml(card.fileSearch || "")}" aria-label="Dateien in diesem Ordner suchen">
+        <span class="path-text" title="${escapeHtml(card.path)}">${escapeHtml(card.path)}</span>
+      </div>
+      <div class="card-body path-browser-body">
+        <aside class="path-tree" data-path-tree="${card.id}" aria-label="Arbeitsbaum" style="--path-tree-width:${Number.isFinite(Number(card.treeWidth)) ? Number(card.treeWidth) : 192}px"></aside>
+        <div class="path-tree-resizer" data-path-tree-resizer="${card.id}" role="separator" aria-orientation="vertical" aria-label="Breite des Arbeitsbaums ändern" tabindex="0"></div>
+        <div class="path-browser-main">
+          <div class="path-stage view-${card.iconView === "list" ? "list" : "grid"}" data-path-stage="${card.id}"></div>
+        </div>
+      </div>
+      <footer class="path-info-bar" data-path-info="${card.id}">
+        <span data-path-info-total>0 Elemente</span>
+        <span data-path-info-selected>0 ausgewählt</span>
+      </footer>
+      <div class="resize-handle"></div>
+    `;
+    el.addEventListener("dblclick", () => setActivePath(card.id));
+    workspace.appendChild(el);
+    fillPathTree(card);
+    const browserBody = el.querySelector(".path-browser-body");
+    const tree = el.querySelector("[data-path-tree]");
+    const resizer = el.querySelector("[data-path-tree-resizer]");
+    const applyTreeWidth = (width) => {
+      const max = Math.max(180, (browserBody?.clientWidth || 640) * 0.45);
+      const next = Math.max(140, Math.min(max, width));
+      card.treeWidth = next;
+      if (tree) tree.style.setProperty("--path-tree-width", `${next}px`);
+    };
+    resizer?.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      resizer.setPointerCapture?.(event.pointerId);
+      window.edex?.setMouseIgnore?.(false);
+      const move = (moveEvent) => {
+        const rect = browserBody.getBoundingClientRect();
+        applyTreeWidth(moveEvent.clientX - rect.left);
+      };
+      const finish = () => {
+        resizer.releasePointerCapture?.(event.pointerId);
+        resizer.removeEventListener("pointermove", move);
+        resizer.removeEventListener("pointerup", finish);
+        persistLayout();
+      };
+      resizer.addEventListener("pointermove", move);
+      resizer.addEventListener("pointerup", finish, { once: true });
+    });
+    el.querySelectorAll("[data-path-tab]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        activatePathTab(card, button.dataset.pathTab);
+      });
+    });
+    const tabBar = el.querySelector(".path-tab-bar");
+    const updateTabScrollButtons = () => {
+      if (!tabBar) return;
+      const maxScroll = Math.max(0, tabBar.scrollWidth - tabBar.clientWidth);
+      el.querySelectorAll("[data-path-tab-scroll]").forEach((button) => {
+        const direction = Number(button.dataset.pathTabScroll);
+        button.disabled = direction < 0 ? tabBar.scrollLeft <= 1 : tabBar.scrollLeft >= maxScroll - 1;
+      });
+    };
+    tabBar?.addEventListener("scroll", updateTabScrollButtons, { passive: true });
+    el.querySelectorAll("[data-path-tab-scroll]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!tabBar) return;
+        const direction = Number(button.dataset.pathTabScroll) || 1;
+        tabBar.scrollLeft += direction * Math.max(144, tabBar.clientWidth * 0.7);
+        updateTabScrollButtons();
+      });
+    });
+    requestAnimationFrame(updateTabScrollButtons);
+    el.querySelectorAll("[data-close-path-tab]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closePathTab(card, button.dataset.closePathTab);
+      });
+    });
+    el.querySelector("[data-path-up]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      navigatePathCardUp(card);
+    });
+    el.querySelector("[data-path-back]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      navigatePathCardHistory(card, "back");
+    });
+    el.querySelector("[data-path-forward]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      navigatePathCardHistory(card, "forward");
+    });
+    el.querySelector("[data-path-refresh]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      scanCard(card);
+    });
+    el.querySelector("[data-path-search]")?.addEventListener("input", (event) => {
+      card.fileSearch = String(event.target.value || "");
+      fillPathStage(card);
+    });
+    bindCardTools(el, () => menuItemsForCard("path", {
+      el,
+      id: card.id,
+      path: card.path,
+      locked: Boolean(card.locked),
+      iconView: card.iconView,
+      widgetType: "path",
+      widgetId: card.id,
+      fixedDisplayId: card.fixedDisplayId,
+      widgetData: () => ({ path: card.path, box: { ...card }, locked: card.locked, iconView: card.iconView, bg: card.bg }),
+      getBg: () => card.bg || "",
+      setBg: (color) => {
+        card.bg = color;
+        persistLayout();
+      },
+      onTransferred: () => {
+        state.pathCards = state.pathCards.filter((c) => c.id !== card.id);
+        if (state.activePathId === card.id) {
+          state.activePathId = state.pathCards[0]?.id || null;
+        }
+        el.remove();
+        persistLayout();
+        doScan();
+      },
+      onLock: () => {
+        card.locked = !card.locked;
+        setCardLocked(el, Boolean(card.locked));
+        persistLayout();
+      },
+      setFixedDisplay: (displayId) => {
+        card.fixedDisplayId = displayId;
+        persistLayout();
+      },
+      onClose: () => {
+        state.pathCards = state.pathCards.filter((c) => c.id !== card.id);
+        if (state.activePathId === card.id) {
+          state.activePathId = state.pathCards[0]?.id || null;
+        }
+        el.remove();
+        persistLayout();
+        doScan();
+        toast("Ordner-Panel geschlossen");
+      }
+    }));
+    makeInteractive(el, {
+      minW: 280,
+      minH: 220,
+      widgetType: "path",
+      widgetId: card.id,
+      widgetData: () => ({ path: card.path, box: { ...card }, locked: card.locked }),
+      onTransferred: () => {
+        state.pathCards = state.pathCards.filter((c) => c.id !== card.id);
+        if (state.activePathId === card.id) {
+          state.activePathId = state.pathCards[0]?.id || null;
+        }
+        el.remove();
+        persistLayout();
+        doScan();
+      },
+      onMove: (x, y, w, h) => {
+        applyBoxPx(card, x, y, w, h);
+      },
+      onEnd: () => {
+        fillPathStage(card);
+        persistLayout();
+      }
+    });
+    applyCardBg(el, card.bg);
+    bindFileDrop(el, () => card.path, async () => scanCard(card));
+    fillPathStage(card);
+    if (!card.listing) requestAnimationFrame(() => scanCard(card));
+    else requestAnimationFrame(() => fillPathStage(card));
+  });
+}
+
+async function setActivePath(id) {
+  state.activePathId = id;
+  renderPathCards();
+  await doScan();
+}
+
+async function changePath(id) {
+  const picked = await window.edex.pickFolder();
+  if (!picked) return;
+  const card = state.pathCards.find((item) => item.id === id);
+  card.path = picked;
+  persistLayout();
+  renderPathCards();
+  await scanCard(card);
+}
+
+function removePath(id) {
+  state.pathCards = state.pathCards.filter((card) => card.id !== id);
+  if (state.activePathId === id) state.activePathId = state.pathCards[0]?.id || null;
+  persistLayout();
+  renderPathCards();
+  doScan();
+}
+
+async function addPathCard() {
+  const picked = await window.edex.pickFolder();
+  if (!picked) return;
+  await addPathCardAt(picked);
+}
+
+async function addPathCardAt(folderPath, options = {}) {
+  const picked = String(folderPath || "").trim();
+  if (!picked || isVirtualPath(picked)) {
+    toast("Dieser Eintrag kann nicht als Ordner-Panel hinzugefügt werden");
+    return;
+  }
+  const comparablePath = (value) => String(value || "")
+    .trim()
+    .replace(/[\\/]+$/, "")
+    .toLowerCase();
+  const existing = state.pathCards.find(
+    (card) => comparablePath(card.path) === comparablePath(picked)
+  );
+  if (existing) {
+    if (existing.minimized) {
+      existing.minimized = false;
+      renderPathCards();
+    }
+    await setActivePath(existing.id);
+    toast("Dieses Ordner-Panel ist bereits vorhanden");
+    return;
+  }
+  const defaultName = picked.split(/[/\\]/).filter(Boolean).pop() || "Ordner-Panel";
+  const panelName = options.promptName === false
+    ? String(options.name || defaultName)
+    : await promptTextInput({
+      title: "Ordner-Panel anlegen",
+      hint: "Panel-Name",
+      value: defaultName,
+      okLabel: "Hinzufügen"
+    });
+  if (panelName == null) return;
+  const id = `p${Date.now()}`;
+  const placed = findEmptyBox({
+    id,
+    path: picked,
+    name: panelName.trim() || defaultName,
+    x: 18,
+    y: 16,
+    w: 46,
+    h: 52,
+    iconView: "grid",
+    fileIconScale: Math.max(0.6, Math.min(2, Number(state.settings.pathIconScale) || 1)),
+    fileFontScale: Math.max(0.7, Math.min(1.8, Number(state.settings.pathFontScale) || 1))
+  }, { pathId: id });
+  const occupied = occupiedLayoutRects({ pathId: id });
+  if (overlapsAny(pxFromBox(placed), occupied)) {
+    const targetCard = activeCard();
+    if (targetCard) {
+      ensurePathTabs(targetCard);
+      syncPathTab(targetCard);
+      const tab = {
+        id: `${targetCard.id}:${Date.now()}`,
+        path: picked,
+        name: panelName.trim() || defaultName,
+        listing: null,
+        scan: null,
+        listingError: ""
+      };
+      targetCard.tabs.push(tab);
+      activatePathTab(targetCard, tab.id);
+      persistLayout();
+      toast(`Ordner als Tab „${tab.name}“ geöffnet`);
+      return;
+    }
+  }
+  state.pathCards.push(placed);
+  state.activePathId = id;
+  persistLayout();
+  renderPathCards();
+  const card = state.pathCards.find((item) => item.id === id);
+  await scanCard(card);
+  toast(`Ordner-Panel „${pathTitle(card, state.pathCards.length - 1)}“ hinzugefügt`);
+}
+
+async function renamePathPanel(id) {
+  const card = state.pathCards.find((item) => item.id === id);
+  if (!card) return;
+  const next = await promptTextInput({
+    title: "Ordner-Panel umbenennen",
+    hint: "Panel-Name",
+    value: pathTitle(card, 0),
+    okLabel: "Speichern"
+  });
+  if (next == null) return;
+  card.name = next.trim() || pathTitle({ path: card.path }, 0);
+  persistLayout();
+  renderPathCards();
+}
+
+function desktopItems() {
+  return listingItems(state.desktopListing);
+}
+
+async function loadDesktopListing(options = {}) {
+  const opts = {
+    decorate: "fast",
+    includeShell: false,
+    ...options
+  };
+  try {
+    // Fast FS listing + Electron icons (cached). Avoids PowerShell on every refresh.
+    state.desktopListing = await window.edex.listDesktopShortcuts(opts);
+  } catch {
+    try {
+      state.desktopListing = await window.edex.listDesktopFiles();
+    } catch {
+      state.desktopListing = { items: [], total: 0 };
+    }
+  }
+}
+
+async function fillDrivesStage() {
+  const stage = document.getElementById("drives-stage");
+  if (!stage) return;
+  const translate = (value) => window.edexI18n?.translateDynamic?.(value) || value;
+  try {
+    const listing = await window.edex.listDrives();
+    const items = listing.items || [];
+    if (!items.length) {
+      stage.innerHTML = `<p class="path-empty">${escapeHtml(translate("找不到本機磁碟"))}</p>`;
+      return;
+    }
+    stage.innerHTML = items.map((d) => `
+      <button type="button" class="drive-row" data-path="${escapeHtml(d.path)}">
+        ${iconSvg(d.icon) || `<svg class="drive-fallback" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="6" width="18" height="12" rx="1.5"/><rect x="5" y="9" width="4" height="2"/></svg>`}
+        <div class="drive-main">
+          <div class="drive-head">
+            <span class="drive-name">${escapeHtml(d.name)}</span>
+            <span class="drive-meta">${escapeHtml(d.freeLabel)} ${escapeHtml(translate("可用"))} / ${escapeHtml(d.totalLabel)}</span>
+          </div>
+          <div class="drive-bar"><i style="width:${d.pct}%"></i></div>
+          <div class="drive-foot">${escapeHtml(translate(d.type))}${d.fs ? ` · ${escapeHtml(d.fs)}` : ""} · ${escapeHtml(translate("已用"))} ${d.pct}%</div>
+        </div>
+      </button>
+    `).join("");
+    window.edexI18n?.translatePage?.(stage);
+    stage.querySelectorAll("[data-path]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const driveName = btn.querySelector(".drive-name")?.textContent?.trim() || btn.dataset.path;
+        addPathCardAt(btn.dataset.path, { name: driveName, promptName: false }).catch((err) => {
+          toast(err?.message || "Laufwerk-Panel konnte nicht geöffnet werden");
+        });
+      });
+    });
+    bindFileStage(stage, {
+      destDir: "",
+      itemFromNode: (node) => {
+        const target = node?.dataset?.path;
+        if (!target) return null;
+        return { path: target, name: node.querySelector(".drive-name")?.textContent || target, isDirectory: true, kind: "drive" };
+      },
+      onRefresh: () => fillDrivesStage()
+    });
+  } catch (err) {
+    stage.innerHTML = `<p class="path-empty">${escapeHtml(err.message || translate("無法讀取磁碟"))}</p>`;
+  }
+}
+
+function openInputDialog(title, fields) {
+  return new Promise((resolve) => {
+    const modal = document.createElement("div");
+    modal.className = "modal_popup info terminal-input-dialog";
+    modal.innerHTML = `
+      <h2>${escapeHtml(title)}</h2>
+      <form data-input-dialog-form>
+        ${fields.map((field) => `
+          <label class="settings-field">
+            <span>${escapeHtml(field.label)}</span>
+            <input type="${field.type === "number" ? "number" : "text"}"
+              data-input-dialog="${escapeHtml(field.id)}"
+              value="${escapeHtml(field.value || "")}"
+              placeholder="${escapeHtml(field.placeholder || "")}"
+              ${field.required ? "required" : ""}>
+          </label>
+        `).join("")}
+        <div class="modal-actions">
+          <button type="button" data-input-dialog-cancel>Abbrechen</button>
+          <button type="submit" data-input-dialog-submit>Übernehmen</button>
+        </div>
+      </form>
+    `;
+    const finish = (result) => {
+      modal.remove();
+      resolve(result);
+    };
+    document.body.appendChild(modal);
+    window.edexI18n?.translatePage?.(modal);
+    placeCentered(modal, { width: Math.min(520, window.innerWidth * 0.8) });
+    const first = modal.querySelector("[data-input-dialog]");
+    first?.focus();
+    modal.querySelector("[data-input-dialog-cancel]")?.addEventListener("click", () => finish(null));
+    modal.querySelector("[data-input-dialog-form]")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const result = {};
+      fields.forEach((field) => {
+        result[field.id] = modal.querySelector(`[data-input-dialog="${CSS.escape(field.id)}"]`)?.value || "";
+      });
+      finish(result);
+    });
+    modal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish(null);
+      }
+    });
+  });
+}
+
+function openConnectionDialog(type, current) {
+  const profiles = (state.settings.connectionProfiles || []).filter((profile) => profile.type === "ssh");
+  return new Promise((resolve) => {
+    let selected = profiles.find((profile) => profile.id === current?.profileId);
+    const values = selected || current || {};
+    const modal = document.createElement("div");
+    modal.className = "modal_popup info terminal-input-dialog";
+    modal.innerHTML = `
+      <h2>SSH-Verbindung</h2>
+      <form data-connection-form>
+        <label class="settings-field">
+          <span>Gespeichertes Profil</span>
+          <select data-connection-profile>
+            <option value="">Neue Verbindung</option>
+            ${profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label class="settings-field">
+          <span>Profilname zum Speichern</span>
+          <input type="text" data-connection-field="name" value="${escapeHtml(values.name || "")}" placeholder="z. B. Mein Server">
+        </label>
+        <label class="settings-field"><span>Host oder IP-Adresse</span><input required type="text" data-connection-field="host" value="${escapeHtml(values.host || "")}"></label>
+        <label class="settings-field"><span>Benutzer</span><input required type="text" data-connection-field="user" value="${escapeHtml(values.user || "")}"></label>
+        <label class="settings-field"><span>Port</span><input required type="number" min="1" max="65535" data-connection-field="port" value="${escapeHtml(String(values.port || 22))}"></label>
+        <label class="settings-field"><span>Privater Schlüssel (optional)</span><input type="text" data-connection-field="identityFile" value="${escapeHtml(values.identityFile || "")}"></label>
+        <div class="modal-actions">
+          <button type="button" data-connection-cancel>Abbrechen</button>
+          <button type="button" data-connection-delete ${selected ? "" : "disabled"}>Profil löschen</button>
+          <button type="button" data-connection-save>Profil speichern</button>
+          <button type="submit" data-connection-connect>Verbinden</button>
+        </div>
+      </form>
+    `;
+    const finish = (action) => {
+      modal.remove();
+      resolve(action);
+    };
+    const readValues = () => {
+      const result = { type };
+      modal.querySelectorAll("[data-connection-field]").forEach((field) => {
+        result[field.dataset.connectionField] = field.value.trim();
+      });
+      result.port = Number(result.port || 22);
+      return result;
+    };
+    const applyProfile = (profile) => {
+      modal.querySelectorAll("[data-connection-field]").forEach((field) => {
+        field.value = profile?.[field.dataset.connectionField] || (field.dataset.connectionField === "port" ? "22" : "");
+      });
+      modal.querySelector("[data-connection-delete]").disabled = !profile;
+    };
+    document.body.appendChild(modal);
+    placeCentered(modal, { width: Math.min(620, window.innerWidth * 0.86) });
+    modal.querySelector("[data-connection-profile]")?.addEventListener("change", (event) => {
+      selected = profiles.find((profile) => profile.id === event.target.value);
+      applyProfile(selected);
+    });
+    modal.querySelector("[data-connection-cancel]")?.addEventListener("click", () => finish(null));
+    modal.querySelector("[data-connection-delete]")?.addEventListener("click", () => {
+      const id = modal.querySelector("[data-connection-profile]")?.value;
+      if (id) finish({ action: "delete", id });
+    });
+    modal.querySelector("[data-connection-save]")?.addEventListener("click", () => {
+      const result = readValues();
+      if (!result.name) {
+        toast("Bitte einen Profilnamen eingeben");
+        return;
+      }
+      finish({ action: "save", profile: { ...result, id: selected?.id || "" } });
+    });
+    modal.querySelector("[data-connection-form]")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const result = readValues();
+      if (type === "ssh" && (!result.host || !result.user || !Number.isInteger(result.port) || result.port < 1 || result.port > 65535)) {
+        toast("Bitte Host, Benutzer und einen gültigen Port eingeben");
+        return;
+      }
+      finish({ action: "connect", profile: { ...result, id: selected?.id || "" } });
+    });
+    modal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish(null);
+      }
+    });
+    modal.querySelector("[data-connection-field]")?.focus();
+  });
+}
+
+async function updateConnectionProfiles(action) {
+  const profiles = [...(state.settings.connectionProfiles || [])];
+  if (action.action === "delete") {
+    const next = profiles.filter((profile) => profile.id !== action.id);
+    const result = await window.edex.saveSettings({ connectionProfiles: next });
+    state.settings = result?.settings || { ...state.settings, connectionProfiles: next };
+  } else if (action.action === "save") {
+    const profile = { ...action.profile, id: action.profile.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+    const next = profiles.filter((item) => item.id !== profile.id && item.name !== profile.name);
+    next.unshift(profile);
+    const result = await window.edex.saveSettings({ connectionProfiles: next.slice(0, 50) });
+    state.settings = result?.settings || { ...state.settings, connectionProfiles: next.slice(0, 50) };
+  }
+}
+
+function terminalParentPath(value) {
+  const target = String(value || "").replace(/[\\/]+$/, "");
+  if (target.startsWith("/") || target.startsWith("~")) {
+    if (!target || target === "/") return "/";
+    const parent = target.slice(0, target.lastIndexOf("/"));
+    return parent || (target.startsWith("~") ? "~" : "/");
+  }
+  const root = /^[A-Za-z]:$/.test(target) ? `${target}\\` : target.slice(0, Math.max(0, target.lastIndexOf("\\")));
+  return root || target;
+}
+
+async function refreshTerminalFileBrowser(id, pane) {
+  const browser = pane?.querySelector("[data-terminal-file-browser]");
+  if (!browser || !terminalBrowserState.get(id)?.open) return;
+  const state = terminalBrowserState.get(id);
+  const target = state.path || terminalCwds.get(id) || "";
+  if (!target) {
+    browser.innerHTML = `<div class="terminal-file-empty">Warte auf Arbeitsverzeichnis …</div>`;
+    return;
+  }
+  const requestId = (state.requestId || 0) + 1;
+  state.requestId = requestId;
+  try {
+    const isRemote = terminalModes.get(id) === "ssh";
+    const listing = isRemote
+      ? await window.edex.listRemoteTerminalFolder(id, target)
+      : await window.edex.listFolder(target, { systemIcons: "fast" });
+    if (listing?.error) throw new Error(listing.error);
+    if (terminalBrowserState.get(id)?.requestId !== requestId) return;
+    state.path = listing.root;
+    browser.innerHTML = `
+      <div class="terminal-file-head">
+        <button type="button" data-terminal-file-up title="Übergeordneten Ordner öffnen">↑</button>
+        <span title="${escapeHtml(listing.root)}">${escapeHtml(listing.root)}</span>
+        <button type="button" data-terminal-file-refresh title="Ordner aktualisieren">↻</button>
+      </div>
+      <div class="terminal-file-list">
+        ${listing.items.map((item) => `
+          <button type="button" class="terminal-file-item" data-terminal-file-path="${escapeHtml(item.path)}" data-terminal-file-directory="${item.isDirectory ? "1" : "0"}">
+            <span class="terminal-file-icon">${item.isDirectory ? "▣" : "·"}</span>
+            <span class="terminal-file-name" title="${escapeHtml(item.name)}">${escapeHtml(item.displayName || item.name)}</span>
+            <span class="terminal-file-meta">${escapeHtml(item.sizeLabel || "")}</span>
+          </button>`).join("") || `<div class="terminal-file-empty">Ordner ist leer</div>`}
+      </div>`;
+    browser.querySelector("[data-terminal-file-up]")?.addEventListener("click", () => {
+      state.path = terminalParentPath(state.path);
+      terminalCwds.set(id, state.path);
+      window.edex.changeTerminalDirectory(id, state.path);
+      refreshTerminalFileBrowser(id, pane);
+    });
+    browser.querySelector("[data-terminal-file-refresh]")?.addEventListener("click", () => refreshTerminalFileBrowser(id, pane));
+    browser.querySelectorAll("[data-terminal-file-path]").forEach((item) => item.addEventListener("dblclick", () => {
+      const nextPath = item.dataset.terminalFilePath;
+      if (item.dataset.terminalFileDirectory === "1") {
+        state.path = nextPath;
+        terminalCwds.set(id, nextPath);
+        window.edex.changeTerminalDirectory(id, nextPath);
+        refreshTerminalFileBrowser(id, pane);
+      } else {
+        if (terminalModes.get(id) !== "ssh") window.edex.openPath(nextPath);
+      }
+    }));
+    if (!terminalBrowserTimers.has(id) && terminalModes.get(id) !== "ssh") {
+      terminalBrowserTimers.set(id, setInterval(() => refreshTerminalFileBrowser(id, pane), 2000));
+    }
+  } catch (error) {
+    browser.innerHTML = `<div class="terminal-file-empty">${escapeHtml(error.message || "Ordner konnte nicht gelesen werden")}</div>`;
+  }
+}
+
+function fitTerminalPane(id, terminal, output, attempt = 0) {
+  const fitAddon = terminalFitAddons.get(id);
+  if (!terminal || !fitAddon || terminalInstances.get(id) !== terminal
+    || !output?.isConnected || !terminal.element?.isConnected
+    || output.clientWidth < 2 || output.clientHeight < 2) return;
+  if (attempt < 12) {
+    const dimensions = terminal._core?._renderService?.dimensions;
+    if (!dimensions?.css?.width || !dimensions?.css?.height) {
+      requestAnimationFrame(() => fitTerminalPane(id, terminal, output, attempt + 1));
+      return;
+    }
+  }
+  try {
+    fitAddon.fit();
+  } catch (error) {
+    const message = String(error?.message || error || "");
+    if (attempt < 20 && message.includes("dimensions")) {
+      setTimeout(() => fitTerminalPane(id, terminal, output, attempt + 1), 50);
+      return;
+    }
+    if (!message.includes("dimensions")) window.edex?.logError?.("terminal.fit", "Terminalgröße konnte nicht angepasst werden", {
+      paneId: id,
+      message
+    });
+  }
+}
+
+function disposeTerminalInstance(id) {
+  terminalResizeObservers.get(id)?.disconnect();
+  terminalResizeObservers.delete(id);
+  terminalFitAddons.delete(id);
+  terminalInstances.get(id)?.dispose();
+  terminalInstances.delete(id);
+}
+
+function disposeAllTerminalInstances() {
+  terminalResizeObservers.forEach((observer) => observer.disconnect());
+  terminalResizeObservers.clear();
+  terminalFitAddons.clear();
+  terminalInstances.forEach((terminal) => terminal.dispose());
+  terminalInstances.clear();
+}
+
+function applyTerminalTheme(theme) {
+  const config = theme?.terminal || {};
+  const colors = theme?.colors || {};
+  const accent = `#${[colors.r ?? 0, colors.g ?? 234, colors.b ?? 255]
+    .map((value) => Number(value).toString(16).padStart(2, "0")).join("")}`;
+  const terminalOptions = {
+    fontFamily: `"${config.fontFamily || "Fira Mono"}", "Share Tech Mono", Consolas, monospace`,
+    cursorStyle: config.cursorStyle || "block",
+    theme: {
+      background: config.background || colors.light_black || "#01080b",
+      foreground: config.foreground || accent,
+      cursor: config.cursor || config.foreground || accent
+    }
+  };
+  for (const terminal of terminalInstances.values()) {
+    terminal.setOption("fontFamily", terminalOptions.fontFamily);
+    terminal.setOption("cursorStyle", terminalOptions.cursorStyle);
+    terminal.setOption("theme", terminalOptions.theme);
+    terminal.refresh(0, Math.max(0, terminal.rows - 1));
+  }
+}
+
+function bindTerminal() {
+  const root = document.querySelector(".terminal-root");
+  if (!root) return;
+  const grid = root.querySelector("[data-terminal-grid]");
+  const status = root.querySelector("[data-terminal-status]");
+  if (!grid) return;
+  if (!terminalBridgeBound) {
+    terminalBridgeBound = true;
+    window.edex.onTerminalData(({ paneId, data }) => {
+      const next = `${terminalBuffers.get(paneId) || ""}${data}`.slice(-100000);
+      terminalBuffers.set(paneId, next);
+      const terminal = terminalInstances.get(paneId);
+      if (!terminal) return;
+      const activeBuffer = terminal.buffer?.active;
+      const wasAtBottom = !activeBuffer
+        || activeBuffer.viewportY >= activeBuffer.baseY;
+      terminal.write(data, () => {
+        if (wasAtBottom) terminal.scrollToBottom?.();
+      });
+    });
+    window.edex.onTerminalCwd(({ paneId, cwd }) => {
+      if (!paneId || !cwd) return;
+      terminalCwds.set(paneId, cwd);
+      const browserState = terminalBrowserState.get(paneId);
+      if (browserState) browserState.path = cwd;
+      const pane = root.querySelector(`[data-terminal-pane="${CSS.escape(paneId)}"]`);
+      if (pane && terminalBrowserState.get(paneId)?.open) refreshTerminalFileBrowser(paneId, pane);
+    });
+    window.edex.onTerminalExit(({ paneId }) => {
+      terminalInstances.get(paneId)?.writeln("\r\n[Terminal beendet]");
+    });
+  }
+  if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
+  grid.style.setProperty("--terminal-columns", terminalGridMode === "1x1" ? "1" : "2");
+  const layoutSelect = root.querySelector("[data-terminal-layout]");
+  if (layoutSelect) layoutSelect.value = terminalGridMode;
+  disposeAllTerminalInstances();
+  terminalBrowserTimers.forEach((timer) => clearInterval(timer));
+  terminalBrowserTimers.clear();
+  grid.innerHTML = terminalPaneIds.map((id, index) => `
+    <section class="terminal-pane" data-terminal-pane="${id}">
+      <header class="terminal-pane-head"><span data-terminal-title>PowerShell-Konsole</span><span class="terminal-pane-actions"><select class="terminal-select" data-terminal-mode aria-label="Terminalansicht"><option value="shell">SHELL</option><option value="ssh">SSH</option></select><button type="button" class="terminal-mode-action" data-terminal-browser>FILES</button><button type="button" class="terminal-close" data-terminal-close aria-label="Grid schließen" title="Grid schließen">×</button></span></header>
+      <div class="terminal-pane-body">
+        <div class="terminal-output" data-terminal-output aria-label="Terminalausgabe"></div>
+        <aside class="terminal-file-browser" data-terminal-file-browser hidden></aside>
+      </div>
+    </section>`).join("");
+  terminalPaneIds.forEach((id) => {
+    const pane = grid.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
+    const output = pane?.querySelector("[data-terminal-output]");
+    const fileBrowser = pane?.querySelector("[data-terminal-file-browser]");
+    const modeSelect = pane?.querySelector("[data-terminal-mode]");
+    const title = pane?.querySelector("[data-terminal-title]");
+    if (!pane || !output || !fileBrowser) return;
+    const currentMode = terminalModes.get(id) || "shell";
+    if (modeSelect) modeSelect.value = currentMode;
+    if (title) title.textContent = currentMode === "ssh"
+      ? `SSH · ${terminalSshOptions.get(id)?.user || "?"}@${terminalSshOptions.get(id)?.host || "Ziel"}`
+      : "PowerShell-Konsole";
+    const existing = terminalInstances.get(id);
+    const terminalConfig = state.theme?.terminal || {};
+    const terminalAccent = `#${[state.theme?.colors?.r ?? 0, state.theme?.colors?.g ?? 234, state.theme?.colors?.b ?? 255]
+      .map((value) => Number(value).toString(16).padStart(2, "0")).join("")}`;
+    const terminal = existing || (window.Terminal ? new window.Terminal({
+      cursorBlink: true,
+      convertEol: true,
+      fontFamily: `"${terminalConfig.fontFamily || "Fira Mono"}", "Share Tech Mono", Consolas, monospace`,
+      fontSize: 13,
+      cursorStyle: terminalConfig.cursorStyle || "block",
+      theme: {
+        background: terminalConfig.background || state.theme?.colors?.light_black || "#01080b",
+        foreground: terminalConfig.foreground || terminalAccent,
+        cursor: terminalConfig.cursor || terminalConfig.foreground || terminalAccent
+      },
+      scrollback: 5000
+    }) : null);
+    if (!terminal) return;
+    if (!existing) {
+      terminalInstances.set(id, terminal);
+      terminal.open(output);
+      const fitAddon = new window.FitAddon.FitAddon();
+      terminal.loadAddon(fitAddon);
+      terminalFitAddons.set(id, fitAddon);
+      const bufferedOutput = terminalBuffers.get(id);
+      if (bufferedOutput) {
+        terminal.write(bufferedOutput, () => terminal.scrollToBottom?.());
+      }
+      terminal.onData((data) => window.edex.writeTerminal(id, data));
+      terminal.onResize(({ cols, rows }) => window.edex.resizeTerminal(id, cols, rows));
+    }
+    if (!terminalResizeObservers.has(id) && window.ResizeObserver) {
+      const resizeObserver = new window.ResizeObserver(() => {
+        requestAnimationFrame(() => fitTerminalPane(id, terminal, output));
+      });
+      resizeObserver.observe(output);
+      terminalResizeObservers.set(id, resizeObserver);
+    }
+    const browserButton = pane.querySelector("[data-terminal-browser]");
+    browserButton?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const browser = terminalBrowserState.get(id) || { open: false, path: "" };
+      browser.open = !browser.open;
+      terminalBrowserState.set(id, browser);
+      fileBrowser.hidden = !browser.open;
+      pane.classList.toggle("terminal-pane-files", browser.open);
+      browserButton.classList.toggle("on", browser.open);
+      if (browser.open) refreshTerminalFileBrowser(id, pane);
+    });
+    modeSelect?.addEventListener("change", async () => {
+      if (modeSelect.value === "ssh") {
+        const result = await openConnectionDialog("ssh", terminalSshOptions.get(id));
+        if (!result) {
+          modeSelect.value = terminalModes.get(id) || "shell";
+          return;
+        }
+        if (result.action !== "connect") {
+          await updateConnectionProfiles(result);
+          modeSelect.value = terminalModes.get(id) || "shell";
+          return;
+        }
+        const profile = result.profile;
+        terminalSshOptions.set(id, {
+          profileId: profile.id,
+          host: profile.host,
+          user: profile.user,
+          port: profile.port,
+          identityFile: profile.identityFile
+        });
+        terminalModes.set(id, "ssh");
+        window.edex.closeTerminal(id);
+        terminalStarted.delete(id);
+        bindTerminal();
+        return;
+      } else {
+        terminalStarted.delete(id);
+        terminalModes.set(id, "shell");
+        terminalSshOptions.delete(id);
+        bindTerminal();
+      }
+    });
+    pane.querySelector("[data-terminal-close]")?.addEventListener("click", () => {
+      window.edex.closeTerminal(id);
+      terminalStarted.delete(id);
+      terminalPaneIds.splice(terminalPaneIds.indexOf(id), 1);
+      terminalBuffers.delete(id);
+      disposeTerminalInstance(id);
+      if (!terminalPaneIds.length) terminalPaneIds.push(`terminal-${terminalNextPane++}`);
+      bindTerminal();
+    });
+    fitTerminalPane(id, terminal, output);
+    requestAnimationFrame(() => fitTerminalPane(id, terminal, output));
+    if (!terminalStarted.has(id) && window.edex?.createTerminal) {
+      terminalStarted.add(id);
+      const shellType = currentMode === "ssh" ? "ssh" : "powershell";
+      window.edex.createTerminal(id, terminalCwds.get(id), shellType, terminalSshOptions.get(id)).then((result) => {
+        if (!result?.cwd) return;
+        terminalCwds.set(id, result.cwd);
+        const browserState = terminalBrowserState.get(id);
+        if (browserState?.open) {
+          browserState.path = result.cwd;
+          refreshTerminalFileBrowser(id, pane);
+        }
+      }).catch?.((error) => {
+        terminalStarted.delete(id);
+        if (currentMode === "ssh") {
+          toast(error.message || "SSH-Sitzung konnte nicht gestartet werden");
+          terminalModes.set(id, "shell");
+        }
+      });
+    }
+    const browserState = terminalBrowserState.get(id);
+    if (browserState?.open) {
+      fileBrowser.hidden = false;
+      pane.classList.add("terminal-pane-files");
+      pane.querySelector("[data-terminal-browser]")?.classList.add("on");
+      if (modeSelect) modeSelect.value = "files";
+      refreshTerminalFileBrowser(id, pane);
+    }
+  });
+  root.querySelector("[data-terminal-add]")?.addEventListener("click", () => {
+    if (terminalPaneIds.length >= 4) return;
+    terminalPaneIds.push(`terminal-${terminalNextPane++}`);
+    bindTerminal();
+  });
+  root.querySelector("[data-terminal-layout]")?.addEventListener("change", (event) => {
+    terminalGridMode = event.target.value;
+    if (terminalGridMode === "2x2" && terminalPaneIds.length < 2) {
+      terminalPaneIds.push(`terminal-${terminalNextPane++}`);
+    }
+    bindTerminal();
+  });
+  window.addEventListener("resize", () => {
+    terminalInstances.forEach((terminal, id) => {
+      const pane = root.querySelector(`[data-terminal-pane="${CSS.escape(id)}"]`);
+      const output = pane?.querySelector("[data-terminal-output]");
+      fitTerminalPane(id, terminal, output);
+    });
+  }, { passive: true });
+  if (status) status.textContent = `${terminalPaneIds.length} Terminal-Sitzung${terminalPaneIds.length === 1 ? "" : "en"}`;
+}
+
+function formatSearchEngine(status) {
+  const engine = status?.engine === "everything" ? "Everything" : "Lokaler Index";
+  const count = Number(status?.count) || 0;
+  const extra = (status?.roots || []).length;
+  const bits = [engine];
+  if (status?.indexing) bits.push("Indexierung läuft");
+  else if (count) bits.push(`${count.toLocaleString()} Ergebnisse`);
+  if (extra) bits.push(`${extra} LAN-Pfade`);
+  if (status?.lastError) bits.push(status.lastError);
+  return bits.join(" · ");
+}
+
+function bindFileSearch() {
+  const input = document.getElementById("fs_query");
+  const go = document.getElementById("fs_go");
+  const results = document.getElementById("fs_results");
+  if (!input || !results) return;
+  let timer = 0;
+  let token = 0;
+  const run = async () => {
+    const query = input.value.trim();
+    const stamp = ++token;
+    if (!query) {
+      results.innerHTML = "";
+      await refreshSearchStatus();
+      return;
+    }
+    setText("fs_status", "Suche läuft …");
+    try {
+      const payload = await window.edex.searchFiles(query, 80);
+      if (stamp !== token) return;
+      renderSearchResults(payload, query);
+    } catch (err) {
+      if (stamp !== token) return;
+      results.innerHTML = `<p class="path-empty">${escapeHtml(err.message || "Suche fehlgeschlagen")}</p>`;
+      setText("fs_status", "Suche fehlgeschlagen");
+    }
+  };
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(run, 160);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      clearTimeout(timer);
+      run();
+    }
+  });
+  go?.addEventListener("click", () => {
+    clearTimeout(timer);
+    run();
+  });
+  results.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-path]");
+    if (!row) return;
+    window.edex.openPath(row.dataset.path);
+  });
+  bindFileStage(results, {
+    destDir: "",
+    allowCreate: false,
+    itemFromNode: (node) => {
+      const target = node?.dataset?.path;
+      if (!target) return null;
+      const name = node.querySelector(".fs-name")?.textContent || target;
+      return { path: target, name, isDirectory: false };
+    },
+    onRefresh: async () => {
+      const q = document.getElementById("fs_query")?.value?.trim();
+      if (q) document.getElementById("fs_go")?.click();
+    }
+  });
+  refreshSearchStatus();
+}
+
+function renderSearchResults(payload, query) {
+  const results = document.getElementById("fs_results");
+  if (!results) return;
+  const items = payload?.items || [];
+  setText("fs_status", `${formatSearchEngine(payload)} · ${items.length} Ergebnisse`);
+  if (!items.length) {
+    results.innerHTML = `<p class="path-empty">Keine Dateien für „${escapeHtml(query)}“ gefunden</p>`;
+    return;
+  }
+  results.innerHTML = items.map((item) => `
+    <button type="button" class="fs-row" data-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">
+      <span class="fs-name">${escapeHtml(item.name)}</span>
+      <span class="fs-path">${escapeHtml(item.dir || item.path)}</span>
+    </button>
+  `).join("");
+  window.edexI18n?.translatePage?.(results);
+}
+
+async function refreshSearchStatus() {
+  const el = document.getElementById("fs_status");
+  if (!el) return;
+  try {
+    const status = await window.edex.searchStatus();
+    el.textContent = formatSearchEngine(status) + " · Suchbegriff eingeben";
+  } catch {
+    el.textContent = "Suche noch nicht bereit";
+  }
+}
+
+async function addSearchFolder() {
+  const folder = await window.edex.pickSearchRoot();
+  if (!folder) return;
+  try {
+    await window.edex.addSearchRoot(folder);
+    toast(`Suchpfad hinzugefügt: ${folder}`);
+    refreshSearchStatus();
+  } catch (err) {
+    toast(err.message || "Pfad konnte nicht hinzugefügt werden");
+  }
+}
+
+function openLanPathPrompt() {
+  document.getElementById("lanPathEditor")?.closest(".modal_popup")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info";
+  modal.innerHTML = `
+    <h1>LAN-Pfad</h1>
+    <h2>例如 \\\\NAS\\share 或已對應的網路磁碟資料夾</h2>
+    <table id="lanPathEditor">
+      <tr><th>路徑</th><th><input id="lan_path_input" type="text" spellcheck="false" placeholder="\\\\伺服器\\分享" /></th></tr>
+    </table>
+    <div class="settings-footer">
+      <button type="button" id="lan-cancel">Abbrechen</button>
+      <button type="button" id="lan-ok">Hinzufügen und indizieren</button>
+    </div>`;
+  document.body.appendChild(modal);
+  window.edexI18n?.translatePage?.(modal);
+  const input = document.getElementById("lan_path_input");
+  if (input && window.edexI18n?.locale?.() !== "zh-Hant") input.placeholder = "\\\\Server\\Share";
+  input?.focus();
+  document.getElementById("lan-cancel").onclick = () => modal.remove();
+  document.getElementById("lan-ok").onclick = async () => {
+    const value = input.value.trim();
+    if (!value) return toast("Bitte einen Pfad eingeben");
+    try {
+      await window.edex.addSearchRoot(value);
+      modal.remove();
+      toast(`Hinzugefügt: ${value}`);
+      refreshSearchStatus();
+    } catch (err) {
+      toast(err.message || "Pfad konnte nicht hinzugefügt werden");
+    }
+  };
+  input?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") document.getElementById("lan-ok")?.click();
+  });
+}
+
+async function openSearchRootsEditor() {
+  document.getElementById("searchRootsEditor")?.closest(".modal_popup")?.remove();
+  let status;
+  try {
+    status = await window.edex.searchStatus();
+  } catch (err) {
+    toast(err.message || "Suchpfade konnten nicht gelesen werden");
+    return;
+  }
+  const roots = status.roots || [];
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info";
+  modal.innerHTML = `
+    <h1>Suchpfade</h1>
+    <h2>${status.includeLocal ? "Lokale Laufwerke eingeschlossen" : "Lokale Laufwerke nicht indiziert"} · ${status.engine === "everything" ? "Everything beschleunigt" : "Dateinamen-Index"}</h2>
+    <div id="searchRootsEditor" class="fs-roots">
+      ${roots.length
+        ? roots.map((root) => `
+          <div class="fs-root-row">
+            <span>${escapeHtml(root)}</span>
+            <button type="button" data-del-root="${escapeHtml(root)}">Entfernen</button>
+          </div>`).join("")
+        : `<p class="cal-editor-empty">Noch keine LAN-Pfade oder zusätzlichen Ordner hinzugefügt.</p>`}
+    </div>
+    <div class="settings-footer">
+      <button type="button" id="fs-local-toggle">${status.includeLocal ? "Lokale Laufwerke deaktivieren" : "Lokale Laufwerke aktivieren"}</button>
+      <button type="button" id="fs-roots-close">Schließen</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll("[data-del-root]").forEach((btn) => {
+    btn.onclick = async () => {
+      try {
+        await window.edex.removeSearchRoot(btn.dataset.delRoot);
+        toast("Suchpfad entfernt");
+        modal.remove();
+        openSearchRootsEditor();
+        refreshSearchStatus();
+      } catch (err) {
+        toast(err.message || "Pfad konnte nicht entfernt werden");
+      }
+    };
+  });
+  document.getElementById("fs-local-toggle").onclick = async () => {
+    await window.edex.setSearchLocal(!status.includeLocal);
+    modal.remove();
+    toast(status.includeLocal ? "Index lokaler Laufwerke deaktiviert" : "Index lokaler Laufwerke aktiviert");
+    openSearchRootsEditor();
+    refreshSearchStatus();
+  };
+  document.getElementById("fs-roots-close").onclick = () => modal.remove();
+}
+
+async function rebuildFileSearch() {
+  toast("Index wird neu erstellt …");
+  try {
+    await window.edex.searchRebuild();
+    toast("Index wurde neu erstellt");
+    refreshSearchStatus();
+  } catch (err) {
+    toast(err.message || "Index konnte nicht erstellt werden");
+  }
+}
+
+function dateKey(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function bindCalendar() {
+  if (!document.getElementById("cal_grid")) return;
+  document.getElementById("cal_prev")?.addEventListener("click", () => {
+    state.calCursor.setMonth(state.calCursor.getMonth() - 1);
+    renderCalendar();
+  });
+  document.getElementById("cal_next")?.addEventListener("click", () => {
+    state.calCursor.setMonth(state.calCursor.getMonth() + 1);
+    renderCalendar();
+  });
+  refreshCalendar();
+}
+
+async function refreshCalendar() {
+  try {
+    state.calNotes = await window.edex.getCalendarNotes() || {};
+  } catch {
+    state.calNotes = {};
+  }
+  renderCalendar();
+}
+
+function mondayIndex(jsDay) {
+  return (jsDay + 6) % 7;
+}
+
+function renderCalendar() {
+  const grid = document.getElementById("cal_grid");
+  const title = document.getElementById("cal_title");
+  if (!grid || !title) return;
+  const y = state.calCursor.getFullYear();
+  const m = state.calCursor.getMonth();
+  title.textContent = `${y} / ${m + 1}`;
+  const start = mondayIndex(new Date(y, m, 1).getDay());
+  const days = new Date(y, m + 1, 0).getDate();
+  const today = dateKey(new Date());
+  const cells = [];
+  for (let i = 0; i < start; i++) {
+    cells.push({ empty: true, sun: i === 6 });
+  }
+  for (let d = 1; d <= days; d++) {
+    const key = `${y}-${pad(m + 1)}-${pad(d)}`;
+    const jsDay = new Date(y, m, d).getDay();
+    cells.push({
+      empty: false,
+      key,
+      day: d,
+      sun: jsDay === 0,
+      holiday: window.edexMacauHolidays?.get(key) || "",
+      notes: state.calNotes[key] || [],
+      today: key === today,
+      selected: key === state.calSelected
+    });
+  }
+  while (cells.length < 42) {
+    cells.push({ empty: true, sun: cells.length % 7 === 6 });
+  }
+  grid.innerHTML = cells.map((cell) => {
+    if (cell.empty) {
+      return `<span class="cal-cell empty${cell.sun ? " sun" : ""}"></span>`;
+    }
+    const cls = ["cal-cell"];
+    if (cell.sun) cls.push("sun");
+    if (cell.today) cls.push("today");
+    if (cell.selected) cls.push("selected");
+    if (cell.holiday) cls.push("holiday");
+    if (cell.notes.length) cls.push("has-notes");
+    const holiday = cell.holiday
+      ? `<span class="cal-holiday" title="${escapeHtml(cell.holiday)}">${escapeHtml(cell.holiday)}</span>`
+      : "";
+    const previews = cell.notes.slice(0, 4).map((n, i) =>
+      `<span class="cal-preview">${i + 1}. ${escapeHtml(n.text)}</span>`
+    ).join("");
+    const more = cell.notes.length > 4 ? `<span class="cal-preview more">+${cell.notes.length - 4}</span>` : "";
+    return `<button type="button" class="${cls.join(" ")}" data-date="${cell.key}">
+      <span class="cal-num">${cell.day}</span>
+      ${holiday}
+      <span class="cal-previews">${previews}${more}</span>
+    </button>`;
+  }).join("");
+  grid.querySelectorAll("[data-date]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.calSelected = btn.dataset.date;
+      grid.querySelectorAll(".cal-cell.selected").forEach((el) => el.classList.remove("selected"));
+      btn.classList.add("selected");
+    });
+    btn.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openCalNoteEditor(btn.dataset.date);
+    });
+  });
+}
+
+function formatNotesForWeChat(dateKey, notes = []) {
+  const lines = [`${dateKey} Kalendereinträge`];
+  if (!notes.length) {
+    lines.push("(Keine Einträge)");
+  } else {
+    notes.forEach((n, i) => lines.push(`${i + 1}. ${n.text}`));
+  }
+  return lines.join("\n");
+}
+
+function openCalNoteEditor(key) {
+  document.getElementById("calNoteEditor")?.closest(".modal_popup")?.remove();
+  state.calSelected = key;
+  const notes = state.calNotes[key] || [];
+  const holiday = window.edexMacauHolidays?.get(key) || "";
+  let editingId = null;
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info cal-editor";
+  modal.innerHTML = `
+    <div class="cal-editor-head">
+      <div class="cal-editor-heading">
+        <h1>Kalendereinträge</h1>
+        <h2>${escapeHtml(key)}${holiday ? ` · ${escapeHtml(holiday)}` : ""}</h2>
+      </div>
+      <div class="cal-editor-actions">
+        <button type="button" id="cal-note-wechat">Zu WeChat kopieren</button>
+        <button type="button" id="cal-note-cancel">Schließen</button>
+      </div>
+    </div>
+    <div class="cal-editor-list" id="calNoteEditor">
+      ${notes.length
+        ? notes.map((n, i) => `
+          <div class="cal-editor-item" data-edit="${escapeHtml(n.id)}">
+            <span class="cal-editor-idx">${i + 1}.</span>
+            <span class="cal-editor-text">${escapeHtml(n.text)}</span>
+            <button type="button" data-edit-btn="${escapeHtml(n.id)}">Bearbeiten</button>
+            <button type="button" data-del="${escapeHtml(n.id)}">Löschen</button>
+          </div>`).join("")
+        : `<p class="cal-editor-empty">Für diesen Tag gibt es noch keine Einträge.</p>`}
+    </div>
+    <label class="cal-editor-label" for="cal_note_text" id="cal_note_label">Eintrag hinzufügen</label>
+    <textarea id="cal_note_text" rows="4" placeholder="Eintrag eingeben …"></textarea>
+    <div class="cal-editor-add">
+      <button type="button" id="cal-note-save">Eintrag hinzufügen</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  window.edexI18n?.translatePage?.(modal);
+  placeCentered(modal);
+  window.edex?.setMouseIgnore?.(false);
+  const input = modal.querySelector("#cal_note_text");
+  const label = modal.querySelector("#cal_note_label");
+  const saveBtn = modal.querySelector("#cal-note-save");
+  input?.focus();
+
+  const setEditMode = (id, text) => {
+    editingId = id || null;
+    modal.querySelectorAll(".cal-editor-item").forEach((el) => {
+      el.classList.toggle("active", Boolean(id) && el.dataset.edit === id);
+    });
+    if (id) {
+      label.textContent = "Eintrag bearbeiten";
+      saveBtn.textContent = window.edexI18n?.translateDynamic?.("儲存修改") || "Änderungen speichern";
+      input.value = text || "";
+      input.focus();
+    } else {
+      label.textContent = "Eintrag hinzufügen";
+      saveBtn.textContent = "Eintrag hinzufügen";
+      input.value = "";
+      input.focus();
+    }
+  };
+
+  const close = () => modal.remove();
+  modal.querySelector("#cal-note-cancel").onclick = close;
+
+  const startEdit = (id) => {
+    const note = (state.calNotes[key] || []).find((n) => n.id === id);
+    if (note) setEditMode(id, note.text);
+  };
+
+  modal.querySelectorAll("[data-edit]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("[data-del]")) return;
+      startEdit(row.dataset.edit);
+    });
+  });
+
+  modal.querySelectorAll("[data-del]").forEach((btn) => {
+    btn.onclick = async (event) => {
+      event.stopPropagation();
+      state.calNotes = await window.edex.removeCalendarNote(key, btn.dataset.del) || {};
+      renderCalendar();
+      close();
+      openCalNoteEditor(key);
+    };
+  });
+
+  modal.querySelector("#cal-note-wechat").onclick = async () => {
+    const list = state.calNotes[key] || [];
+    const text = formatNotesForWeChat(key, list);
+    await window.edex.copyText(text);
+    toast("Kopiert, bereit zum Einfügen in WeChat");
+  };
+
+  const save = async () => {
+    const text = input.value.trim();
+    if (!text) {
+      toast("Bitte einen Eintrag eingeben");
+      return;
+    }
+    let result;
+    if (editingId) {
+      result = await window.edex.updateCalendarNote(key, editingId, text);
+    } else {
+      result = await window.edex.addCalendarNote(key, text);
+    }
+    state.calNotes = result?.notes || result || {};
+    renderCalendar();
+    close();
+    openCalNoteEditor(key);
+  };
+  saveBtn.onclick = save;
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      save();
+    }
+  });
+}
+
+function parentDir(target) {
+  const value = String(target || "");
+  const idx = Math.max(value.lastIndexOf("\\"), value.lastIndexOf("/"));
+  return idx > 0 ? value.slice(0, idx) : "";
+}
+
+function isVirtualPath(target) {
+  const value = String(target || "");
+  return !value || /^shell:/i.test(value) || value.includes("::{") || value.startsWith("::");
+}
+
+function isDriveRoot(target) {
+  return /^[a-zA-Z]:\\?$/.test(String(target || "").trim());
+}
+
+function tagDotsHtml(tags) {
+  const list = Array.isArray(tags) ? tags : [];
+  if (!list.length) return "";
+  const dots = list.map((id) => {
+    const tag = MACOS_TAGS.find((t) => t.id === id);
+    if (!tag) return "";
+    return `<i class="tag-dot" style="background:${tag.color}" title="${escapeHtml(tag.label)}"></i>`;
+  }).join("");
+  return dots ? `<span class="tag-dots">${dots}</span>` : "";
+}
+
+const bindFileStage = (...args) => window.edexFolderPanel.bindFileStage(...args);
+const itemFromIcon = (...args) => window.edexFolderPanel.itemFromIcon(...args);
+const fileMenuItems = (...args) => window.edexFolderPanel.fileMenuItems(...args);
+const canNativeFileItem = (...args) => window.edexFolderPanel.canNativeFileItem(...args);
+const fileStageRoot = (...args) => window.edexFolderPanel.fileStageRoot(...args);
+const stageFileNodes = (...args) => window.edexFolderPanel.stageFileNodes(...args);
+const clearStageSelection = (...args) => window.edexFolderPanel.clearStageSelection(...args);
+const selectedPathsInStage = (...args) => window.edexFolderPanel.selectedPathsInStage(...args);
+const selectFileNode = (...args) => window.edexFolderPanel.selectFileNode(...args);
+const hideFileDragGhost = (...args) => window.edexFolderPanel.hideFileDragGhost(...args);
+const bindNativeFileDrag = (...args) => window.edexFolderPanel.bindNativeFileDrag(...args);
+const promptTextInput = (...args) => window.edexFolderPanel.promptTextInput(...args);
+const promptFolderName = (...args) => window.edexFolderPanel.promptFolderName(...args);
+const promptRename = (...args) => window.edexFolderPanel.promptRename(...args);
+const startRename = (...args) => window.edexFolderPanel.startRename(...args);
+
+function fillIconStage(stage, items, opts = {}) {
+  const view = opts.view === "list" ? "list" : "grid";
+  const listMode = view === "list";
+  const dragRoot = fileStageRoot(stage) || stage;
+  stage.classList.toggle("view-list", listMode);
+  stage.classList.toggle("view-grid", !listMode);
+  stage.innerHTML = "";
+  const gap = snapGap();
+
+  items.forEach((item) => {
+    const node = document.createElement("div");
+    node.className = "desk-icon";
+    if (isDesktopFavorite(item)) node.classList.add("favorite");
+    node.dataset.path = item.path;
+    node.dataset.name = item.name || "";
+    node.dataset.dir = item.isDirectory ? "1" : "0";
+    node.dataset.kind = item.kind || "";
+    if (item.targetPath) node.dataset.targetPath = item.targetPath;
+    if (item.targetIsDirectory) node.dataset.targetDir = "1";
+    node.dataset.tags = JSON.stringify(item.tags || []);
+    try {
+      node.dataset.itemJson = JSON.stringify({
+        path: item.path,
+        name: item.name,
+        displayName: item.displayName,
+        isDirectory: Boolean(item.isDirectory),
+        targetPath: item.targetPath || "",
+        targetIsDirectory: Boolean(item.targetIsDirectory),
+        kind: item.kind || "",
+        category: item.category || "",
+        size: Number(item.size) || 0,
+        sizeLabel: item.sizeLabel || "",
+        mtime: Number(item.mtime) || 0,
+        category: item.category || "",
+        tags: item.tags || []
+      });
+    } catch {
+      // ignore
+    }
+    const label = itemLabel(item);
+    node.title = "";
+    node.innerHTML = `<span class="desk-icon-face">${fileBrowserIcon(item)}${tagDotsHtml(item.tags)}</span><h3>${escapeHtml(label)}</h3><span class="meta">${escapeHtml(item.sizeLabel || "")}</span>`;
+    node.addEventListener("pointerenter", (event) => showFileBrowserTooltip(item, event));
+    node.addEventListener("pointermove", (event) => showFileBrowserTooltip(item, event));
+    node.addEventListener("pointerleave", hideFileBrowserTooltip);
+    node.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      holdOverlayHits(1500);
+    }, true);
+    // OS file drag — only after a real drag; do not steal double-clicks.
+    bindNativeFileDrag(node, item, dragRoot);
+    if (opts.draggable && !listMode) bindIconDrag(node, item, gap);
+    stage.appendChild(node);
+  });
+  bindFileStage(stage, {
+    destDir: opts.destDir || "",
+    allowCreate: opts.allowCreate,
+    desktopActions: opts.desktopActions,
+    onRefresh: opts.onRefresh
+  });
+}
+
+function bindIconDrag(node, item, gap) {
+  node.addEventListener("pointerdown", (event) => {
+    if (event.detail > 1) return;
+    event.preventDefault();
+    node.classList.add("dragging");
+    node.style.zIndex = String(++state.zTop);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origX = node.offsetLeft;
+    const origY = node.offsetTop;
+    const move = (ev) => {
+      let x = origX + (ev.clientX - startX);
+      let y = origY + (ev.clientY - startY);
+      if (state.settings.snapWidgets) {
+        x = Math.round(x / gap) * gap;
+        y = Math.round(y / gap) * gap;
+      }
+      x = Math.max(0, x);
+      y = Math.max(0, y);
+      node.style.left = `${x}px`;
+      node.style.top = `${y}px`;
+      state.iconPositions[item.path] = { x, y };
+    };
+    const up = () => {
+      node.classList.remove("dragging");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      persistLayout();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+
+function itemKindBucket(item) {
+  if (!item) return "other";
+  if (item.kind === "thispc" || item.kind === "recycle") return "icons";
+  const name = String(item.name || "");
+  if (/\.(lnk|url)$/i.test(name) || item.category === "shortcuts" || item.kind === "shortcut") {
+    return "icons";
+  }
+  if (item.isDirectory) return "folders";
+  return item.category || "other";
+}
+
+function desktopFavoritePath(itemOrPath) {
+  return String(typeof itemOrPath === "string" ? itemOrPath : itemOrPath?.path || "").trim();
+}
+
+function isDesktopFavorite(itemOrPath) {
+  const path = desktopFavoritePath(itemOrPath);
+  return Boolean(path) && state.desktopFavorites.includes(path);
+}
+
+async function toggleDesktopFavorite(item) {
+  const path = desktopFavoritePath(item);
+  if (!path) return;
+  const favorites = new Set(state.desktopFavorites);
+  if (favorites.has(path)) favorites.delete(path);
+  else favorites.add(path);
+  state.desktopFavorites = [...favorites];
+  try {
+    await window.edex.saveSettings({ desktopFavorites: state.desktopFavorites });
+    await persistLayout();
+  } catch (error) {
+    toast(error?.message || "Favorit konnte nicht gespeichert werden");
+    return;
+  }
+  arrangeDesktop();
+}
+
+state.isDesktopFavorite = isDesktopFavorite;
+state.toggleDesktopFavorite = toggleDesktopFavorite;
+
+function deskFilterBuckets() {
+  return [
+    { id: "folders", label: "文件夾" },
+    { id: "icons", label: "圖標" },
+    ...FILE_FORMAT_FILTERS
+  ];
+}
+
+function matchesDeskFilter(item, filter) {
+  if (filter === "favorites") return isDesktopFavorite(item);
+  const bucket = itemKindBucket(item);
+  if (!filter || filter === "all") return true;
+  if (filter === "files") return !["folders", "icons"].includes(bucket);
+  return bucket === filter;
+}
+
+const activeDesktopFolderTab = (...args) => window.edexFolderPanel.activeDesktopFolderTab(...args);
+const activeDesktopDropDir = (...args) => window.edexFolderPanel.activeDesktopDropDir(...args);
+const folderTabTitle = (...args) => window.edexFolderPanel.folderTabTitle(...args);
+
+function ensureDesktopEnabled() {
+  if (!state.primary) return false;
+  if (state.desktopEnabled !== false && document.getElementById("card_desktop")) return true;
+  state.desktopEnabled = true;
+  if (!state.desktopStage) state.desktopStage = findEmptyBox(defaultDesktop(), { desktop: true });
+  persistLayout();
+  // rebuildWorkspace keeps state.layout; never assign defaultWidgets() here.
+  rebuildWorkspace();
+  return Boolean(document.getElementById("card_desktop"));
+}
+
+/** Remove panel id(s) from all persisted display layouts (closed = gone forever). */
+async function purgePanelFromSavedLayouts(panelIds) {
+  const ids = (Array.isArray(panelIds) ? panelIds : [panelIds])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  if (!ids.length) return;
+  const layouts = state.settings?.displayLayouts;
+  if (!layouts || typeof layouts !== "object") return;
+  const next = {};
+  let changed = false;
+  for (const [displayId, entry] of Object.entries(layouts)) {
+    if (!entry?.layout) {
+      next[displayId] = entry;
+      continue;
+    }
+    const layout = { ...entry.layout };
+    let local = false;
+    for (const id of ids) {
+      if (layout[id]) {
+        delete layout[id];
+        local = true;
+      }
+    }
+    if (local) {
+      next[displayId] = { ...entry, layout };
+      changed = true;
+    } else {
+      next[displayId] = entry;
+    }
+  }
+  if (!changed) return;
+  try {
+    const result = await window.edex.saveSettings({ displayLayouts: next });
+    if (result?.settings) state.settings = result.settings;
+  } catch {
+    // ignore
+  }
+}
+
+/** Resolve a real folder path for desktop tab open (folder or .lnk → folder). */
+function resolveFolderForTab(item) {
+  if (!item) return null;
+  const pathValue = String(item.path || "").trim();
+  const target = String(item.targetPath || "").trim();
+  const name = itemLabel(item) || item.name || item.displayName || "";
+  if (item.isDirectory && pathValue && !isVirtualPath(pathValue)) {
+    return { path: pathValue, name: name || folderTabTitle(pathValue), isDirectory: true };
+  }
+  if ((item.targetIsDirectory || item.kind === "shortcut") && target && !isVirtualPath(target)) {
+    // Folder shortcuts often only set targetPath; treat as folder when target has no file ext
+    // or explicit targetIsDirectory flag.
+    const base = target.split(/[/\\]/).pop() || "";
+    const looksFile = /\.[a-z0-9]{1,8}$/i.test(base);
+    if (item.targetIsDirectory || !looksFile) {
+      return { path: target, name: name || folderTabTitle(target), isDirectory: true };
+    }
+  }
+  return null;
+}
+
+const renderDeskTabs = (...args) => window.edexFolderPanel.renderDeskTabs(...args);
+const bindDeskTabs = (...args) => window.edexFolderPanel.bindDeskTabs(...args);
+const openFolderInDesktopTab = (...args) => window.edexFolderPanel.openFolderInDesktopTab(...args);
+const closeDesktopFolderTab = (...args) => window.edexFolderPanel.closeDesktopFolderTab(...args);
+const refreshActiveDesktopView = (...args) => window.edexFolderPanel.refreshActiveDesktopView(...args);
+const loadFolderTabListing = (...args) => window.edexFolderPanel.loadFolderTabListing(...args);
+
+function bindDeskFilters(desk) {
+  desk.querySelectorAll("[data-desk-filter]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.desktopFilter = btn.dataset.deskFilter || "all";
+      state.desktopTabId = "classify";
+      persistLayout();
+      arrangeDesktop();
+    });
+  });
+  syncDeskFilters();
+}
+
+const syncDeskFilters = (...args) => window.edexDesktopLayout.syncDeskFilters(...args);
+const renderGroupedDesktop = (...args) => window.edexDesktopLayout.renderGroupedDesktop(...args);
+const renderDesktopFolderTab = (...args) => window.edexDesktopLayout.renderDesktopFolderTab(...args);
+const syncDesktopChrome = (...args) => window.edexDesktopLayout.syncDesktopChrome(...args);
+
+async function arrangeDesktop() {
+  const stage = document.getElementById("desktop-stage");
+  if (!stage) return;
+  syncDesktopChrome();
+  const iconScale = Math.max(0.6, Math.min(2, Number(state.desktopIconScale) || Number(state.settings.desktopIconScale) || 1));
+  const fontScale = Math.max(0.7, Math.min(1.8, Number(state.desktopFontScale) || Number(state.settings.desktopFontScale) || 1));
+  stage.style.setProperty("--path-icon-size", `${3.2 * iconScale}rem`);
+  stage.style.setProperty("--path-list-icon-size", `${2 * iconScale}rem`);
+  stage.style.setProperty("--path-grid-min", `${6.6 * iconScale}rem`);
+  stage.style.setProperty("--path-font-size", `${fontScale}em`);
+  stage.style.setProperty("--path-label-size", `${0.78 * fontScale}rem`);
+
+  const folderTab = activeDesktopFolderTab();
+  const view = state.iconView === "list" ? "list" : "grid";
+
+  if (folderTab) {
+    await renderDesktopFolderTab(stage, folderTab, view, arrangeDesktop);
+    return;
+  }
+
+  const destDir = state.bootstrap?.desktop || "";
+  const all = desktopItems();
+  const filter = state.desktopFilter || "all";
+  const fileOpts = {
+    destDir,
+    desktopActions: true,
+    isFavorite: isDesktopFavorite,
+    onFavoriteToggle: toggleDesktopFavorite,
+    onRefresh: async () => {
+      await loadDesktopListing();
+      arrangeDesktop();
+    }
+  };
+  const buckets = deskFilterBuckets();
+  if (state.desktopGrouped && filter === "all") {
+    renderGroupedDesktop(stage, all, buckets, view, fileOpts);
+    return;
+  }
+  stage.classList.remove("view-grouped");
+  const items = all.filter((item) => matchesDeskFilter(item, filter));
+  fillIconStage(stage, items, { draggable: false, view, ...fileOpts });
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = window.edexI18n?.translateDynamic?.(text) || text;
+}
+
+function renderStats() {
+  // Category / storage panels removed — keep no-op for existing call sites.
+}
+
+function log(text) {
+  const node = document.getElementById("op_log");
+  if (!node) return;
+  const time = new Date().toLocaleTimeString(window.edexI18n?.locale?.() || "zh-Hant", { hour12: false });
+  const entry = document.createDocumentFragment();
+  entry.append(document.createTextNode(`[${time}] ${window.edexI18n?.translateDynamic?.(text) || String(text)}`));
+  entry.append(document.createElement("br"));
+  node.prepend(entry);
+}
+
+function updateDisplayChip() {
+  const chip = document.getElementById("display_chip");
+  if (!chip) return;
+  const { width, height } = pageSize();
+  const role = state.primary ? "主螢幕" : "獨立頁面";
+  const who = state.bootstrap?.username || "";
+  const monitor = `顯示器 ${state.displayIndex + 1} · ${layoutMode().toUpperCase()}`;
+  const localize = (value) => window.edexI18n?.translateDynamic?.(value) || value;
+  chip.textContent = `${localize(monitor)} · ${width}×${height} · ${who} · ${localize(role)}`;
+}
+
+async function refreshPlan() {
+  if (!state.scan) return;
+  state.plan = await window.edex.plan(state.scan, { includeFolders: state.includeFolders });
+  setText("st_plan", `${state.plan.count} 筆`);
+  setText("st_folders", state.includeFolders ? "一併移動" : "略過");
+}
+
+async function doScan() {
+  const cards = state.pathCards.filter((card) => card.path);
+  setText("st_mode", "掃描中");
+  try {
+    if (!cards.length) {
+      state.scan = null;
+      state.plan = null;
+    } else {
+      await Promise.all(cards.map((card) => scanCard(card)));
+    }
+  } finally {
+    setText("st_mode", "待命");
+  }
+  await loadDesktopListing();
+  arrangeDesktop();
+}
+
+function closeSettings() {
+  if (document.querySelector(".theme-studio-in-settings")) {
+    window.edex?.themeStudioResetPreview?.().catch?.(() => {});
+  }
+  clearSnapGuides();
+  document.getElementById("settingsEditor")?.closest(".modal_popup")?.remove();
+}
+
+function requestPresetName(parent) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.innerHTML = `
+      <form method="dialog">
+        <h2>Preset speichern</h2>
+        <input name="name" type="text" maxlength="80" value="Mein Preset" autofocus />
+        <div class="settings-footer">
+          <button value="cancel" type="submit">Abbrechen</button>
+          <button value="save" type="submit">Speichern</button>
+        </div>
+      </form>`;
+    parent.appendChild(dialog);
+    const input = dialog.querySelector("input");
+    const finish = () => {
+      const value = dialog.returnValue === "save" ? input.value.trim() : "";
+      dialog.remove();
+      resolve(value || null);
+    };
+    dialog.addEventListener("close", finish, { once: true });
+    dialog.showModal();
+    input.select();
+  });
+}
+
+function presetSettingsSnapshot(settings = state.settings) {
+  const snapshot = { ...settings };
+  delete snapshot.displayLayouts;
+  delete snapshot.presets;
+  return snapshot;
+}
+
+async function saveDesktopLayout() {
+  snapAllLayoutToGrid();
+  try {
+    await persistLayout();
+    toast("Desktop-Layout dieses Monitors gespeichert");
+    return true;
+  } catch (err) {
+    toast(err?.message || "Layout konnte nicht gespeichert werden");
+    return false;
+  }
+}
+
+async function resetDesktopLayout() {
+  state.layout = defaultWidgets();
+  state.desktopStage = defaultDesktop();
+  state.desktopEnabled = true;
+  state.pathCards = [];
+  state.desktopFolderTabs = [];
+  state.desktopTabId = "classify";
+  snapAllLayoutToGrid();
+  try {
+    await persistLayout();
+    rebuildWorkspace();
+    toast("Desktop-Layout zurückgesetzt");
+  } catch (err) {
+    toast(err?.message || "Layout konnte nicht zurückgesetzt werden");
+  }
+}
+
+function openOrganizerSettings() {
+  document.getElementById("organizerSettingsModal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "organizerSettingsModal";
+  modal.className = "modal_popup info central-settings-modal";
+  modal.innerHTML = `
+    <h1>Desktop organisieren</h1>
+    <p>Lege fest, ob die Desktop-Inhalte nur gruppiert angezeigt oder tatsächlich in Kategorie- und Endungsordner verschoben werden.</p>
+    <table>
+      <tr><th>Option</th><th>Wert</th></tr>
+      <tr>
+        <td>Dateien verschieben</td>
+        <td><label><input id="organizer-migrate" type="checkbox" ${state.settings?.migrateFiles ? "checked" : ""}> Dateien beim Organisieren verschieben</label></td>
+      </tr>
+      <tr>
+        <td>Ordner einbeziehen</td>
+        <td><label><input id="organizer-folders" type="checkbox" ${state.includeFolders ? "checked" : ""}> Ordner ebenfalls einbeziehen</label></td>
+      </tr>
+    </table>
+    <div class="settings-footer">
+      <button type="button" id="organizer-save">Speichern</button>
+      <button type="button" id="organizer-run">Speichern und ausführen</button>
+      <button type="button" id="organizer-close">Schließen</button>
+    </div>`;
+  document.body.appendChild(modal);
+  placeCentered(modal, { width: Math.min(620, window.innerWidth * 0.55), topRatio: 0.22 });
+
+  const save = async () => {
+    const migrateFiles = Boolean(modal.querySelector("#organizer-migrate")?.checked);
+    const includeFolders = Boolean(modal.querySelector("#organizer-folders")?.checked);
+    const result = await window.edex.saveSettings({ migrateFiles, includeFolders });
+    state.settings = result.settings || { ...state.settings, migrateFiles, includeFolders };
+    state.includeFolders = includeFolders;
+    toast("Organisations-Einstellungen gespeichert");
+  };
+  modal.querySelector("#organizer-save")?.addEventListener("click", async () => {
+    try {
+      await save();
+      modal.remove();
+    } catch (err) {
+      toast(err?.message || "Organisations-Einstellungen konnten nicht gespeichert werden");
+    }
+  });
+  modal.querySelector("#organizer-run")?.addEventListener("click", async () => {
+    try {
+      await save();
+      modal.remove();
+      await runOrganize();
+    } catch (err) {
+      toast(err?.message || "Organisation konnte nicht gestartet werden");
+    }
+  });
+  modal.querySelector("#organizer-close")?.addEventListener("click", () => modal.remove());
+}
+
+function openSettings(focusPanel = "") {
+  if (document.getElementById("settingsEditor")) return;
+  const modal = document.createElement("div");
+  modal.className = "modal_popup info settings-modal";
+  const themeOpts = state.themes.map((t) =>
+    `<option value="${escapeHtml(t)}" ${t === state.themeName ? "selected" : ""}>${escapeHtml(t)}</option>`
+  ).join("");
+  const wallOpts = state.wallpapers.map((w) =>
+    `<option value="${escapeHtml(w.id)}" ${w.id === (state.settings.wallpaper || "grid") ? "selected" : ""}>${escapeHtml(window.edexI18n?.translateDynamic?.(w.label) || w.label)}</option>`
+  ).join("");
+  const presetOpts = (state.settings.presets || []).map((preset) =>
+    `<option value="${escapeHtml(preset.name)}">${escapeHtml(preset.name)}</option>`
+  ).join("");
+  const dockLabelColor = String(state.settings?.dockLabelColor || "theme");
+  const currentLocale = state.settings.locale || "de";
+  const zhLanguageLabel = currentLocale === "zh-Hant"
+    ? "繁體中文"
+    : currentLocale === "en"
+      ? "Traditional Chinese"
+      : "Chinesisch (traditionell)";
+
+  modal.innerHTML = `
+    <h1>Einstellungen · Monitor ${state.displayIndex + 1}${state.primary ? " (Hauptmonitor)" : ""}</h1>
+    <h2>Sprache / 語言</h2>
+    <table><tr><td>Sprache</td><td>UI-Sprache der Anwendung</td><td>
+      <select id="set-locale">
+        <option value="zh-Hant" ${currentLocale === "zh-Hant" ? "selected" : ""}>${zhLanguageLabel}</option>
+        <option value="de" ${state.settings.locale === "de" ? "selected" : ""}>Deutsch</option>
+        <option value="en" ${state.settings.locale === "en" ? "selected" : ""}>English</option>
+      </select>
+    </td></tr></table>
+    <h2>Presets</h2>
+    <div class="settings-footer preset-controls">
+      <select id="set-preset" ${presetOpts ? "" : "disabled"}>
+        <option value="">Preset auswählen …</option>
+        ${presetOpts}
+      </select>
+      <select id="set-startup-preset" ${presetOpts ? "" : "disabled"} title="Dieses Preset wird beim Start geladen">
+        <option value="">Kein Preset automatisch laden</option>
+        ${((state.settings.presets || []).map((preset) =>
+          `<option value="${escapeHtml(preset.name)}" ${preset.name === state.settings.startupPreset ? "selected" : ""}>Start: ${escapeHtml(preset.name)}</option>`
+        )).join("")}
+      </select>
+      <button type="button" id="set-preset-save">Als Preset speichern</button>
+      <button type="button" id="set-preset-load" ${presetOpts ? "" : "disabled"}>Preset laden</button>
+      <button type="button" id="set-preset-delete" ${presetOpts ? "" : "disabled"}>Preset löschen</button>
+    </div>
+    <h2>畫面與外觀（解析度與網格全顯示器同步）</h2>
+    <table id="settingsEditor">
+      <tr><th>項目</th><th>說明</th><th>值</th></tr>
+      <tr>
+        <td>本顯示器</td>
+        <td>實體解析度（非系統 2K 縮放）</td>
+        <td>顯示器 ${state.displayIndex + 1} · ${pageSize().width}×${pageSize().height}</td>
+      </tr>
+      <tr>
+        <td>顯示器數量</td>
+        <td>各自獨立視窗，非鏡像</td>
+        <td>${state.displays.length || 1} 台</td>
+      </tr>
+      <tr>
+        <td>主題</td>
+        <td>原版介面主題</td>
+        <td><select id="set-theme">${themeOpts}</select></td>
+      </tr>
+      <tr>
+        <td data-i18n="settings.startup.version">Version & Updates</td>
+        <td>Installierte Version und Prüfung auf neue GitHub-Releases</td>
+        <td><span id="set-app-version">${escapeHtml(state.appVersion || "unbekannt")}</span> <button type="button" id="set-check-updates">Jetzt prüfen</button> <span id="set-update-status" class="settings-inline-status" aria-live="polite"></span></td>
+      </tr>
+      <tr id="set-windows-sync-row">
+        <td>Windows-Synchronisierung</td>
+        <td>Einzelne Windows-Anpassungen im Theme Studio aktivieren, testen und wiederherstellen</td>
+        <td>Modular verwaltet</td>
+      </tr>
+      <tr>
+        <td>Theme-Hintergrund beibehalten</td>
+        <td>Theme-Wallpaper auch ohne aktive Desktop-UI-Oberfläche als Windows-Desktop verwenden</td>
+        <td><input id="set-keep-theme-wallpaper" type="checkbox" ${state.settings.keepThemeWallpaper === true ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Rainmeter-HUD</td>
+        <td>Optionales Rainmeter-Overlay mit Uhr, CPU und RAM im aktiven Theme verwenden</td>
+        <td><input id="set-rainmeter" type="checkbox" ${state.settings.rainmeterEnabled === true ? "checked" : ""}> <span id="rainmeter-status" class="settings-inline-status">Status wird geprüft …</span></td>
+      </tr>
+      <tr>
+        <td>Mit Windows starten</td>
+        <td>Desktop UI automatisch bei der Windows-Anmeldung öffnen</td>
+        <td><input id="set-start-with-windows" type="checkbox" ${state.settings.startWithWindows === true ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>壁紙</td>
+        <td>所有顯示器共用背景</td>
+        <td><select id="set-wall">${wallOpts}</select></td>
+      </tr>
+      <tr>
+        <td>Windows-Hintergrundbild</td>
+        <td>Eigenes Bild als Windows-Desktop verwenden; leer lassen zum Wiederherstellen des vorherigen Hintergrunds</td>
+        <td>
+          <input id="set-windows-wallpaper" type="text" readonly value="${escapeHtml(state.settings.windowsWallpaper || "")}" title="${escapeHtml(state.settings.windowsWallpaper || "")}">
+          <button type="button" id="set-pick-windows-wallpaper">Bild auswählen</button>
+          <button type="button" id="set-clear-windows-wallpaper">Entfernen</button>
+        </td>
+      </tr>
+      <tr>
+        <td>圖示顯示</td>
+        <td>桌面容器內圖示排列</td>
+        <td>
+          <select id="set-icon-view">
+            <option value="grid" ${state.iconView === "grid" ? "selected" : ""}>圖示網格</option>
+            <option value="list" ${state.iconView === "list" ? "selected" : ""}>圖示列表</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>自動吸附</td>
+        <td>容器拖曳時自動對齊（含螢幕邊緣）</td>
+        <td><input id="set-snap" type="checkbox" ${state.settings.snapWidgets !== false ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>底部 Dock</td>
+        <td>主螢幕底邊背景條；寬度跟隨任務欄圖示；不遮擋點擊</td>
+        <td><input id="set-dock" type="checkbox" ${dockEnabled() ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Windows-Taskbar-Integration</td>
+        <td>Laufende Windows-Fenster im eDEX-Task-Dock anzeigen und aktivieren/minimieren</td>
+        <td><input id="set-taskbar-integration" type="checkbox" ${state.settings.taskbarIntegrationEnabled === true ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Dock 外框</td>
+        <td>圓角 / 梯形 / 直角；邊框帶電路發光點</td>
+        <td>
+          <select id="set-dock-frame" ${!dockEnabled() ? "disabled" : ""}>
+            <option value="rounded" ${(state.settings?.dockFrameStyle || "rounded") === "rounded" ? "selected" : ""}>圓角</option>
+            <option value="trapezoid" ${state.settings?.dockFrameStyle === "trapezoid" ? "selected" : ""}>梯形</option>
+            <option value="rect" ${state.settings?.dockFrameStyle === "rect" ? "selected" : ""}>直角</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>Dock-Beschriftungsfarbe</td>
+        <td>Beschriftungen werden automatisch an die Theme-Farbe angepasst oder verwenden eine eigene Farbe</td>
+        <td>
+          <select id="set-dock-label-color-mode" ${!dockEnabled() ? "disabled" : ""}>
+            <option value="theme" ${dockLabelColor === "theme" ? "selected" : ""}>Automatisch (Theme)</option>
+            <option value="custom" ${dockLabelColor !== "theme" ? "selected" : ""}>Benutzerdefiniert</option>
+          </select>
+          <input id="set-dock-label-color" type="color" value="${escapeHtml(dockLabelColor === "theme" ? "#00eaff" : dockLabelColor)}" ${!dockEnabled() || dockLabelColor === "theme" ? "disabled" : ""} title="Dock-Beschriftungsfarbe">
+        </td>
+      </tr>
+      <tr>
+        <td>Windows-Skalierzone</td>
+        <td>Geschützter Bereich für eingebettete Windows-Fenster und skalierbare Programme</td>
+        <td><input id="set-window-zone-enabled" type="checkbox" ${state.settings.windowZoneEnabled !== false ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Skalierzone-Ränder</td>
+        <td>Abstand der Zone vom linken, oberen, rechten und unteren Bildschirmrand in Rasterzellen</td>
+        <td>
+          <div class="zone-margin-fields" aria-label="Skalierzone-Ränder in Rasterzellen">
+            <label>L <input id="set-zone-left" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.left ?? 18)}"> Raster</label>
+            <label>O <input id="set-zone-top" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.top ?? 8)}"> Raster</label>
+            <label>R <input id="set-zone-right" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.right ?? 18)}"> Raster</label>
+            <label>U <input id="set-zone-bottom" type="number" min="0" max="45" step="1" value="${Number(state.settings.windowZoneMargins?.bottom ?? 8)}"> Raster</label>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td>Rastergröße</td>
+        <td>Alle Monitore verwenden denselben Rasterabstand in Pixeln</td>
+        <td><input id="set-grid" type="number" min="12" max="96" step="1" value="${settingsGridSize()}"></td>
+      </tr>
+      <tr>
+        <td>Uhr als Panel</td>
+        <td>Uhr und Datum mit sichtbarem Rahmen als normales verschiebbares Panel anzeigen</td>
+        <td><input id="set-clock-panel" type="checkbox" ${state.settings.clockPanelFrame === true ? "checked" : ""}></td>
+      </tr>
+      <tr>
+        <td>Suchschriftgröße</td>
+        <td>Einheitliche Schriftgröße für Dateisuche, Pfade und Eingabefelder (px, Standard 12)</td>
+        <td><input id="set-search-font" type="text" inputmode="numeric" spellcheck="false" value="${searchFontSize()}"></td>
+      </tr>
+      <tr>
+        <td>Code-Regen-Schriftgröße</td>
+        <td>Schriftgröße des Code-Hintergrunds (px, 8–72)</td>
+        <td><input id="set-rain-font" type="text" inputmode="numeric" spellcheck="false" value="${rainFontSize()}"></td>
+      </tr>
+      <tr>
+        <td>Code-Regen-Geschwindigkeit</td>
+        <td>Fallgeschwindigkeit (0,1–8,0)</td>
+        <td><input id="set-rain-speed" type="text" inputmode="decimal" spellcheck="false" value="${rainSpeed()}"></td>
+      </tr>
+      <tr>
+        <td>Layout-Auflösung</td>
+        <td>Für alle Monitore synchron. 2K-Bildschirme werden proportional skaliert</td>
+        <td>
+          <select id="set-layout-mode">
+            <option value="2k" ${layoutMode() === "2k" ? "selected" : ""}>2K（2560×1440）</option>
+            <option value="4k" ${layoutMode() === "4k" ? "selected" : ""}>4K（3840×2160）</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>UI-Skalierung</td>
+        <td>Individuelle Skalierung für diesen Monitor, zusätzlich zur Layout-Auflösung</td>
+        <td><input id="set-ui-scale" type="number" min="0.4" max="1.5" step="0.05" value="${displayUiScale()}"></td>
+      </tr>
+    </table>
+
+    <div class="settings-footer">
+      <span id="settings-save-status" class="settings-save-status" aria-live="polite">Keine ungespeicherten Änderungen</span>
+      <button type="button" id="set-quit">Programm beenden</button>
+      <button type="button" id="set-cancel">Schließen</button>
+      <button type="button" id="set-save" title="Speichert die allgemeinen eDEX-Einstellungen. Theme-Änderungen werden separat im Theme Studio gespeichert.">Einstellungen speichern</button>
+    </div>
+  `;
+  const settingsTable = modal.querySelector("#settingsEditor");
+  let activateSettingsSubmenu = null;
+  if (settingsTable) {
+    const headings = [...modal.querySelectorAll(":scope > h2")];
+    const [languageHeading, presetsHeading, displayHeading] = headings;
+    const languageTable = languageHeading?.nextElementSibling;
+    const presetControls = presetsHeading?.nextElementSibling;
+    const settingsFooter = modal.querySelector("#set-save")?.parentElement;
+    const rows = [...settingsTable.querySelectorAll("tr")];
+    const header = rows.shift();
+    const panels = new Map();
+    const rowTables = new Map();
+    const rowBodies = new Map();
+
+    const addPanel = (id, title, description = "") => {
+      const panel = document.createElement("section");
+      panel.className = "settings-section settings-view-panel";
+      panel.dataset.settingsPanel = id;
+      panel.hidden = true;
+      const heading = document.createElement("h3");
+      heading.textContent = title;
+      panel.append(heading);
+      if (description) {
+        const help = document.createElement("p");
+        help.className = "settings-view-help";
+        help.textContent = description;
+        panel.append(help);
+      }
+      const body = document.createElement("div");
+      body.className = "settings-view-panel-body";
+      panel.append(body);
+      panels.set(id, panel);
+      return body;
+    };
+
+    const rowContains = (row, id) => Boolean(row.querySelector(`#${id}`));
+    const sectionForRow = (row, index) => {
+      if (index < 2
+        || rowContains(row, "set-window-zone-enabled")
+        || rowContains(row, "set-zone-left")
+        || rowContains(row, "set-grid")
+        || rowContains(row, "set-layout-mode")
+        || rowContains(row, "set-ui-scale")) return "layout";
+      if (rowContains(row, "set-theme")
+        || rowContains(row, "set-keep-theme-wallpaper")
+        || rowContains(row, "set-wall")
+        || rowContains(row, "set-windows-wallpaper")) return "background";
+      if (row.id === "set-windows-sync-row") return "windows-sync";
+      if (rowContains(row, "set-rainmeter")
+        || rowContains(row, "set-rain-font")
+        || rowContains(row, "set-rain-speed")) return "extensions";
+      if (rowContains(row, "set-start-with-windows")
+        || rowContains(row, "set-check-updates")) return "startup";
+      if (rowContains(row, "set-icon-view")
+        || rowContains(row, "set-snap")
+        || rowContains(row, "set-dock")
+        || rowContains(row, "set-taskbar-integration")
+        || rowContains(row, "set-dock-frame")
+        || rowContains(row, "set-dock-label-color-mode")
+        || rowContains(row, "set-clock-panel")
+        || rowContains(row, "set-search-font")) return "panels";
+      return "startup";
+    };
+
+    addPanel("language", "Sprache", "Sprache der eDEX-Oberfläche festlegen.");
+    addPanel("presets", "Presets", "Gespeicherte Layouts auswählen, laden und verwalten.");
+    addPanel("startup", "Start & Updates", "Startverhalten und Versionsprüfung verwalten.");
+    addPanel("layout", "Raster & Layout", "Anzeigeinformationen, Skalierung und geschützte Desktop-Zonen.");
+    addPanel("background", "Theme & Hintergrund", "eDEX-Theme sowie Desktop-Hintergründe konfigurieren.");
+    addPanel("panels", "Panels & Dock", "Desktop-Icons, Panels, Dock und Schriftoptionen verwalten.");
+    addPanel("extensions", "Erweiterungen", "Rainmeter und Code-Regen-Effekte konfigurieren.");
+    addPanel("windows-sync", "Windows-Synchronisierung", "Status der einzeln verwalteten Windows-Anpassungen.");
+    const studioBody = addPanel("studio", "Theme Studio", "Themes, Windows-Styling und Wiederherstellung.");
+    const studioHost = document.createElement("div");
+    studioHost.className = "theme-studio-in-settings";
+    studioBody.append(studioHost);
+
+    if (languageHeading && languageTable) {
+      languageHeading.remove();
+      languageHeading.textContent = "Sprache";
+      languageTable.classList.add("settings-section-table");
+      panels.get("language").querySelector(".settings-view-panel-body").append(languageTable);
+    }
+    if (presetsHeading && presetControls) {
+      presetsHeading.remove();
+      presetsHeading.textContent = "Presets";
+      presetControls.classList.remove("settings-footer");
+      presetControls.classList.add("settings-preset-controls");
+      panels.get("presets").querySelector(".settings-view-panel-body").append(presetControls);
+    }
+
+    rows.forEach((row, index) => {
+      const destination = sectionForRow(row, index);
+      if (!rowTables.has(destination)) {
+        const table = settingsTable.cloneNode(false);
+        table.removeAttribute("id");
+        table.classList.add("settings-section-table");
+        const body = document.createElement("tbody");
+        if (header) body.append(header.cloneNode(true));
+        table.append(body);
+        rowTables.set(destination, table);
+        rowBodies.set(destination, body);
+        panels.get(destination).querySelector(".settings-view-panel-body").append(table);
+      }
+      rowBodies.get(destination).append(row);
+    });
+    const primaryTable = rowTables.get("layout");
+    if (primaryTable) primaryTable.id = "settingsEditor";
+    displayHeading?.remove();
+    settingsTable.remove();
+
+    const navigationTree = [
+      {
+        id: "general", label: "Allgemein", icon: "⚙", children: [
+          { id: "language", label: "Sprache", panel: "language" },
+          { id: "presets", label: "Presets", panel: "presets" },
+          { id: "startup", label: "Start & Updates", panel: "startup" }
+        ]
+      },
+      {
+        id: "display", label: "Anzeige & Monitore", icon: "▣", children: [
+          { id: "layout", label: "Raster & Layout", panel: "layout" },
+          { id: "background", label: "Theme & Hintergrund", panel: "background" }
+        ]
+      },
+      {
+        id: "modules", label: "Panels & Module", icon: "▦", children: [
+          { id: "panels", label: "Panels & Dock", panel: "panels" },
+          { id: "extensions", label: "Erweiterungen", panel: "extensions" }
+        ]
+      },
+      {
+        id: "studio", label: "Theme Studio", icon: "◉", children: [
+          { id: "theme-library", label: "Theme-Bibliothek", panel: "studio", section: "edex", anchor: "theme-library" },
+          { id: "studio-colors", label: "eDEX-Farben", panel: "studio", section: "edex", anchor: "edex-colors" },
+          { id: "studio-panels", label: "Fenster & Panels", panel: "studio", section: "edex", anchor: "panel-design" },
+          { id: "studio-preview", label: "Live-Vorschau", panel: "studio", section: "edex", anchor: "live-preview" },
+          { id: "windows-manager", label: "Windows-Farbmanager", panel: "studio", section: "windows", anchor: "windows-manager" },
+          { id: "windhawk", label: "Windows Style Integration", panel: "studio", section: "windows", anchor: "windhawk" }
+        ]
+      },
+      {
+        id: "system", label: "System & Sicherheit", icon: "⛨", children: [
+          { id: "windows-sync", label: "Windows-Synchronisierung", panel: "windows-sync" },
+          { id: "profiles", label: "Profile & Wiederherstellung", panel: "studio", section: "profiles", anchor: "profiles" }
+        ]
+      }
+    ];
+
+    const workspace = document.createElement("div");
+    workspace.className = "settings-workspace";
+    const sidebar = document.createElement("aside");
+    sidebar.className = "settings-sidebar";
+    const searchLabel = document.createElement("label");
+    searchLabel.className = "settings-search";
+    searchLabel.innerHTML = '<span class="sr-only">Einstellungen suchen</span>';
+    const search = document.createElement("input");
+    search.type = "search";
+    search.placeholder = window.edexI18n?.t?.("settings.search") || "Search settings…";
+    search.dataset.i18nPlaceholder = "settings.search";
+    search.setAttribute("aria-label", "Einstellungen suchen");
+    searchLabel.append(search);
+    const navigation = document.createElement("nav");
+    navigation.className = "settings-navigation";
+    navigation.setAttribute("aria-label", "Einstellungskategorien");
+    const menuEntries = new Map();
+
+    navigationTree.forEach((category, index) => {
+      const group = document.createElement("section");
+      group.className = "settings-navigation-group";
+      group.dataset.category = category.id;
+      const categoryButton = document.createElement("button");
+      categoryButton.type = "button";
+      categoryButton.className = "settings-category";
+      categoryButton.setAttribute("aria-expanded", String(index === 0));
+      const icon = document.createElement("span");
+      icon.className = "settings-category-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = category.icon;
+      const label = document.createElement("span");
+      label.dataset.i18n = `settings.category.${category.id}`;
+      label.textContent = window.edexI18n?.t?.(label.dataset.i18n) || category.label;
+      const caret = document.createElement("span");
+      caret.className = "settings-category-caret";
+      caret.setAttribute("aria-hidden", "true");
+      caret.textContent = "›";
+      categoryButton.append(icon, label, caret);
+      const children = document.createElement("div");
+      children.className = "settings-navigation-children";
+      children.hidden = index !== 0;
+      category.children.forEach((child) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "settings-submenu";
+        button.dataset.submenu = child.id;
+        button.dataset.i18n = ({"language":"settings.nav.language","presets":"settings.nav.presets","startup":"settings.nav.startup","layout":"settings.nav.layout","background":"settings.nav.background","panels":"settings.nav.panels","extensions":"settings.nav.extensions","theme-library":"settings.nav.library","studio-colors":"settings.nav.colors","studio-panels":"settings.nav.design","studio-preview":"settings.nav.preview","windows-manager":"settings.nav.windows","windhawk":"settings.nav.windhawk","windows-sync":"settings.nav.sync","profiles":"settings.nav.profiles"})[child.id];
+        button.textContent = window.edexI18n?.t?.(button.dataset.i18n) || child.label;
+        button.setAttribute("aria-current", "false");
+        children.append(button);
+        menuEntries.set(child.id, { ...child, category, group, button });
+      });
+      group.append(categoryButton, children);
+      navigation.append(group);
+      categoryButton.addEventListener("click", () => {
+        const expanded = categoryButton.getAttribute("aria-expanded") !== "true";
+        categoryButton.setAttribute("aria-expanded", String(expanded));
+        children.hidden = !expanded;
+        // Opening a group only changes navigation visibility; it must not silently
+        // switch the selected settings page or alter a user's pending edits.
+      });
+    });
+
+    const main = document.createElement("main");
+    main.className = "settings-main";
+    const viewHeader = document.createElement("header");
+    viewHeader.className = "settings-view-header";
+    const breadcrumb = document.createElement("div");
+    breadcrumb.className = "settings-breadcrumb";
+    const viewTitle = document.createElement("h2");
+    viewTitle.className = "settings-view-title";
+    viewHeader.append(breadcrumb, viewTitle);
+    const viewBody = document.createElement("div");
+    viewBody.className = "settings-view-body";
+    panels.forEach((panel) => viewBody.append(panel));
+    main.append(viewHeader, viewBody);
+    sidebar.append(searchLabel, navigation);
+    workspace.append(sidebar, main);
+    modal.querySelector("h1")?.after(workspace);
+    if (settingsFooter) {
+      settingsFooter.classList.add("settings-actions-footer");
+      modal.append(settingsFooter);
+    }
+
+    activateSettingsSubmenu = (id) => {
+      const entry = menuEntries.get(id);
+      if (!entry) return;
+      if (!search.value.trim()) {
+        navigation.querySelectorAll(".settings-navigation-group").forEach((group) => {
+          const activeGroup = group === entry.group;
+          group.querySelector(".settings-category")?.setAttribute("aria-expanded", String(activeGroup));
+          group.querySelector(".settings-navigation-children").hidden = !activeGroup;
+        });
+      } else {
+        entry.group.querySelector(".settings-category")?.setAttribute("aria-expanded", "true");
+        entry.group.querySelector(".settings-navigation-children").hidden = false;
+      }
+      menuEntries.forEach(({ button }) => {
+        const active = button === entry.button;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-current", String(active));
+      });
+      panels.forEach((panel) => { panel.hidden = panel.dataset.settingsPanel !== entry.panel; });
+      viewBody.scrollTop = 0;
+      breadcrumb.textContent = `Einstellungen / ${entry.category.label}`;
+      viewTitle.textContent = entry.label;
+      if (entry.section) {
+        window.BockisThemeStudio?.selectSection?.(studioHost, entry.section, entry.anchor);
+      }
+    };
+
+    menuEntries.forEach(({ button, id }) => {
+      button.addEventListener("click", () => activateSettingsSubmenu(id));
+    });
+    search.addEventListener("input", () => {
+      const query = search.value.trim().toLocaleLowerCase();
+      const matches = [];
+      navigationTree.forEach((category) => {
+        const group = navigation.querySelector(`[data-category="${category.id}"]`);
+        let visibleCount = 0;
+        category.children.forEach((child) => {
+          const entry = menuEntries.get(child.id);
+          // Studio subsections share one DOM host; searching its entire text would
+          // incorrectly mark every Studio submenu as a match.
+          const panelText = child.panel === "studio" ? "" : (panels.get(child.panel)?.textContent || "");
+          const isMatch = !query || `${category.label} ${child.label} ${panelText}`.toLocaleLowerCase().includes(query);
+          entry.button.hidden = !isMatch;
+          if (isMatch) {
+            visibleCount += 1;
+            matches.push(child.id);
+          }
+        });
+        group.hidden = visibleCount === 0;
+        if (query && visibleCount) {
+          group.querySelector(".settings-category")?.setAttribute("aria-expanded", "true");
+          group.querySelector(".settings-navigation-children").hidden = false;
+        }
+      });
+      const active = navigation.querySelector(".settings-submenu.active");
+      if (query && active?.hidden && matches.length) activateSettingsSubmenu(matches[0]);
+      if (!query) {
+        const selected = navigation.querySelector(".settings-submenu.active");
+        navigation.querySelectorAll(".settings-navigation-group").forEach((group) => {
+          const current = !!selected && group.contains(selected);
+          group.querySelector(".settings-category")?.setAttribute("aria-expanded", String(current));
+          group.querySelector(".settings-navigation-children").hidden = !current;
+        });
+      }
+    });
+
+    activateSettingsSubmenu("language");
+    window.BockisThemeStudio?.mount(studioHost, { embedded: true, externalNavigation: true });
+    // A shared studio draft survives submenu changes. Mark its menu group when dirty.
+    studioHost.addEventListener("bockis-theme-dirty", (event) => {
+      const category = navigation.querySelector('[data-category="studio"] .settings-category');
+      if (category) {
+        category.classList.toggle("has-unsaved-theme", !!event.detail?.dirty);
+        category.title = event.detail?.dirty ? "Ungespeicherte Theme-Änderungen – im Theme Studio speichern" : "";
+      }
+      const footerStatus = modal.querySelector("#settings-save-status");
+      if (footerStatus) {
+        const themeMessage = "Theme-Änderungen offen – im Theme Studio speichern";
+        if (event.detail?.dirty) {
+          footerStatus.textContent = themeMessage;
+          footerStatus.dataset.themeDirty = "true";
+        } else if (footerStatus.dataset.themeDirty === "true") {
+          footerStatus.dataset.themeDirty = "false";
+          footerStatus.textContent = "Theme gespeichert – allgemeine Einstellungen separat speichern";
+        }
+      }
+    });
+  }
+  document.body.appendChild(modal);
+  // Reopen the onboarding without forcing it on existing installations.
+  const reopen = document.createElement("button");
+  reopen.type = "button";
+  reopen.className = "first-run-reopen";
+  reopen.textContent = window.edexI18n?.t?.("firstRun.restart") || "Restart setup";
+  reopen.addEventListener("click", () => {
+    modal.remove();
+    window.edexFirstRun?.open({ state, previewTheme: applyTheme, force: true });
+  });
+  modal.querySelector(".settings-navigation, .settings-sidebar, .settings-nav")?.appendChild(reopen)
+    || modal.insertBefore(reopen, modal.firstChild.nextSibling);
+  const replayTour = document.createElement("button");
+  replayTour.type = "button";
+  replayTour.className = "first-run-reopen";
+  replayTour.textContent = window.edexI18n?.t?.("firstRun.startTour") || "Start desktop tour";
+  replayTour.addEventListener("click", () => {
+    modal.remove();
+    window.edexFirstRun?.showTour?.();
+  });
+  reopen.insertAdjacentElement("afterend", replayTour);
+  modal.querySelector("#set-check-updates")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const status = modal.querySelector("#set-update-status");
+    button.disabled = true;
+    if (status) status.textContent = "Prüfe …";
+    try {
+      const result = await window.edex.checkForUpdates();
+      if (status) {
+        status.textContent = result.ok
+          ? (result.updateAvailable ? `Neue Version ${result.latestVersion} verfügbar` : "Keine neue Version verfügbar")
+          : `Prüfung fehlgeschlagen: ${result.error}`;
+      }
+    } finally {
+      button.disabled = false;
+    }
+  });
+  const saveStatus = modal.querySelector("#settings-save-status");
+  const setSaveStatus = (message, dirty = false) => {
+    if (!saveStatus) return;
+    saveStatus.textContent = message;
+    saveStatus.dataset.state = dirty ? "dirty" : "saved";
+  };
+  modal.querySelectorAll(".settings-section input, .settings-section select, .settings-section textarea")
+    .forEach((control) => {
+      control.addEventListener("input", () => setSaveStatus("Ungespeicherte Änderungen", true));
+      control.addEventListener("change", () => setSaveStatus("Ungespeicherte Änderungen", true));
+    });
+  window.edexI18n?.translatePage?.(modal);
+  // Settings needs more room than standard dialogs, especially for Theme Studio.
+  placeCentered(modal, { width: Math.min(1420, window.innerWidth * 0.94) });
+  window.edex?.getStartWithWindows?.().then((enabled) => {
+    const checkbox = modal.querySelector("#set-start-with-windows");
+    if (checkbox) checkbox.checked = Boolean(enabled);
+  }).catch(() => {});
+  const updateZonePreview = () => showWindowZonePreview(modal);
+  ["#set-zone-left", "#set-zone-top", "#set-zone-right", "#set-zone-bottom", "#set-window-zone-enabled"]
+    .forEach((selector) => {
+      modal.querySelector(selector)?.addEventListener("input", updateZonePreview);
+      modal.querySelector(selector)?.addEventListener("change", updateZonePreview);
+    });
+  updateZonePreview();
+  window.edex?.getRainmeterStatus?.().then((status) => {
+    const statusEl = modal.querySelector("#rainmeter-status");
+    if (!statusEl) return;
+    if (!status?.installed) {
+      statusEl.textContent = "Rainmeter nicht gefunden";
+      statusEl.dataset.state = "missing";
+    } else if (status.enabled) {
+      statusEl.textContent = "installiert · aktiviert";
+      statusEl.dataset.state = "ready";
+    } else {
+      statusEl.textContent = "installiert · deaktiviert";
+      statusEl.dataset.state = "disabled";
+    }
+  }).catch(() => {
+    const statusEl = modal.querySelector("#rainmeter-status");
+    if (statusEl) {
+      statusEl.textContent = "Status nicht verfügbar";
+      statusEl.dataset.state = "unknown";
+    }
+  });
+  const focusSubmenu = focusPanel === "coderain"
+    ? "extensions"
+    : focusPanel === "clock" || focusPanel === "desktop" ? "panels" : "";
+  if (focusSubmenu) activateSettingsSubmenu?.(focusSubmenu);
+
+  const presetSelect = modal.querySelector("#set-preset");
+  const startupPresetSelect = modal.querySelector("#set-startup-preset");
+  startupPresetSelect?.addEventListener("change", () => setSaveStatus("Ungespeicherte Änderungen", true));
+  const updatePresetButtons = () => {
+    const active = Boolean(presetSelect?.value);
+    modal.querySelector("#set-preset-load")?.toggleAttribute("disabled", !active);
+    modal.querySelector("#set-preset-delete")?.toggleAttribute("disabled", !active);
+  };
+  presetSelect?.addEventListener("change", updatePresetButtons);
+  modal.querySelector("#set-preset-save")?.addEventListener("click", async () => {
+    const name = await requestPresetName(modal);
+    if (!name) return;
+    await persistLayout();
+    const currentLayout = { ...currentDisplayLayout(), uiScale: state.displayUiScale };
+    const presetDisplayLayouts = {
+      ...(state.settings.displayLayouts || {}),
+      [String(state.displayId)]: currentLayout
+    };
+    const presets = (state.settings.presets || []).filter((preset) => preset.name !== name);
+    presets.push({
+      name: name.slice(0, 80),
+      createdAt: new Date().toISOString(),
+      settings: presetSettingsSnapshot(),
+      layout: currentLayout,
+      displayLayouts: presetDisplayLayouts
+    });
+    const result = await window.edex.saveSettings({ presets: presets.slice(-20) });
+    logUiAction("settings.save", "Einstellungen gespeichert", {
+      theme: state.themeName || state.settings.theme || "tron",
+      wallpaper: state.settings.wallpaper || "grid",
+      rainmeterEnabled: state.settings.rainmeterEnabled === true
+    });
+    state.settings = result.settings;
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    presetSelect?.appendChild(option);
+    if (presetSelect) presetSelect.value = name;
+    modal.querySelector("#set-preset-load")?.removeAttribute("disabled");
+    modal.querySelector("#set-preset-delete")?.removeAttribute("disabled");
+    toast(`Preset „${name}“ gespeichert`);
+  });
+  modal.querySelector("#set-preset-load")?.addEventListener("click", async () => {
+    const preset = (state.settings.presets || []).find((item) => item.name === presetSelect?.value);
+    if (!preset) return;
+    await window.edex.saveSettings({
+      ...preset.settings,
+      displayLayouts: preset.displayLayouts || state.settings.displayLayouts,
+      presets: state.settings.presets
+    });
+    await window.edex.saveDisplayLayout(preset.layout);
+    location.reload();
+  });
+  modal.querySelector("#set-preset-delete")?.addEventListener("click", async () => {
+    const name = presetSelect?.value;
+    if (!name) return;
+    const presets = (state.settings.presets || []).filter((preset) => preset.name !== name);
+    const result = await window.edex.saveSettings({ presets });
+    state.settings = result.settings;
+    presetSelect.querySelector(`option[value="${CSS.escape(name)}"]`)?.remove();
+    presetSelect.value = "";
+    updatePresetButtons();
+    toast(`Preset „${name}“ gelöscht`);
+  });
+
+  const previewRain = () => {
+    const fontRaw = Number(modal.querySelector("#set-rain-font")?.value);
+    const speedRaw = Number(modal.querySelector("#set-rain-speed")?.value);
+    state.settings = {
+      ...state.settings,
+      rainFontSize: Number.isFinite(fontRaw) ? Math.max(8, Math.min(72, Math.round(fontRaw))) : rainFontSize(),
+      rainSpeed: Number.isFinite(speedRaw) ? Math.max(0.1, Math.min(8, Math.round(speedRaw * 10) / 10)) : rainSpeed()
+    };
+    applyRainMetrics();
+  };
+  modal.querySelector("#set-rain-font")?.addEventListener("input", previewRain);
+  modal.querySelector("#set-rain-speed")?.addEventListener("input", previewRain);
+  modal.querySelector("#set-search-font")?.addEventListener("input", (event) => {
+    const next = Number(event.target.value);
+    if (!Number.isFinite(next)) return;
+    state.settings = { ...state.settings, searchFontSize: Math.max(8, Math.min(72, Math.round(next))) };
+    applyUiMetrics();
+  });
+
+  const prevLayoutMode = layoutMode();
+  const prevUiScale = displayUiScale();
+  modal.querySelector("#set-layout-mode")?.addEventListener("change", (event) => {
+    state.settings = { ...state.settings, layoutMode: event.target.value === "4k" ? "4k" : "2k" };
+    applyUiMetrics();
+  });
+  modal.querySelector("#set-ui-scale")?.addEventListener("input", (event) => {
+    const next = Number(event.target.value);
+    if (!Number.isFinite(next)) return;
+    state.displayUiScale = Math.max(0.4, Math.min(1.5, next));
+    applyUiMetrics();
+  });
+
+  modal.querySelector("#set-dock")?.addEventListener("change", (event) => {
+    setDockEnabled(event.target.checked);
+    const frameSel = modal.querySelector("#set-dock-frame");
+    if (frameSel) frameSel.disabled = !event.target.checked || !state.primary;
+  });
+  modal.querySelector("#set-dock-frame")?.addEventListener("change", (event) => {
+    window.dockPanel?.setFrameStyle?.(state, event.target.value);
+  });
+  modal.querySelector("#set-dock-label-color-mode")?.addEventListener("change", (event) => {
+    const colorInput = modal.querySelector("#set-dock-label-color");
+    if (colorInput) colorInput.disabled = event.target.value !== "custom";
+  });
+  modal.querySelector("#set-pick-windows-wallpaper")?.addEventListener("click", async () => {
+    const selected = await window.edex.pickWindowsWallpaper?.();
+    if (!selected) return;
+    const input = modal.querySelector("#set-windows-wallpaper");
+    if (input) {
+      input.value = selected;
+      input.title = selected;
+    }
+  });
+  modal.querySelector("#set-clear-windows-wallpaper")?.addEventListener("click", () => {
+    const input = modal.querySelector("#set-windows-wallpaper");
+    if (input) {
+      input.value = "";
+      input.title = "";
+    }
+  });
+  modal.querySelector("#set-cancel").onclick = () => {
+    state.settings = { ...state.settings, layoutMode: prevLayoutMode };
+    state.displayUiScale = prevUiScale;
+    applyUiMetrics();
+    closeSettings();
+  };
+  modal.querySelector("#set-quit").onclick = () => {
+    if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?")) window.edex.quitApp();
+  };
+  modal.querySelector("#set-save").onclick = async () => {
+    state.iconView = modal.querySelector("#set-icon-view").value === "list" ? "list" : "grid";
+    const themeName = modal.querySelector("#set-theme").value;
+    const keepThemeWallpaper = Boolean(modal.querySelector("#set-keep-theme-wallpaper")?.checked);
+    const rainmeterEnabled = Boolean(modal.querySelector("#set-rainmeter")?.checked);
+    const wallpaper = modal.querySelector("#set-wall").value;
+    const windowsWallpaper = String(modal.querySelector("#set-windows-wallpaper")?.value || "").trim();
+    const uiScaleRaw = Number(modal.querySelector("#set-ui-scale").value);
+    const uiScale = Number.isFinite(uiScaleRaw) ? Math.max(0.4, Math.min(1.5, uiScaleRaw)) : 1;
+    const layoutModeValue = modal.querySelector("#set-layout-mode")?.value === "4k" ? "4k" : "2k";
+    state.settings = { ...state.settings, layoutMode: layoutModeValue };
+    state.displayUiScale = uiScale;
+    const gridRaw = Number(modal.querySelector("#set-grid").value);
+    const gridSizeValue = Number.isFinite(gridRaw) ? Math.max(12, Math.min(96, Math.round(gridRaw))) : 32;
+    const clockPanelFrame = Boolean(modal.querySelector("#set-clock-panel")?.checked);
+    const rainFontRaw = Number(modal.querySelector("#set-rain-font").value);
+    const rainFontValue = Number.isFinite(rainFontRaw)
+      ? Math.max(8, Math.min(72, Math.round(rainFontRaw)))
+      : 14;
+    const rainSpeedRaw = Number(modal.querySelector("#set-rain-speed").value);
+    const rainSpeedValue = Number.isFinite(rainSpeedRaw)
+      ? Math.max(0.1, Math.min(8, Math.round(rainSpeedRaw * 10) / 10))
+      : 1;
+    const searchFontRaw = Number(modal.querySelector("#set-search-font")?.value);
+    const searchFontValue = Number.isFinite(searchFontRaw)
+      ? Math.max(8, Math.min(72, Math.round(searchFontRaw)))
+      : 12;
+    const dockEnabledValue = Boolean(modal.querySelector("#set-dock")?.checked);
+    const taskbarIntegrationEnabled = Boolean(modal.querySelector("#set-taskbar-integration")?.checked);
+    const dockFrameValue = String(modal.querySelector("#set-dock-frame")?.value || state.settings?.dockFrameStyle || "rounded");
+    const dockLabelColorMode = modal.querySelector("#set-dock-label-color-mode")?.value === "custom" ? "custom" : "theme";
+    const dockLabelColorInput = modal.querySelector("#set-dock-label-color")?.value || "#00eaff";
+    const dockLabelColorValue = dockLabelColorMode === "custom" && /^#[0-9a-f]{6}$/i.test(dockLabelColorInput)
+      ? dockLabelColorInput.toLowerCase()
+      : "theme";
+    const startWithWindows = Boolean(modal.querySelector("#set-start-with-windows")?.checked);
+    const zoneRaster = (selector, fallback) => {
+      const value = Number(modal.querySelector(selector)?.value);
+      return Number.isFinite(value) ? Math.max(0, Math.min(45, Math.round(value))) : fallback;
+    };
+    const windowZoneEnabled = Boolean(modal.querySelector("#set-window-zone-enabled")?.checked);
+    const windowZoneMargins = {
+      left: zoneRaster("#set-zone-left", 18),
+      top: zoneRaster("#set-zone-top", 8),
+      right: zoneRaster("#set-zone-right", 18),
+      bottom: zoneRaster("#set-zone-bottom", 8)
+    };
+    const localeValue = window.edexI18n?.normalize?.(modal.querySelector("#set-locale")?.value) || "zh-Hant";
+    state.settings = {
+      ...state.settings,
+      dockEnabled: dockEnabledValue,
+      taskbarIntegrationEnabled,
+      dockFrameStyle: dockFrameValue,
+      dockLabelColor: dockLabelColorValue,
+      startWithWindows,
+      windowZoneEnabled,
+      windowZoneMargins
+    };
+    state.displayDockEnabled = dockEnabledValue;
+    syncDockLayout(dockEnabledValue);
+    window.dockPanel?.setFrameStyle?.(state, dockFrameValue);
+    const settingsPatch = {
+      snapWidgets: modal.querySelector("#set-snap").checked,
+      dockEnabled: dockEnabledValue,
+      taskbarIntegrationEnabled,
+      dockFrameStyle: dockFrameValue,
+      dockLabelColor: dockLabelColorValue,
+      gridSize: gridSizeValue,
+      clockPanelFrame,
+      rainFontSize: rainFontValue,
+      rainSpeed: rainSpeedValue,
+      searchFontSize: searchFontValue,
+      layoutMode: layoutModeValue,
+      theme: themeName,
+      keepThemeWallpaper,
+      rainmeterEnabled,
+      startWithWindows,
+      wallpaper,
+      windowsWallpaper,
+      iconView: state.iconView,
+      windowZoneEnabled,
+      windowZoneMargins,
+      locale: localeValue,
+      startupPreset: startupPresetSelect?.value || ""
+    };
+    if (!state.primary) delete settingsPatch.dockEnabled;
+    snapAllLayoutToGrid();
+    const startupPresetName = String(settingsPatch.startupPreset || "").trim();
+    const startupPreset = (state.settings.presets || []).find((preset) => preset.name === startupPresetName);
+    if (startupPreset) {
+      settingsPatch.refreshStartupPreset = startupPresetName;
+    }
+    const result = await window.edex.saveSettings({
+      ...settingsPatch,
+      displayLayout: { ...currentDisplayLayout(), uiScale: state.displayUiScale }
+    });
+    state.settings = result.settings;
+    if (!taskbarIntegrationEnabled && taskbarWindowTimer) {
+      clearInterval(taskbarWindowTimer);
+      taskbarWindowTimer = null;
+    }
+    window.edexI18n?.setLocale?.(state.settings.locale);
+    state.themeName = result.themeName;
+    if (result.displays) state.displays = result.displays;
+    applyTheme(result.theme, wallpaper);
+    applyClockMetrics();
+    applyRainMetrics();
+    closeSettings();
+    toast(startupPreset
+      ? `Einstellungen, Desktop-Layout und Start-Preset „${startupPresetName}“ gespeichert`
+      : "Einstellungen und Desktop-Layout gespeichert");
+    rebuildWorkspace();
+  };
+}
+
+function rebuildWorkspace() {
+  buildLayout();
+  updateDisplayChip();
+  applyClockMetrics();
+  applyRainMetrics();
+  window.edexEffects?.start?.();
+  applyRainMetrics();
+  renderPathCards();
+  if (state.scan) renderStats();
+  loadDesktopListing().then(() => arrangeDesktop());
+  fillDrivesStage();
+  bindTerminal();
+  bindPluginPanels();
+  window.edexI18n?.translatePage?.();
+}
+
+function receiveWidget(widget) {
+  if (!widget?.type) return;
+
+  if (widget.type === "panel" && widget.id && widget.id !== "status" && PANEL_META[widget.id]) {
+    if (widget.id === "dock") {
+      setDockEnabled(true);
+      return;
+    }
+    if (state.layout[widget.id]) {
+      toast("此顯示器已有該插件");
+      return;
+    }
+    state.layout[widget.id] = findEmptyBox({
+      ...(widget.data?.box || {}),
+      x: widget.x ?? PANEL_META[widget.id].box?.x ?? 2,
+      y: widget.y ?? PANEL_META[widget.id].box?.y ?? 4,
+      w: widget.w ?? PANEL_META[widget.id].box?.w ?? 16,
+      h: widget.h ?? PANEL_META[widget.id].box?.h ?? 14,
+      gx: widget.gx,
+      gy: widget.gy,
+      gw: widget.gw,
+      gh: widget.gh
+    }, { panelId: widget.id });
+    persistLayout();
+    rebuildWorkspace();
+    toast(`已接收面板「${PANEL_META[widget.id].title}」`);
+    return;
+  }
+
+  if (widget.type === "path") {
+    const id = widget.id || `p${Date.now()}`;
+    if (!state.pathCards.some((c) => c.id === id)) {
+      state.pathCards.push(findEmptyBox({
+        id,
+        path: widget.data?.path || state.bootstrap.root,
+        x: widget.x ?? 20,
+        y: widget.y ?? 16,
+        w: widget.w ?? 46,
+        h: widget.h ?? 52,
+        gx: widget.gx,
+        gy: widget.gy,
+        gw: widget.gw,
+        gh: widget.gh,
+        iconView: widget.data?.iconView === "list" ? "list" : "grid"
+        ,fixedDisplayId: widget.data?.fixedDisplayId ?? null
+      }, { pathId: id }));
+    } else {
+      const card = state.pathCards.find((c) => c.id === id);
+      Object.assign(card, findEmptyBox({
+        ...card,
+        path: widget.data?.path || card.path,
+        x: widget.x ?? card.x,
+        y: widget.y ?? card.y,
+        w: widget.w ?? card.w,
+        h: widget.h ?? card.h,
+        gx: widget.gx ?? card.gx,
+        gy: widget.gy ?? card.gy,
+        gw: widget.gw ?? card.gw,
+        gh: widget.gh ?? card.gh
+        ,fixedDisplayId: widget.data?.fixedDisplayId ?? card.fixedDisplayId ?? null
+      }, { pathId: id }));
+    }
+    if (!state.activePathId) state.activePathId = id;
+    persistLayout();
+    renderPathCards();
+    const card = state.pathCards.find((c) => c.id === id);
+    scanCard(card);
+    toast("Ordner-Panel übernommen");
+    return;
+  }
+
+  if (widget.type === "desktop") {
+    if (!state.primary) {
+      toast("系統桌面僅能顯示在主顯示器");
+      return;
+    }
+    state.desktopEnabled = true;
+    state.desktopStage = findEmptyBox({
+      ...(state.desktopStage || defaultDesktop()),
+      x: widget.x ?? state.desktopStage?.x,
+      y: widget.y ?? state.desktopStage?.y,
+      w: widget.w ?? state.desktopStage?.w ?? DEFAULT_DESKTOP_PRIMARY.w,
+      h: widget.h ?? state.desktopStage?.h ?? DEFAULT_DESKTOP_PRIMARY.h,
+      gx: widget.gx,
+      gy: widget.gy,
+      gw: widget.gw,
+      gh: widget.gh
+    }, { desktop: true });
+    persistLayout();
+    rebuildWorkspace();
+    toast("已接收桌面容器");
+  }
+}
+
+async function runOrganize() {
+  const root = state.bootstrap?.desktop;
+  if (!root) {
+    toast("找不到系統桌面路徑");
+    return;
+  }
+  const migrate = Boolean(state.settings?.migrateFiles);
+  state.busy = true;
+  setText("st_mode", migrate ? "整理中" : "篩選中");
+  try {
+    const scan = await window.edex.scan(root);
+    state.scan = scan;
+    await refreshPlan();
+    renderStats();
+    if (!migrate) {
+      state.desktopGrouped = true;
+      state.desktopFilter = "all";
+      persistLayout();
+      await loadDesktopListing();
+      arrangeDesktop();
+      log("Anzeige nach Ordnern, Symbolen und Dateiformaten gefiltert (Dateien nicht verschoben)");
+      toast("已按格式大類篩選顯示，檔案仍在系統桌面");
+      return;
+    }
+    if (!state.plan?.count) {
+      toast("沒有需要遷移的項目");
+      return;
+    }
+    const confirmText = `將在系統桌面建立分類／副檔名資料夾並遷移 ${state.plan.count} 個項目。確定？`;
+    if (!window.confirm(window.edexI18n?.translateDynamic?.(confirmText) || confirmText)) {
+      return;
+    }
+    const result = await window.edex.organize(scan, { includeFolders: state.includeFolders });
+    log(`已遷移 ${result.moved} 個項目到分類資料夾`);
+    toast(`已遷移 ${result.moved} 個項目`);
+    await doScan();
+  } catch (err) {
+    toast(err.message);
+    log(`執行失敗：${err.message}`);
+  } finally {
+    state.busy = false;
+    setText("st_mode", "待命");
+  }
+}
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "F10" || (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "s")) {
+    event.preventDefault();
+    openSettings();
+  }
+});
+
+(async function start() {
+  bindUiErrorLogging();
+  logUiAction("ui.start", "Renderer gestartet");
+  state.bootstrap = await window.edex.bootstrap();
+  const fileTags = await window.edex.getFileTags();
+  if (!Array.isArray(fileTags) || fileTags.some((tag) =>
+    !tag || typeof tag.id !== "string" || typeof tag.label !== "string" || typeof tag.color !== "string"
+  )) {
+    throw new Error("Datei-Markierungen konnten nicht geladen werden");
+  }
+  MACOS_TAGS = fileTags;
+  state.settings = state.bootstrap.settings || {};
+  try {
+    state.windowsColors = await window.edex.getWindowsColors?.();
+  } catch {
+    state.windowsColors = null;
+  }
+  window.edexI18n?.setLocale?.(state.settings.locale || "de");
+  state.displays = state.bootstrap.displays || [];
+  state.displayId = state.bootstrap.displayId ?? window.edex.displayId;
+  state.displayIndex = state.bootstrap.displayIndex ?? window.edex.displayIndex ?? 0;
+  state.primary = Boolean(state.bootstrap.primary ?? window.edex.isPrimary);
+  window.edex.onShutdownRequested?.(() => shutdown());
+  state.bounds = state.bootstrap.bounds || {
+    x: 0,
+    y: 0,
+    width: window.edex.launchWidth || window.innerWidth,
+    height: window.edex.launchHeight || window.innerHeight
+  };
+  state.scaleFactor = state.bootstrap.scaleFactor || window.edex.launchScale || 1;
+  state.physicalSize = state.bootstrap.physicalSize || null;
+  state.appVersion = state.bootstrap.appVersion || "";
+  state.themes = state.bootstrap.themes || [];
+  state.wallpapers = state.bootstrap.wallpapers || [];
+  state.themeName = state.bootstrap.themeName || "tron";
+  state.includeFolders = Boolean(state.settings.includeFolders);
+  let startupTheme = state.bootstrap.theme;
+  const configuredStartupPreset = String(state.settings.startupPreset || "").trim();
+  const startupPreset = (state.settings.presets || [])
+    .find((preset) => preset.name === configuredStartupPreset);
+  if (startupPreset) {
+    const preservedPresets = state.settings.presets;
+    state.settings = {
+      ...state.settings,
+      ...startupPreset.settings,
+      presets: preservedPresets,
+      startupPreset: configuredStartupPreset
+    };
+    const presetLayout = startupPreset.displayLayouts?.[String(state.displayId)] || startupPreset.layout;
+    if (presetLayout) state.bootstrap.displayLayout = presetLayout;
+    if (state.settings.theme && state.settings.theme !== state.bootstrap.themeName) {
+      startupTheme = await window.edex.getTheme(state.settings.theme);
+    }
+  }
+
+  // Prefer per-display layout; migrate legacy global layout onto primary once.
+  let saved = state.bootstrap.displayLayout;
+  if (!saved && state.primary && (state.settings.layout || state.settings.pathCards)) {
+    saved = {
+      layout: state.settings.layout,
+      desktopStage: state.settings.desktopStage,
+      pathCards: state.settings.pathCards,
+      iconPositions: state.settings.iconPositions,
+      iconView: state.settings.iconView
+    };
+  }
+  state.displayUiScale = Number.isFinite(Number(saved?.uiScale))
+    ? Math.max(0.4, Math.min(1.5, Number(saved.uiScale)))
+    : Math.max(0.4, Math.min(1.5, Number(state.settings.uiScale) || 1));
+
+  state.iconView = (saved?.iconView || state.settings.iconView) === "list" ? "list" : "grid";
+  state.desktopIconScale = Math.max(0.6, Math.min(2, Number(saved?.desktopIconScale) || Number(state.settings.desktopIconScale) || 1));
+  state.desktopFontScale = Math.max(0.7, Math.min(1.8, Number(saved?.desktopFontScale) || Number(state.settings.desktopFontScale) || 1));
+  state.iconPositions = saved?.iconPositions || {};
+  if (state.settings?.layoutMode !== "4k" && state.settings?.layoutMode !== "2k") {
+    state.settings = { ...state.settings, layoutMode: defaultLayoutMode() };
+  }
+  applyTheme(startupTheme, state.settings.wallpaper || "grid");
+
+  try {
+    const fitted = await window.edex.refitDisplay();
+    if (fitted?.bounds) {
+      state.bounds = fitted.bounds;
+      state.scaleFactor = fitted.scaleFactor || state.scaleFactor;
+      state.physicalSize = fitted.physicalSize || state.physicalSize;
+    }
+  } catch {
+    // Keep launch bounds if refit is unavailable.
+  }
+  applyUiMetrics();
+  await migrateWindowZoneToRaster();
+
+  await boot();
+
+  const defaults = defaultWidgets();
+  state.layout = defaults;
+  const savedLayout = saved?.layout || null;
+  state.displayDockEnabled = typeof saved?.dockEnabled === "boolean"
+    ? saved.dockEnabled
+    : state.settings?.dockEnabled !== false;
+  state.displayDockSettings = {
+    position: saved?.dockPosition === "top" ? "top" : String(saved?.dockPosition || state.settings?.dockPosition || "bottom"),
+    width: Number(saved?.dockWidth) || Number(state.settings?.dockWidth) || 720,
+    height: Number(saved?.dockHeight) || Number(state.settings?.dockHeight) || 72,
+    frameStyle: ["rounded", "trapezoid", "rect"].includes(saved?.dockFrameStyle)
+      ? saved.dockFrameStyle
+      : (state.settings?.dockFrameStyle || "rounded")
+  };
+  const oldSecondaryMirror = !state.primary && savedLayout && Object.keys(savedLayout).length
+    && Object.keys(savedLayout).every((k) => ["clock", "status"].includes(k));
+
+  if (savedLayout && !oldSecondaryMirror) {
+    // Trust saved layout exactly — missing keys mean the user closed those panels.
+    state.layout = {};
+    Object.keys(savedLayout).forEach((key) => {
+      if (key === "status" || REMOVED_PANELS.has(key)) return;
+      if (!PANEL_META[key]) return;
+      state.layout[key] = { ...(PANEL_META[key].box || {}), ...savedLayout[key] };
+    });
+  } else if (!state.primary) {
+    state.layout = {};
+  } else {
+    state.layout = defaults;
+  }
+
+  // Dock is a primary-only backdrop driven by settings.dockEnabled (default on).
+  syncDockLayout(dockEnabled());
+
+  // Drop retired panels from memory + disk so they cannot reappear.
+  let strippedRemoved = false;
+  for (const key of REMOVED_PANELS) {
+    if (state.layout[key]) {
+      delete state.layout[key];
+      strippedRemoved = true;
+    }
+  }
+  if (strippedRemoved || Object.keys(savedLayout || {}).some((k) => REMOVED_PANELS.has(k))) {
+    queueMicrotask(async () => {
+      await persistLayout();
+      await purgePanelFromSavedLayouts([...REMOVED_PANELS]);
+    });
+  }
+
+  state.desktopStage = saved?.desktopStage
+    ? { ...defaultDesktop(), ...saved.desktopStage }
+    : defaultDesktop();
+  if (saved?.desktopBg && !state.desktopStage.bg) state.desktopStage.bg = saved.desktopBg;
+  // 系統桌面 only on the primary monitor — force off on secondaries and persist.
+  if (!state.primary) {
+    if (saved?.desktopEnabled !== false) {
+      queueMicrotask(() => persistLayout());
+    }
+    state.desktopEnabled = false;
+  } else {
+    state.desktopEnabled = saved?.desktopEnabled !== false;
+  }
+  state.desktopLocked = Boolean(saved?.desktopLocked);
+  state.desktopGrouped = Boolean(saved?.desktopGrouped);
+  const savedFavorites = Array.isArray(saved?.desktopFavorites)
+    ? saved.desktopFavorites
+    : [];
+  const hasGlobalFavorites = Array.isArray(state.settings?.desktopFavorites);
+  const globalFavorites = hasGlobalFavorites ? state.settings.desktopFavorites : [];
+  state.desktopFavorites = [...new Set(
+    (hasGlobalFavorites ? globalFavorites : savedFavorites)
+      .map((path) => String(path || "").trim())
+      .filter(Boolean)
+  )];
+  if (!hasGlobalFavorites && savedFavorites.length) {
+    queueMicrotask(() => window.edex.saveSettings({ desktopFavorites: state.desktopFavorites }));
+  }
+  state.desktopFilter = saved?.desktopFilter || "all";
+  state.desktopTabId = saved?.desktopTabId || "classify";
+  state.desktopFolderTabs = Array.isArray(saved?.desktopFolderTabs)
+    ? saved.desktopFolderTabs
+      .filter((tab) => tab?.id && tab?.path)
+      .map((tab) => ({
+        id: String(tab.id),
+        path: String(tab.path),
+        name: String(tab.name || folderTabTitle(tab.path)),
+        listing: null
+      }))
+    : [];
+  if (
+    state.desktopTabId !== "classify"
+    && !(state.desktopFolderTabs || []).some((tab) => tab.id === state.desktopTabId)
+  ) {
+    state.desktopTabId = "classify";
+  }
+
+  if (Array.isArray(saved?.pathCards) && saved.pathCards.length) {
+    state.pathCards = saved.pathCards
+      .filter((card) => card?.path && card.id !== "desktop")
+      .map((card) => {
+        const tabs = Array.isArray(card.tabs)
+          ? card.tabs.filter((tab) => tab?.id && tab?.path).map((tab) => ({
+            id: String(tab.id),
+            path: String(tab.path),
+            name: String(tab.name || ""),
+            listing: null,
+            scan: null,
+            listingError: ""
+          }))
+          : [];
+        return {
+          ...card,
+          name: String(card.name || ""),
+          tabs,
+          activeTabId: String(card.activeTabId || tabs[0]?.id || `${card.id}:root`)
+        };
+      });
+  } else {
+    state.pathCards = [];
+  }
+  state.pathCards.forEach((card) => {
+    ensurePathTabs(card);
+    const active = card.tabs.find((tab) => tab.id === card.activeTabId) || card.tabs[0];
+    card.activeTabId = active.id;
+    card.path = active.path;
+    card.name = active.name || card.name;
+  });
+  state.activePathId = state.pathCards[0]?.id || null;
+
+  snapAllLayoutToGrid();
+  const savedLayoutChanged = normalizeSavedLayout();
+  if (savedLayoutChanged) {
+    queueMicrotask(() => persistLayout());
+  }
+  buildLayout();
+  bindTerminal();
+  window.edexI18n?.translatePage?.();
+  setText("info_user", state.bootstrap.username);
+  setText("info_host", state.bootstrap.hostname);
+  updateDisplayChip();
+  renderPathCards();
+
+  window.edex.onDisplaysChanged((payload) => {
+    if (Array.isArray(payload)) {
+      state.displays = payload;
+    } else {
+      state.displays = payload.displays || state.displays;
+      if (payload.bounds) state.bounds = payload.bounds;
+      if (payload.scaleFactor) state.scaleFactor = payload.scaleFactor;
+      if (payload.displayId != null) state.displayId = payload.displayId;
+      if (payload.index != null) state.displayIndex = payload.index;
+      if (payload.physicalSize) state.physicalSize = payload.physicalSize;
+    }
+    updateDisplayChip();
+  });
+
+  window.edex.onUpdateCheckResult?.((result) => {
+    state.updateResult = result;
+    const status = document.querySelector("#set-update-status");
+    if (status && result.ok) {
+      status.textContent = result.updateAvailable
+        ? `Neue Version ${result.latestVersion} verfügbar`
+        : "Keine neue Version verfügbar";
+    } else if (status && !result.ok) {
+      status.textContent = `Prüfung fehlgeschlagen: ${result.error}`;
+    }
+  });
+  window.edex.onUpdateAvailable?.((result) => {
+    toast(`Neue Version ${result.latestVersion} verfügbar (aktuell ${result.currentVersion})`);
+  });
+
+  window.edex.onThemePreview?.((theme) => {
+    applyTheme(theme, state.settings.wallpaper || "grid", { preview: true });
+    applyTerminalTheme(theme);
+  });
+  window.edex.onThemePreviewReset?.(() => {
+    if (state.theme) {
+      applyTheme(state.theme, state.settings.wallpaper || "grid");
+      applyTerminalTheme(state.theme);
+    }
+  });
+
+  window.edex.onSettingsUpdated((payload) => {
+    const prevGrid = gridSize();
+    const prevGridSetting = settingsGridSize();
+    const prevClock = clockScale();
+    const prevMode = layoutMode();
+    const prevUi = displayUiScale();
+    const previousLocale = state.settings.locale || "de";
+    state.settings = payload.settings || state.settings;
+    window.edexI18n?.setLocale?.(state.settings.locale || "de");
+    state.themeName = payload.themeName || state.themeName;
+    if (payload.displays) state.displays = payload.displays;
+    if (payload.theme) {
+      applyTheme(payload.theme, state.settings.wallpaper || "grid");
+      applyTerminalTheme(payload.theme);
+    }
+    else applyUiMetrics();
+    applyClockMetrics();
+    applyRainMetrics();
+    updateDisplayChip();
+    renderClock();
+    if (previousLocale !== (state.settings.locale || "de")) {
+      rebuildWorkspace();
+    } else if (
+      settingsGridSize() !== prevGridSetting
+      || gridSize() !== prevGrid
+      || layoutMode() !== prevMode
+      || displayUiScale() !== prevUi
+    ) {
+      snapAllLayoutToGrid();
+      rebuildWorkspace();
+    } else if (clockScale() !== prevClock) {
+      applyClockMetrics();
+      renderClock();
+    }
+  });
+
+  window.edex.onReceiveWidget((widget) => receiveWidget(widget));
+  setupDesktopClickThrough();
+  bindDesktopIconClicks();
+
+  window.addEventListener("resize", () => {
+    applyUiMetrics();
+    updateDisplayChip();
+  });
+
+  await loadDesktopListing();
+  await arrangeDesktop();
+  await doScan();
+  if (state.primary && state.settings.firstRun?.completed === false) {
+    window.edexFirstRun?.open({ state, previewTheme: applyTheme });
+  }
+})();

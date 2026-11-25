@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>eDEX Boot</title>
+<style>
+:root {
+  --bg: #02060a; --fg: #7fe8ff; --dim: #1e5f72;
+  --ok: #2cffb0; --warn: #ffcc4d; --err: #ff3d6e; --pink: #e0357a;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; background: var(--bg); overflow: hidden; }
+body {
+  color: var(--fg);
+  font: 13px/1.55 "Share Tech Mono", "Courier New", monospace;
+  position: relative;
+}
+
+/* Scanlines */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, rgba(0,0,0,.20) 0 1px, transparent 1px 3px
+  );
+  pointer-events: none; z-index: 99;
+}
+/* Vignette */
+body::after {
+  content: "";
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.7));
+  pointer-events: none; z-index: 98;
+}
+
+#term {
+  position: absolute; inset: 0;
+  padding: 18px 26px 72px;
+  overflow: hidden;
+  text-shadow: 0 0 5px rgba(127,232,255,.35);
+}
+
+/* Farben */
+.ok   { color: var(--ok); }
+.w    { color: var(--warn); }
+.er   { color: var(--err); }
+.d    { color: var(--dim); }
+.p    { color: var(--pink); }
+.b    { font-weight: bold; }
+.hi   { color: #fff; text-shadow: 0 0 10px #fff; }
+
+/* Fußleiste */
+#foot {
+  position: fixed; left: 26px; right: 26px;
+  bottom: 18px; z-index: 100;
+  font-size: 11px; color: var(--dim);
+  display: flex; align-items: center; gap: 12px;
+}
+#pct { min-width: 70px; }
+#track { flex: 1; height: 4px; border: 1px solid var(--dim); background: rgba(127,232,255,.03); }
+#fill  { height: 100%; width: 0; background: var(--fg); box-shadow: 0 0 8px var(--fg); transition: width .12s linear; }
+
+/* Skip */
+#skip {
+  position: fixed; top: 10px; right: 14px; z-index: 101;
+  background: transparent; border: 1px solid var(--dim);
+  color: var(--dim); font: 11px "Share Tech Mono", monospace;
+  padding: 2px 10px; cursor: pointer;
+}
+#skip:hover { color: var(--fg); border-color: var(--fg); }
+
+/* Endbildschirm */
+#fin {
+  position: fixed; inset: 0; z-index: 102;
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  background: var(--bg);
+}
+#fin h1 {
+  font-size: clamp(32px, 7vw, 80px);
+  letter-spacing: .5em; color: var(--fg);
+  text-shadow: 0 0 30px var(--fg), 0 0 60px rgba(127,232,255,.3);
+  animation: glow 2s ease-in-out infinite;
+}
+#fin .sub { color: var(--dim); letter-spacing: .35em; font-size: 12px; }
+#fin .cd  { color: var(--ok); font-size: 12px; }
+@keyframes glow { 50% { opacity: .5; } }
+</style>
+</head>
+<body>
+
+<button id="skip">SKIP ▸</button>
+<div id="term"></div>
+<div id="foot">
+  <span id="pct">BOOT 0%</span>
+  <div id="track"><div id="fill"></div></div>
+</div>
+<div id="fin">
+  <h1>eDEX-UI</h1>
+  <div class="sub">SYSTEM ONLINE</div>
+  <div class="cd" id="cd">starte Dashboard …</div>
+</div>
+
+<script>
+'use strict';
+
+// ── DOM-Refs ─────────────────────────────────────────────────────────────────
+const TERM  = document.getElementById('term');
+const FILL  = document.getElementById('fill');
+const PCT   = document.getElementById('pct');
+
+// ── Hilfsfunktionen ──────────────────────────────────────────────────────────
+const sleep  = ms => new Promise(r => setTimeout(r, ms));
+const fmtGB  = b  => b > 0 ? (b / 2**30).toFixed(1) : '?';
+const pctOf  = (a,b) => b > 0 ? ((a/b)*100).toFixed(0) : '?';
+const hex    = n  => Math.floor(Math.random()*16**n).toString(16).padStart(n,'0');
+const ts     = () => {
+  const t = (performance.now()/1000).toFixed(6).padStart(13,' ');
+  return `<span class="d">[${t}]</span> `;
+};
+
+let fast = false;
+let _done = 0, _total = 1;
+
+function prog(n = 1) {
+  _done = Math.min(_done + n, _total);
+  const p = (_done / _total * 100).toFixed(1);
+  FILL.style.width  = p + '%';
+  PCT.textContent   = 'BOOT ' + Math.round(+p) + '%';
+}
+function progTo(p) {
+  FILL.style.width = p + '%';
+  PCT.textContent  = 'BOOT ' + Math.round(p) + '%';
+}
+
+function line(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  TERM.appendChild(d);
+  while (TERM.scrollHeight > TERM.clientHeight + 6 && TERM.firstChild)
+    TERM.removeChild(TERM.firstChild);
+}
+
+async function typeCmd(cmd, spd = 20) {
+  const d = document.createElement('div');
+  TERM.appendChild(d);
+  while (TERM.scrollHeight > TERM.clientHeight + 6 && TERM.firstChild)
+    TERM.removeChild(TERM.firstChild);
+  const prompt = `<span class="ok">root</span><span class="d">@eDEX-UI</span>:<span class="w">~</span># `;
+  d.innerHTML = prompt;
+  const span = document.createElement('span');
+  d.appendChild(span);
+  for (const c of cmd) {
+    if (fast) { span.textContent = cmd; return; }
+    span.textContent += c;
+    await sleep(spd + Math.random() * 12);
+  }
+}
+
+async function pause(ms) { if (!fast) await sleep(ms); }
+
+// ── Echte Daten via window.edex ──────────────────────────────────────────────
+async function loadData() {
+  const api = window.edex;
+  if (!api) return null;
+
+  const [hw, mem, procs, net, drives] = await Promise.allSettled([
+    api.getHardwareInfo?.(),
+    api.getMemMetrics?.(),
+    api.getTopProcesses?.(),
+    api.getNetStatus?.(),
+    api.listDrives?.(),
+  ]);
+
+  return {
+    hw:     hw.status     === 'fulfilled' ? hw.value     : null,
+    mem:    mem.status    === 'fulfilled' ? mem.value    : null,
+    procs:  procs.status  === 'fulfilled' ? procs.value  : null,
+    net:    net.status    === 'fulfilled' ? net.value    : null,
+    drives: drives.status === 'fulfilled' ? drives.value : null,
+  };
+}
+
+// ── Fallback-Daten (kein Electron / Entwicklungsmodus) ───────────────────────
+function fallback() {
+  return {
+    hw: {
+      cpu: { brand: 'Intel Core i9-10900K', cores: 20, speed: 3.7, speedMax: 5.3 },
+      gpu: { model: 'NVIDIA GeForce RTX 3080', vram: 10240, driverVersion: '537.58' },
+      os:  { distro: 'Windows 11', release: '23H2', arch: 'x64', hostname: 'BOCKIS-PC', kernel: '10.0.22631', build: '22631' },
+      bios: { vendor: 'ASUS', version: '3801', date: '05/10/2023' },
+    },
+    mem:   { total: 34359738368, used: 16106127360, free: 18253611008, cached: 2147483648 },
+    procs: [
+      { name: 'Discord.exe',       pid: 24076, cpuPercent: 20.3, memPercent: 2.1 },
+      { name: 'Elgato.WaveLink',   pid: 19960, cpuPercent: 13.5, memPercent: 1.8 },
+      { name: 'Code.exe',          pid: 11249, cpuPercent: 8.4,  memPercent: 3.2 },
+      { name: 'Beckis-wDEX Deskto',pid: 15706, cpuPercent: 5.3,  memPercent: 2.7 },
+      { name: 'steamwebhelper',    pid: 10192, cpuPercent: 4.0,  memPercent: 1.1 },
+    ],
+    net:   { interfaces: [{ name: 'Ethernet', address: '192.168.1.42', mac: 'de:ad:be:ef:00:01', speed: 1000 }] },
+    drives:[
+      { letter: 'C:', label: 'System', total: 549755813888, used: 301006249984, free: 248749563904, fsType: 'NTFS' },
+      { letter: 'D:', label: 'Daten',  total: 2199023255552, used: 879609302016, free: 1319413953536, fsType: 'NTFS' },
+    ],
+  };
+}
+
+// ── Boot-Sequenz ─────────────────────────────────────────────────────────────
+async function boot() {
+
+  // Daten parallel laden während Logo gezeigt wird
+  const dataPromise = loadData();
+
+  // Logo
+  line(`<span class="p">  ███████╗██████╗ ███████╗██╗  ██╗    ██╗   ██╗██╗</span>`);
+  line(`<span class="p">  ██╔════╝██╔══██╗██╔════╝╚██╗██╔╝    ██║   ██║██║</span>`);
+  line(`<span class="p">  █████╗  ██║  ██║█████╗   ╚███╔╝     ██║   ██║██║</span>`);
+  line(`<span class="p">  ██╔══╝  ██║  ██║██╔══╝   ██╔██╗     ██║   ██║██║</span>`);
+  line(`<span class="p">  ███████╗██████╔╝███████╗██╔╝ ██╗    ╚██████╔╝██║</span>`);
+  line(`<span class="d">  PERSONAL GRID — Boot-Loader v3.0 — ${new Date().toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>`);
+  line('');
+  await pause(500);
+
+  // Daten auflösen
+  const raw = await dataPromise;
+  const D   = (raw?.hw && raw?.mem) ? raw : fallback();
+  const usingReal = !!(raw?.hw && raw?.mem);
+
+  const hw  = D.hw;
+  const cpu = hw?.cpu    ?? {};
+  const gpu = hw?.gpu    ?? {};
+  const osi = hw?.os     ?? {};
+  const mem = D.mem      ?? {};
+  const procs  = D.procs  ?? [];
+  const net    = D.net    ?? {};
+  const drives = D.drives ?? [];
+
+  // Schritte kalkulieren
+  _total = 7                      // Hardware-Zeilen
+         + 12                     // OK-Dienste
+         + Math.max(1, (net.interfaces?.filter(i => i.address)?.length ?? 1))
+         + Math.max(1, drives.length)
+         + Math.min(6, procs.length)
+         + 6                      // Diagnose
+         + 10;                    // Pakete
+  _done = 0;
+
+  // ── Phase 1: Hardware ─────────────────────────────────────────────────────
+  line(ts() + `Kernel: <span class="b">${osi.kernel ?? '10.0.22631'}</span>  Host: <span class="b">${osi.hostname ?? 'BOCKIS-PC'}</span>`); prog();
+  await pause(60);
+
+  line(ts() + `OS: <span class="b">${osi.distro ?? 'Windows'} ${osi.release ?? ''}</span>  Build <span class="d">${osi.build ?? ''}</span>  ${osi.arch ?? 'x64'}`); prog();
+  await pause(60);
+
+  if (hw?.bios?.vendor)
+  { line(ts() + `BIOS: ${hw.bios.vendor} ${hw.bios.version}  (${hw.bios.date})`); prog(); await pause(50); }
+  else prog();
+
+  line(ts() + `CPU:  <span class="b">${cpu.brand ?? 'Unbekannt'}</span>  ${cpu.cores ?? '?'} Kerne  ${cpu.speed ?? '?'} GHz base / ${cpu.speedMax ?? '?'} GHz boost`); prog();
+  await pause(70);
+
+  const ramBar = (() => {
+    const pct = Math.round((mem.used ?? 0) / (mem.total ?? 1) * 20);
+    return `<span class="ok">${'▓'.repeat(pct)}</span><span class="d">${'░'.repeat(20-pct)}</span>`;
+  })();
+  line(ts() + `RAM:  [${ramBar}]  <span class="b">${fmtGB(mem.used)} / ${fmtGB(mem.total)} GiB</span>  <span class="d">${fmtGB(mem.free)} GiB frei</span>`); prog();
+  await pause(60);
+
+  if (gpu.model)
+  { line(ts() + `GPU:  <span class="b">${gpu.model}</span>${gpu.vram ? '  '+gpu.vram+' MB VRAM' : ''}${gpu.driverVersion ? '  <span class="d">Treiber '+gpu.driverVersion+'</span>' : ''}`); prog(); await pause(60); }
+  else prog();
+
+  line(ts() + `Daten: <span class="${usingReal ? 'ok' : 'w'}">${usingReal ? 'echte Systemdaten via window.edex' : 'Demo-Fallback (kein Electron-Kontext)'}</span>`); prog();
+  await pause(80);
+  line('');
+
+  // ── Phase 2: Dienste ──────────────────────────────────────────────────────
+  const svcs = [
+    'Mounting filesystem root',
+    'Loading kernel modules',
+    'Starting udev daemon',
+    'Initializing network stack',
+    'Starting Light-Cycle scheduler',
+    'Bringing up Identity Disc service',
+    'Syncing system clock (NTP)',
+    'Starting I/O tower relay',
+    'Loading display shader pipeline',
+    'Starting telemetry bridge',
+    'Mounting user data partitions',
+    'Spawning terminal emulator (PTY)',
+  ];
+  for (const s of svcs) {
+    line(`[<span class="ok">  OK  </span>] <span class="d">${s}</span>`);
+    prog(); await pause(fast ? 0 : 55 + Math.random() * 130);
+  }
+  line('');
+
+  // ── Phase 3: Netzwerk ─────────────────────────────────────────────────────
+  line(`<span class="w">:: Netzwerk-Schnittstellen</span>`);
+  const ifaces = (net.interfaces ?? []).filter(i => i.address);
+  if (ifaces.length) {
+    for (const iface of ifaces) {
+      line(`   <span class="ok">↑</span>  ${(iface.name ?? '').padEnd(14,' ')} <span class="b">${(iface.address ?? '').padEnd(17,' ')}</span> <span class="d">MAC ${iface.mac ?? '?'}${iface.speed ? '  '+iface.speed+'Mbps' : ''}</span>`);
+      prog(); await pause(fast ? 0 : 60);
+    }
+  } else {
+    line(`   <span class="w">keine aktiven Schnittstellen</span>`);
+    prog();
+  }
+  line('');
+  await pause(150);
+
+  // ── Phase 4: Laufwerke ────────────────────────────────────────────────────
+  line(`<span class="w">:: Dateisystem / Laufwerke</span>`);
+  const drvList = drives.length ? drives : fallback().drives;
+  for (const drv of drvList) {
+    const used  = drv.used  ?? (drv.total - drv.free) ?? 0;
+    const total = drv.total ?? 1;
+    const useP  = Math.round(used / total * 100);
+    const filled= Math.round(useP / 100 * 22);
+    const bar   = `<span class="ok">${'▓'.repeat(filled)}</span><span class="d">${'░'.repeat(22-filled)}</span>`;
+    const col   = useP > 85 ? 'er' : useP > 65 ? 'w' : 'ok';
+    line(`   <span class="b">${(drv.letter ?? drv.mount ?? '').padEnd(4,' ')}</span>  [${bar}] <span class="${col}">${String(useP).padStart(3,' ')}%</span>  <span class="d">${fmtGB(used)} / ${fmtGB(total)} GiB  ${drv.label ? '('+drv.label+')' : ''}  ${drv.fsType ?? ''}</span>`);
+    prog(); await pause(fast ? 0 : 70);
+  }
+  line('');
+  await pause(150);
+
+  // ── Phase 5: Prozesse ─────────────────────────────────────────────────────
+  if (procs.length) {
+    line(`<span class="w">:: Top-Prozesse (CPU)</span>`);
+    for (const p of procs.slice(0, 6)) {
+      const name = (p.name ?? p.exe ?? 'unknown').slice(0, 22).padEnd(22, ' ');
+      const cpu  = (p.cpuPercent ?? p.cpu ?? 0).toFixed(1);
+      const mem  = (p.memPercent ?? p.mem ?? 0).toFixed(1);
+      line(`   <span class="d">${String(p.pid ?? 0).padStart(6,' ')}</span>  <span class="b">${name}</span> CPU <span class="ok">${cpu.padStart(5,' ')}%</span>  MEM <span class="d">${mem}%</span>`);
+      prog(); await pause(fast ? 0 : 40);
+    }
+    line('');
+  }
+
+  // ── Phase 6: Diagnose ─────────────────────────────────────────────────────
+  line(`<span class="w">:: Systemdiagnose</span>`);
+  const checks = [
+    ['CPU-Auslastung',        'bestanden'],
+    ['Arbeitsspeicher',       'bestanden'],
+    ['Netzwerk-Interface',    ifaces.length ? 'bestanden' : 'WARNUNG'],
+    ['GPU-Shader-Pipeline',   gpu.model    ? 'bestanden' : 'übersprungen'],
+    ['Dateisystem-Integrität','bestanden'],
+    ['Electron IPC-Bridge',   usingReal    ? 'bestanden' : 'Fallback-Modus'],
+  ];
+  for (const [lbl, res] of checks) {
+    const cls = res === 'bestanden' ? 'ok' : res === 'WARNUNG' ? 'w' : 'd';
+    line(`   prüfe <span class="d">${lbl.padEnd(28,' ')}</span> <span class="${cls}">${res}</span>`);
+    prog(); await pause(fast ? 0 : 90 + Math.random() * 110);
+  }
+  line('');
+  await pause(200);
+
+  // ── Phase 7: Installations-Routine ───────────────────────────────────────
+  await typeCmd('edex-install --full --theme tron --source live', 20);
+  await pause(250);
+  line(`<span class="d">Reading package lists… Done</span>`);
+  line(`<span class="d">Resolving dependencies… Done</span>`);
+  await pause(200);
+
+  const pkgs = [
+    'libgrid-core', 'tron-theme-neon', 'edex-ui-shell',
+    'sysinfo-bridge', 'globe-render', 'netmon-live',
+    'proc-watch', 'fs-browser', 'audio-fx', 'pty-bridge',
+  ];
+
+  for (const pkg of pkgs) {
+    const row  = document.createElement('div');
+    TERM.appendChild(row);
+    while (TERM.scrollHeight > TERM.clientHeight + 6 && TERM.firstChild)
+      TERM.removeChild(TERM.firstChild);
+    const size = (Math.random() * 900 + 80).toFixed(0);
+    for (let i = 0; i <= 20; i++) {
+      if (!fast) await sleep(14 + Math.random() * 22);
+      row.innerHTML =
+        `Installiere <span class="b">${pkg.padEnd(16,' ')}</span> ` +
+        `[<span class="ok">${'#'.repeat(i)}</span><span class="d">${'.'.repeat(20-i)}</span>] ` +
+        `${String(i*5).padStart(3,' ')}%  <span class="d">${size} kB</span>`;
+    }
+    row.innerHTML =
+      `Installiere <span class="b">${pkg.padEnd(16,' ')}</span> ` +
+      `[<span class="ok">${'#'.repeat(20)}</span>] ` +
+      `<span class="ok">fertig</span>  <span class="d">sha256:${hex(8)}</span>`;
+    prog(); await pause(fast ? 0 : 30);
+  }
+
+  line('');
+  line(`<span class="ok">Installation abgeschlossen.</span>  <span class="d">0 Fehler  0 Warnungen</span>`);
+  await pause(300);
+  await typeCmd('systemctl start edex-ui', 22);
+  progTo(100);
+  await pause(600);
+
+  // ── Fertig ────────────────────────────────────────────────────────────────
+  const fin = document.getElementById('fin');
+  fin.style.display = 'flex';
+  const cd  = document.getElementById('cd');
+  let   n   = 3;
+  const iv  = setInterval(() => {
+    cd.textContent = `starte Dashboard in ${n} …`;
+    if (n-- <= 0) {
+      clearInterval(iv);
+      cd.textContent = 'bereit.';
+      // ─── Hier weiterleiten ───────────────────────────────────────────────
+      // window.location.href = 'index.html';
+      // oder per IPC (falls du boot:done in main.js abfängst):
+      // window.edex?.logAction?.('boot', 'boot:done');
+      window.dispatchEvent(new CustomEvent('edex:boot-complete'));
+    }
+  }, 900);
+}
+
+document.getElementById('skip').onclick = () => { fast = true; };
+boot();
+</script>
+</body>
+</html>

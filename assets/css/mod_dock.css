@@ -1,0 +1,373 @@
+/* Dock — opaque frame flush to the selected screen edge; circuit glow on canvas */
+
+#mod_dock.dock-root {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    user-select: none;
+    pointer-events: none !important;
+    contain: layout paint;
+}
+
+.dock-shell {
+    position: absolute;
+    inset: 0;
+    background: var(--dock-surface, var(--panel-surface, var(--color_light_black, #05080d)));
+    border: none;
+    pointer-events: none;
+    transform: translateZ(0);
+}
+
+.dock-items {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.45rem 0.8rem;
+    pointer-events: auto;
+    z-index: 3;
+}
+
+.task-dock-panel {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    background: transparent;
+    pointer-events: auto;
+}
+
+#card_taskdock.taskdock-auto-grow {
+    max-width: 100vw;
+    overflow: visible;
+}
+
+#card_taskdock.taskdock-auto-grow .card-body {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+}
+
+#card_taskdock.taskdock-auto-grow #task-dock-panel {
+    height: auto;
+    min-height: 0;
+}
+
+#card_taskdock.taskdock-auto-grow .task-dock-items {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: center;
+    height: auto;
+    overflow: visible;
+}
+
+#card_taskdock.taskdock-auto-grow .dock-item {
+    flex: 0 0 auto;
+}
+
+#card_taskdock.taskdock-auto-grow .resize-handle {
+    display: none;
+}
+
+#card_taskdock.taskdock-fixed-size .task-dock-items {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+#card_taskdock.taskdock-labels-off .dock-item-label {
+    display: none;
+}
+
+.task-dock-shell {
+    display: none;
+}
+
+.task-dock-items {
+    position: relative;
+    inset: auto;
+    min-width: 0;
+    width: 100%;
+    padding: 0.25rem 0.65rem;
+    gap: 0.25rem;
+    pointer-events: auto;
+}
+
+.task-dock-panel .dock-item {
+    min-width: 4.6rem;
+    min-height: 4.2rem;
+    max-width: 6.8rem;
+    font-size: clamp(0.7rem, calc(var(--fs) * 0.65), 0.85rem);
+}
+
+.task-dock-panel .dock-item-icon {
+    width: 2.7rem;
+    height: 2.7rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="compact"] .dock-item {
+    min-width: 3.8rem;
+    min-height: 3.6rem;
+    max-width: 5.6rem;
+    padding: 0.15rem 0.25rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="compact"] .dock-item-icon {
+    width: 2rem;
+    height: 2rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="compact"] .dock-item-label {
+    font-size: 0.68rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="large"] .dock-item {
+    min-width: 5.5rem;
+    min-height: 5.2rem;
+    max-width: 8rem;
+    padding: 0.25rem 0.4rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="large"] .dock-item-icon {
+    width: 3.3rem;
+    height: 3.3rem;
+}
+
+#card_taskdock[data-taskdock-tile-size="large"] .dock-item-label {
+    font-size: 0.85rem;
+}
+
+.task-dock-panel .taskbar-window-item.active {
+    background: rgba(var(--ddj), 0.2);
+    border-color: rgba(var(--ddj), 0.8);
+}
+
+.task-dock-panel .taskbar-window-item.minimized {
+    opacity: 0.62;
+}
+
+.task-dock-empty {
+    align-self: center;
+    color: rgba(var(--ddj), 0.55);
+    font-size: 0.72em;
+    letter-spacing: 0.08em;
+    padding: 0.5rem;
+}
+
+.dock-item {
+    min-width: 5.6rem;
+    max-width: 7.5rem;
+    min-height: 4.8rem;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    overflow: hidden;
+    padding: 0.2rem 0.35rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--dock-label-color, rgb(var(--ddj)));
+    font: inherit;
+    font-size: clamp(10px, calc(var(--fs) * 0.52), 14px);
+    letter-spacing: 0.05em;
+    cursor: pointer;
+}
+
+.dock-item.has-tab-group {
+    position: relative;
+    overflow: visible;
+    background: rgba(127, 232, 255, 0.07);
+    border-color: rgba(127, 232, 255, 0.28);
+}
+
+.dock-item.has-tab-group:hover,
+.dock-item.has-tab-group:focus-visible {
+    background: rgba(127, 232, 255, 0.16);
+    border-color: rgba(127, 232, 255, 0.72);
+}
+
+.dock-item.has-tab-group::after {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 0.45rem);
+    z-index: 20;
+    width: max-content;
+    max-width: 18rem;
+    padding: 0.42rem 0.58rem;
+    border: 1px solid rgba(127, 232, 255, 0.48);
+    background: rgba(2, 8, 13, 0.97);
+    box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.48);
+    color: #d7f8ff;
+    content: attr(data-dock-tabs);
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 0.25rem);
+    transition: opacity 120ms ease, transform 120ms ease;
+    white-space: normal;
+}
+
+.dock-item.has-tab-group:hover::after,
+.dock-item.has-tab-group:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.dock-tab-count {
+    position: absolute;
+    top: 0.18rem;
+    right: 0.22rem;
+    min-width: 1.05rem;
+    height: 1.05rem;
+    padding: 0 0.18rem;
+    border: 1px solid rgba(127, 232, 255, 0.65);
+    border-radius: 50%;
+    background: rgba(2, 8, 13, 0.92);
+    color: #d7f8ff;
+    font-family: "Share Tech Mono", "Courier New", monospace;
+    font-size: 0.68rem;
+    line-height: 0.95rem;
+    text-align: center;
+}
+
+.dock-item-icon {
+    width: 3.1rem;
+    height: 3.1rem;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 0;
+    background-color: transparent;
+    background-image: none;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    image-rendering: auto;
+    overflow: hidden;
+}
+
+.dock-item-icon-image { object-fit: contain; }
+
+.dock-item-icon-cpu { background-image: url("../icons/dock/cpu.png"); }
+.dock-item-icon-desktop { background-image: url("../icons/dock/desktop.png"); }
+.dock-item-icon-processes { background-image: url("../icons/dock/prozesse.png"); }
+.dock-item-icon-clock { background-image: url("../icons/dock/uhr.png"); }
+.dock-item-icon-world { background-image: url("../icons/dock/world-view.png"); }
+.dock-item-icon-ram { background-image: url("../icons/dock/ram.png"); }
+.dock-item-icon-network { background-image: url("../icons/dock/network.png"); }
+.dock-item-icon-drive { background-image: url("../icons/dock/lokale-laufwerke.png"); }
+.dock-item-icon-directories { background-image: url("../icons/dock/verzeichnisse.png"); }
+.dock-item-icon-folders { background-image: url("../icons/dock/ordner.png"); }
+.dock-item-icon-search { background-image: url("../icons/dock/suche.png"); }
+.dock-item-icon-browser { background-image: url("../icons/dock/browser.png"); }
+.dock-item-icon-cloud { background-image: url("../icons/dock/cloud.png"); }
+.dock-item-icon-terminal { background-image: url("../icons/dock/terminal.png"); }
+.dock-item-icon-log { background-image: url("../icons/dock/log.png"); }
+.dock-item-icon-weather { background-image: url("../icons/dock/wetter.png"); }
+.dock-item-icon-calendar { background-image: url("../icons/dock/kalender.png"); }
+.dock-item-icon-calculator { background-image: url("../icons/dock/taschenrechner.png"); }
+.dock-item-icon-fallback {
+    background-image: none;
+    background-color: rgba(var(--ddj), 0.12);
+}
+
+.dock-item-icon-fallback::after {
+    content: "◆";
+    color: rgb(var(--ddj));
+    font-size: 1.25em;
+    line-height: 1;
+}
+
+.dock-item-label {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.dock-item:hover,
+.dock-item:focus-visible {
+    background: rgba(var(--ddj), 0.08);
+    border-color: rgba(var(--ddj), 0.45);
+    outline: none;
+}
+
+/* Rounded — only top corners; bottom flush to screen edge */
+#mod_dock.is-rounded .dock-shell {
+    border-radius: 0.95rem 0.95rem 0 0;
+}
+
+#mod_dock.is-rounded.is-top .dock-shell {
+    border-radius: 0 0 0.95rem 0.95rem;
+}
+
+/* Sharp rectangle */
+#mod_dock.is-rect .dock-shell {
+    border-radius: 0;
+}
+
+/* Trapezoid — wide base flush to screen bottom (symmetric inset) */
+#mod_dock.is-trap .dock-shell {
+    border-radius: 0;
+    clip-path: polygon(7% 0%, 93% 0%, 100% 100%, 0% 100%);
+}
+
+#mod_dock.is-trap.dock-root,
+.hud-card.dock-bare.dock-trapezoid {
+    clip-path: polygon(7% 0%, 93% 0%, 100% 100%, 0% 100%);
+}
+
+.dock-fx {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+    transform: translateZ(0);
+}
+
+.hud-card.dock-bare {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    overflow: visible;
+    z-index: 0;
+    pointer-events: none !important;
+    /* Geometry is owned by dock-panel (bottom-center); ignore layout % drift */
+    position: fixed !important;
+}
+
+.hud-card.dock-bare .card-title,
+.hud-card.dock-bare .resize-handle {
+    display: none !important;
+}
+
+.hud-card.dock-bare .card-body {
+    overflow: visible;
+    background: transparent !important;
+    padding: 0;
+    height: 100%;
+    pointer-events: none !important;
+}
+
+.hud-card.dock-bare .card-body > #mod_dock {
+    height: 100%;
+}

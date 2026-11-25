@@ -1,0 +1,106 @@
+name: BOCKIS Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Validate and build BOCKIS Setup (x64)
+    runs-on: windows-2022
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: .NET SDK for hardware monitor
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify source assets, metadata, and version tag
+        run: npm run release:preflight
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate translations
+        run: npm run i18n:check
+
+      - name: Execute test suite
+        run: npm test
+
+      - name: Build NSIS and graphical BOCKIS bootstrapper
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # Read-only token for GitHub API lookups of the pinned Windhawk/Rainmeter installers.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run dist -- --publish never
+
+      - name: Verify final packaged Windows setup
+        run: |
+          npm run release:verify
+          npm run release:checksums
+
+      - name: Upload finished installer for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: BOCKIS-Windows-Setup-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            dist/Bockis-eDEX-Desktop-UI-Setup-*.exe
+            dist/latest.yml
+            dist/SHA256SUMS.txt
+
+  release-draft:
+    name: Prepare GitHub Release draft (manual publication)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: BOCKIS-Windows-Setup-${{ github.run_number }}
+          path: release-files
+
+      - name: Create draft release (do not publish automatically)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-files/Bockis-eDEX-Desktop-UI-Setup-*.exe release-files/latest.yml release-files/SHA256SUMS.txt)
+          if [ "${#assets[@]}" -ne 3 ]; then
+            echo 'Expected installer, latest.yml and SHA256SUMS.txt' >&2
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to overwrite assets." >&2
+            exit 1
+          fi
+          gh release create "$TAG" "${assets[@]}" --draft --verify-tag --title "BOCKIS-eDEX $TAG" --notes "Windows x64 installer. Review and test the installer before publishing. SHA-256 checksums are included. Windhawk remains an optional user-selected component."

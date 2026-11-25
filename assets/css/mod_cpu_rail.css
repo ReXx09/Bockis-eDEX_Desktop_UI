@@ -1,0 +1,480 @@
+/*
+ * CPU power-rail — static SVG schematic + canvas FX overlay.
+ * Dash/bead motion runs on a desynchronized 2D canvas (~12fps), not SVG SMIL.
+ */
+
+#mod_cpu_rail.cpu-rail-root {
+    --rail: var(--color_r), var(--color_g), var(--color_b);
+    --cpu-load: 0;
+    --cpu-intensity: 1;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background:
+        radial-gradient(ellipse 55% 50% at 50% 50%, rgba(var(--rail), 0.07), transparent 70%),
+        rgba(0, 0, 0, 0.55);
+    color: rgb(var(--rail));
+    font-family: var(--font_mono), ui-monospace, monospace;
+    user-select: none;
+    overflow: hidden;
+    contain: strict;
+    content-visibility: auto;
+}
+
+.cpu-rail-stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    transform: translate3d(0, 0, 0);
+    contain: strict;
+    /* One compositor layer; no animated children → near-zero ongoing cost */
+    will-change: transform;
+}
+
+.cpu-rail-stage svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform: translateZ(0);
+    pointer-events: auto;
+}
+
+.cpu-rail-fx {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+    transform: translateZ(0);
+    will-change: contents;
+    opacity: var(--cpu-intensity);
+}
+
+.cpu-rail-paused .cpu-rail-fx {
+    visibility: hidden;
+}
+
+.cpu-rail-flow-off .cpu-rail-fx {
+    visibility: hidden;
+}
+
+.cpu-rail-meter-off .cpu-rail-meter {
+    display: none;
+}
+
+.cpu-rail-pins-off .cpu-rail-pin.io-active {
+    animation: none;
+    filter: none;
+}
+
+.cpu-rail-wave-off .cpu-rail-wave,
+.cpu-rail-temperature-off [data-cpu-rail-temp],
+.cpu-rail-hover-off [data-cpu-core] {
+    visibility: hidden;
+}
+
+.cpu-rail-trace {
+    fill: none;
+    stroke: rgb(var(--rail));
+    stroke-width: 1.2;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+    opacity: 0.72;
+}
+
+/* Dashed look without animating dashoffset (CPU-heavy in Chromium SVG). */
+.cpu-rail-trace.pulse {
+    stroke-dasharray: 5 11;
+    opacity: 0.9;
+}
+
+.cpu-rail-trace.pulse.slow {
+    opacity: 0.55;
+    stroke-dasharray: 4 14;
+}
+
+.cpu-rail-trace.ring {
+    stroke-width: 1.45;
+    opacity: 0.4;
+    stroke-dasharray: 8 16;
+}
+
+.cpu-rail-bead {
+    display: none; /* SMIL beads removed — zero runtime cost */
+}
+
+.cpu-rail-node,
+.cpu-rail-via-wrap {
+    opacity: 0.85;
+}
+
+.cpu-rail-node-halo {
+    fill: rgb(var(--rail));
+    opacity: 0.14;
+}
+
+.cpu-rail-node-core {
+    fill: rgb(var(--rail));
+}
+
+.cpu-rail-via-wrap.glow .cpu-rail-via-halo {
+    fill: rgb(var(--rail));
+    opacity: 0.2;
+}
+
+.cpu-rail-via-halo {
+    fill: rgb(var(--rail));
+    opacity: 0.12;
+}
+
+.cpu-rail-via {
+    fill: none;
+    stroke: rgb(var(--rail));
+    stroke-width: 1.15;
+}
+
+.cpu-rail-pad {
+    fill: rgb(var(--rail));
+}
+
+.cpu-rail-comp {
+    fill: none;
+    stroke: rgb(var(--rail));
+    stroke-width: 1.05;
+}
+
+.cpu-rail-comp-fill {
+    fill: rgb(var(--rail));
+    opacity: 0.9;
+}
+
+.cpu-rail-chip-body {
+    fill: rgba(0, 0, 0, 0.88);
+    stroke: rgb(var(--rail));
+    stroke-width: 1.7;
+}
+
+.cpu-rail-chip-inner {
+    fill: none;
+    stroke: rgb(var(--rail));
+    stroke-width: 0.9;
+    opacity: 0.45;
+}
+
+.cpu-rail-pin {
+    fill: rgb(var(--rail));
+    transition: opacity 0.18s ease, filter 0.18s ease;
+}
+
+.cpu-rail-pin.io-active {
+    opacity: 1;
+    filter: drop-shadow(0 0 3px rgb(var(--rail)));
+    animation: cpu-rail-pin-pulse 0.45s ease-in-out infinite alternate;
+}
+
+.cpu-die-outline {
+    fill: rgba(var(--rail), 0.04);
+    stroke: rgb(var(--rail));
+    stroke-width: 0.8;
+    opacity: 0.55;
+}
+
+.cpu-die-core {
+    fill: rgba(var(--rail), 0.1);
+    stroke: rgb(var(--rail));
+    stroke-width: 0.75;
+    opacity: 0.75;
+    cursor: pointer;
+    transition: opacity 0.2s ease, fill 0.2s ease, stroke-width 0.2s ease;
+}
+
+.cpu-die-core.is-active {
+    fill: rgba(var(--core-color), calc(0.18 + var(--core-load) * 0.55));
+    stroke: rgb(var(--core-color));
+    stroke-width: calc(0.75px + var(--core-load) * 1.1px);
+}
+
+.cpu-die-core:hover {
+    fill: rgba(var(--rail), 0.75);
+    stroke-width: 1.6;
+}
+
+.cpu-die-core-x {
+    fill: none;
+    stroke: rgb(var(--rail));
+    stroke-width: 0.55;
+    opacity: 0.35;
+}
+
+.cpu-die-mesh {
+    fill: none;
+    stroke: rgb(var(--rail));
+    stroke-width: 0.7;
+    opacity: 0.45;
+    stroke-linecap: square;
+}
+
+.cpu-die-mesh.pulse {
+    stroke-dasharray: 3 7;
+    opacity: 0.7;
+}
+
+.cpu-die-cache {
+    fill: rgba(var(--rail), 0.1);
+    stroke: rgb(var(--rail));
+    stroke-width: 0.85;
+    opacity: 0.75;
+}
+
+.cpu-die-cache-line {
+    fill: none;
+    stroke: rgb(var(--rail));
+    stroke-width: 0.9;
+    stroke-dasharray: 2 5;
+    opacity: 0.75;
+}
+
+.cpu-die-ring {
+    fill: none;
+    stroke: rgb(var(--rail));
+    stroke-width: 1.1;
+    stroke-dasharray: 6 10;
+    opacity: 0.55;
+}
+
+.cpu-die-bond {
+    fill: rgb(var(--rail));
+    opacity: 0.65;
+}
+
+.cpu-die-bead {
+    display: none;
+}
+
+.cpu-rail-chip-face {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    pointer-events: none;
+    z-index: 3;
+    text-align: center;
+    overflow: hidden;
+    transform: translateZ(0);
+    contain: layout paint;
+}
+
+.cpu-rail-root[data-load-level="medium"] .cpu-rail-chip-face {
+    filter: drop-shadow(0 0 calc(4px + var(--cpu-load) * 8px) rgba(var(--rail), 0.45));
+}
+
+.cpu-rail-root[data-load-level="high"] .cpu-rail-chip-face {
+    filter: drop-shadow(0 0 calc(8px + var(--cpu-load) * 12px) rgba(var(--rail), 0.72));
+}
+
+.cpu-rail-glow-off .cpu-rail-chip-face {
+    filter: none !important;
+}
+
+.cpu-rail-scanline {
+    position: absolute;
+    left: 37%;
+    width: 26%;
+    height: 1px;
+    top: 35%;
+    background: rgb(var(--rail));
+    box-shadow: 0 0 8px rgba(var(--rail), 0.8);
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: 4;
+    animation: cpu-rail-scan 3.8s linear infinite;
+}
+
+.cpu-rail-scan-off .cpu-rail-scanline {
+    display: none;
+}
+
+.cpu-rail-root:not(.cpu-rail-temperature-off)[data-temp-level="warning"] {
+    --rail: 255, 190, 64;
+}
+
+.cpu-rail-root:not(.cpu-rail-temperature-off)[data-temp-level="critical"] {
+    --rail: 255, 82, 82;
+}
+
+.cpu-rail-root:not(.cpu-rail-temperature-off)[data-temp-level="critical"] .cpu-rail-chip-body {
+    animation: cpu-rail-temp-flash 0.7s steps(2, end) infinite;
+}
+
+.cpu-rail-detail {
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.35rem;
+    padding: 0.25rem 0.4rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.78);
+    border: 1px solid rgba(var(--rail), 0.45);
+    color: rgb(var(--rail));
+    font-size: 0.65rem;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.cpu-rail-wave {
+    position: absolute;
+    left: 7%;
+    right: 7%;
+    bottom: 0.4rem;
+    width: 86%;
+    height: 30px;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0.8;
+}
+
+.cpu-rail-logo {
+    width: 42%;
+    max-width: 5.5rem;
+    opacity: 0.9;
+}
+
+.cpu-rail-logo svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.cpu-rail-model {
+    font-size: clamp(0.55rem, 1.6cqw, 0.95rem);
+    letter-spacing: 0.04em;
+    opacity: 0.95;
+    max-width: 96%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cpu-rail-brand {
+    font-size: clamp(0.45rem, 1.2cqw, 0.75rem);
+    letter-spacing: 0.12em;
+    opacity: 0.65;
+    text-transform: uppercase;
+}
+
+.cpu-rail-meta {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    gap: 0.35rem;
+    padding: 0.25rem 0.4rem 0.35rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    opacity: 0.75;
+    border-top: 1px solid rgba(var(--rail), 0.25);
+}
+
+.cpu-rail-meta b {
+    font-weight: 600;
+    opacity: 1;
+    margin-left: 0.2rem;
+}
+
+.cpu-rail-load-metric,
+.cpu-rail-clock-metric {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.12rem;
+}
+
+.cpu-rail-meter {
+    display: inline-block;
+    width: 2.4rem;
+    height: 0.22rem;
+    overflow: hidden;
+    border: 1px solid rgba(var(--rail), 0.6);
+    background: rgba(var(--rail), 0.12);
+    vertical-align: middle;
+}
+
+.cpu-rail-meter i {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: rgb(var(--rail));
+    box-shadow: 0 0 4px rgba(var(--rail), 0.85);
+    transition: width 0.35s ease;
+}
+
+.cpu-rail-clk-wave {
+    display: block;
+    width: 2.5rem;
+    height: 0.55rem;
+    overflow: hidden;
+    color: rgb(var(--rail));
+}
+
+.cpu-rail-clk-wave[hidden] {
+    display: none;
+}
+
+.cpu-rail-clk-wave path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1;
+    stroke-dasharray: 9 10;
+    animation: cpu-rail-clock-shift var(--clk-period, 0.5s) linear infinite;
+}
+
+.cpu-rail-action {
+    border: 1px solid rgba(var(--rail), 0.45);
+    background: rgba(var(--rail), 0.08);
+    color: rgb(var(--rail));
+    font: inherit;
+    font-size: 0.62rem;
+    padding: 0.05rem 0.3rem;
+    cursor: pointer;
+}
+
+.cpu-rail-action:hover {
+    background: rgba(var(--rail), 0.25);
+}
+
+@keyframes cpu-rail-scan {
+    0% { transform: translateY(0); opacity: 0; }
+    12% { opacity: 0.7; }
+    88% { opacity: 0.7; }
+    100% { transform: translateY(190px); opacity: 0; }
+}
+
+@keyframes cpu-rail-clock-shift {
+    to { stroke-dashoffset: -19; }
+}
+
+@keyframes cpu-rail-pin-pulse {
+    from { opacity: 0.45; }
+    to { opacity: 1; }
+}
+
+@keyframes cpu-rail-temp-flash {
+    50% { opacity: 0.35; }
+}
+
+/*
+ * Optional subtle live cue ONLY while the card is hovered — a single opacity
+ * pulse on the chip body (GPU-friendly), never dashoffset / SMIL.
+ */
+#card_cpuRail:hover .cpu-rail-chip-body {
+    opacity: 0.95;
+    transition: opacity 0.4s ease;
+}

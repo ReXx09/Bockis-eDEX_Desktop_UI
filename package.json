@@ -1,0 +1,138 @@
+{
+  "name": "bockis-edex-desktop-ui",
+  "productName": "Bockis-eDEX Desktop UI",
+  "version": "1.2.7+9",
+  "displayVersion": "1.2.7.9",
+  "shortVersionWindows": "1.2.7.9",
+  "description": "Desktop UI using the eDEX-UI sci-fi HUD layout",
+  "main": "main.js",
+  "author": "bananamax9113",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ReXx09/Bockis-eDEX_Desktop_UI.git"
+  },
+  "scripts": {
+    "test": "node --test test/organizer.test.js test/i18n.test.js test/i18n-modules.test.js test/i18n-migration.test.js test/theme-studio.test.js test/update-checker.test.js test/desktop-layout.test.js test/settings-store.test.js test/windows-theme-registry.test.js test/windows-theme-importer.test.js test/windows-style-integration.test.js test/ssh-path.test.js test/cpu-live-metrics.test.js test/hardware-monitor.test.js test/release-tools.test.js test/first-run.test.js test/desktop-tour.test.js test/panel-tour.test.js test/panel-tour-controls.test.js test/panel-tour-learning.test.js test/panel-tour-live-preview.test.js test/panel-tour-mouse-hotfix.test.js test/settings-navigation-regression.test.js test/settings-responsive-layout.test.js",
+    "prepare-assets": "node scripts/prepare-assets.js",
+    "prepare-rainmeter": "node scripts/prepare-rainmeter.js",
+    "prepare-windhawk": "node scripts/prepare-windhawk.js",
+    "build-hardware-monitor": "dotnet publish hardware-monitor\\BockisHardwareMonitor.csproj --configuration Release --output build\\hardware-monitor",
+    "prestart": "node scripts/prepare-assets.js && npm run build-hardware-monitor",
+    "start": "electron .",
+    "rebuild-native": "electron-rebuild -f -w node-pty",
+    "predist": "npm run i18n:check && npm run panel-tour:check && npm run rebuild-native && node scripts/prepare-assets.js && node scripts/prepare-rainmeter.js && node scripts/prepare-windhawk.js && npm run build-hardware-monitor",
+    "dist": "electron-builder --win nsis --x64",
+    "predist:dir": "npm run build-hardware-monitor",
+    "postdist": "node scripts/build-tron-installer.js",
+    "dist:dir": "electron-builder --win dir --x64",
+    "i18n:build": "node scripts/i18n-build.js && node scripts/i18n-installer-build.js",
+    "i18n:check": "node scripts/i18n-check.js",
+    "pretest": "npm run i18n:check && npm run panel-tour:check",
+    "release:preflight": "node scripts/release-tools.js preflight",
+    "release:verify": "node scripts/release-tools.js verify",
+    "release:checksums": "node scripts/release-tools.js checksums",
+    "panel-tour:build": "node scripts/panel-tour-build.js",
+    "panel-tour:check": "node scripts/panel-tour-build.js --check"
+  },
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "buildVersion": "1.2.7.9",
+    "appId": "com.bockis.edex-desktop-ui",
+    "productName": "Bockis-eDEX Desktop UI",
+    "copyright": "Copyright © Bockis-eDEX Desktop UI",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "start-tron.ps1",
+        "to": "start-tron.ps1"
+      },
+      {
+        "from": "start-tron.cmd",
+        "to": "start-tron.cmd"
+      },
+      {
+        "from": "build/hardware-monitor",
+        "to": "hardware-monitor"
+      },
+      {
+        "from": "hardware-monitor/LICENSE",
+        "to": "hardware-monitor/LICENSE"
+      },
+      {
+        "from": "hardware-monitor/THIRD-PARTY-NOTICES.txt",
+        "to": "hardware-monitor/THIRD-PARTY-NOTICES.txt"
+      },
+      {
+        "from": "NOTICE.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
+      }
+    ],
+    "asar": true,
+    "npmRebuild": true,
+    "forceCodeSigning": false,
+    "artifactName": "Bockis-eDEX-Desktop-UI-Setup-${buildVersion}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icons/branding/app.ico",
+      "verifyUpdateCodeSignature": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "shortcutName": "Bockis-eDEX Desktop UI",
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": [
+        "de_DE",
+        "zh_TW",
+        "en_US"
+      ],
+      "language": "1031",
+      "include": "build/installer.nsh"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ReXx09",
+        "repo": "Bockis-eDEX_Desktop_UI"
+      }
+    ]
+  },
+  "allowScripts": {
+    "electron@44.7.0": true,
+    "node-pty@1.1.0": true,
+    "electron-winstaller@5.4.0": true
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0"
+  }
+}
