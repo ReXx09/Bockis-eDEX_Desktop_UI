@@ -137,7 +137,7 @@ Das **Autostart-Panel** wird ebenfalls über **Plugin-Panels** hinzugefügt. Es 
 
 1. Unter **Assets** die Datei `Bockis-eDEX-Desktop-UI-Setup-<version>.exe` herunterladen.
 2. Die SHA-256-Prüfsumme bei Bedarf mit `SHA256SUMS.txt` vergleichen.
-3. Die EXE starten und im grafischen BOCKIS-Setup optionale Komponenten wie Windhawk nur bei Bedarf auswählen.
+3. Die EXE starten. Windhawk ist für die Windows Style Integration erforderlich und wird nur nach ausdrücklicher Bestätigung installiert; eine vorhandene Installation wird weiterverwendet.
 4. Beim ersten Start hilft die optionale Ersteinrichtung bei Sprache, Monitoren und Theme-Auswahl.
 
 **Kein Node.js, npm oder Quellcode-Download erforderlich.** Falls noch kein öffentlicher Release vorhanden ist, ist der Link vorerst leer. Nicht signierte EXE-Dateien können eine Windows-SmartScreen-Warnung auslösen; Herausgeber und Prüfsumme vor dem Ausführen prüfen.

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { undoLast } = require("../lib/organizer");
+const { executePlan, scanRoot, undoLast } = require("../lib/organizer");
 
 test("Keeps failed undo entries available after a partial restore", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-organizer-test-"));
@@ -36,4 +36,33 @@ test("Keeps failed undo entries available after a partial restore", async (t) =>
   assert.equal(result.errors.length, 1);
   assert.equal(fs.existsSync(original), true);
   assert.deepEqual(remaining.applied, [missingMove]);
+});
+
+test("Undo recovers a file move when writing the completed journal entry fails", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-organizer-pending-test-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const original = path.join(root, "notes.txt");
+  const journalPath = path.join(root, "journal.json");
+  await fs.promises.writeFile(original, "keep me");
+  const scan = await scanRoot(root);
+
+  const originalWriteFile = fs.promises.writeFile;
+  let journalWrites = 0;
+  fs.promises.writeFile = async (file, ...args) => {
+    if (String(file).startsWith(`${journalPath}.`) && String(file).endsWith(".tmp")) {
+      journalWrites += 1;
+      if (journalWrites === 3) throw new Error("simulated journal failure");
+    }
+    return originalWriteFile.call(fs.promises, file, ...args);
+  };
+  try {
+    await assert.rejects(executePlan(scan, {}, journalPath), /simulated journal failure/);
+  } finally {
+    fs.promises.writeFile = originalWriteFile;
+  }
+
+  const result = await undoLast(journalPath);
+  assert.equal(result.undone, 1);
+  assert.equal(await fs.promises.readFile(original, "utf8"), "keep me");
+  assert.equal(fs.existsSync(journalPath), false);
 });

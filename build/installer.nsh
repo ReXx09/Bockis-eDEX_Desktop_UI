@@ -5,6 +5,10 @@ Var WindhawkInstalled
 
 Function DetectWindhawk
   StrCpy $WindhawkInstalled "0"
+  ReadEnvStr $R6 EDEX_WINDHAWK_EXE
+  StrCmp $R6 "" windhawk_check_registry
+  IfFileExists "$R6" windhawk_found
+windhawk_check_registry:
   SetRegView 64
   StrCpy $R0 0
 windhawk_hkcu_64_loop:
@@ -12,7 +16,13 @@ windhawk_hkcu_64_loop:
   StrCmp $R1 "" windhawk_hklm_64
   ReadRegStr $R2 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "DisplayName"
   StrCpy $R3 $R2 8
-  StrCmp $R3 "Windhawk" windhawk_found
+  StrCmp $R3 "Windhawk" windhawk_hkcu_64_candidate
+  Goto windhawk_hkcu_64_next
+windhawk_hkcu_64_candidate:
+  ReadRegStr $R4 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "InstallLocation"
+  StrCmp $R4 "" windhawk_hkcu_64_next
+  IfFileExists "$R4\windhawk.exe" windhawk_found
+windhawk_hkcu_64_next:
   IntOp $R0 $R0 + 1
   Goto windhawk_hkcu_64_loop
 windhawk_hklm_64:
@@ -22,7 +32,13 @@ windhawk_hklm_64_loop:
   StrCmp $R1 "" windhawk_hkcu_32
   ReadRegStr $R2 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "DisplayName"
   StrCpy $R3 $R2 8
-  StrCmp $R3 "Windhawk" windhawk_found
+  StrCmp $R3 "Windhawk" windhawk_hklm_64_candidate
+  Goto windhawk_hklm_64_next
+windhawk_hklm_64_candidate:
+  ReadRegStr $R4 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "InstallLocation"
+  StrCmp $R4 "" windhawk_hklm_64_next
+  IfFileExists "$R4\windhawk.exe" windhawk_found
+windhawk_hklm_64_next:
   IntOp $R0 $R0 + 1
   Goto windhawk_hklm_64_loop
 windhawk_hkcu_32:
@@ -33,7 +49,13 @@ windhawk_hkcu_32_loop:
   StrCmp $R1 "" windhawk_hklm_32
   ReadRegStr $R2 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "DisplayName"
   StrCpy $R3 $R2 8
-  StrCmp $R3 "Windhawk" windhawk_found
+  StrCmp $R3 "Windhawk" windhawk_hkcu_32_candidate
+  Goto windhawk_hkcu_32_next
+windhawk_hkcu_32_candidate:
+  ReadRegStr $R4 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "InstallLocation"
+  StrCmp $R4 "" windhawk_hkcu_32_next
+  IfFileExists "$R4\windhawk.exe" windhawk_found
+windhawk_hkcu_32_next:
   IntOp $R0 $R0 + 1
   Goto windhawk_hkcu_32_loop
 windhawk_hklm_32:
@@ -43,7 +65,13 @@ windhawk_hklm_32_loop:
   StrCmp $R1 "" windhawk_check_known_paths
   ReadRegStr $R2 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "DisplayName"
   StrCpy $R3 $R2 8
-  StrCmp $R3 "Windhawk" windhawk_found
+  StrCmp $R3 "Windhawk" windhawk_hklm_32_candidate
+  Goto windhawk_hklm_32_next
+windhawk_hklm_32_candidate:
+  ReadRegStr $R4 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R1" "InstallLocation"
+  StrCmp $R4 "" windhawk_hklm_32_next
+  IfFileExists "$R4\windhawk.exe" windhawk_found
+windhawk_hklm_32_next:
   IntOp $R0 $R0 + 1
   Goto windhawk_hklm_32_loop
 windhawk_check_known_paths:
@@ -75,13 +103,18 @@ FunctionEnd
           ExecWait '"$PLUGINSDIR\Windhawk-Setup.exe"' $R0
         ${EndIf}
         ${If} $R0 != 0
-          MessageBox MB_OK|MB_ICONEXCLAMATION "Windhawk wurde nicht erfolgreich installiert. Bockis-eDEX wird ohne Windows-Styling-Erweiterung installiert."
+          MessageBox MB_OK|MB_ICONSTOP "Windhawk wurde nicht erfolgreich installiert. Das BOCKIS-Setup wird abgebrochen."
+          Abort "Windhawk installation failed."
         ${Else}
           Call DetectWindhawk
           ${If} $WindhawkInstalled != "1"
-            MessageBox MB_OK|MB_ICONEXCLAMATION "Windhawk konnte nach der Installation nicht erkannt werden. Die eDEX-Installation wird fortgesetzt."
+            MessageBox MB_OK|MB_ICONSTOP "Windhawk konnte nach der Installation nicht gefunden werden. Das BOCKIS-Setup wird abgebrochen."
+            Abort "Windhawk was not found after setup."
           ${EndIf}
         ${EndIf}
+      ${Else}
+        MessageBox MB_OK|MB_ICONSTOP "Windhawk ist für die Windows Style Integration erforderlich. Das BOCKIS-Setup wird abgebrochen."
+        Abort "Windhawk is required."
       ${EndIf}
     ${EndIf}
   !endif

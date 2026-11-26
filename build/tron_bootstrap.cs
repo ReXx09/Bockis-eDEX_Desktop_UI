@@ -61,13 +61,13 @@ internal static class TronBootstrap
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Windhawk", "windhawk.exe")
         };
         foreach (string candidate in candidates) if (File.Exists(candidate)) return true;
-        foreach (RegistryKey root in new RegistryKey[] { Registry.CurrentUser, Registry.LocalMachine })
+        foreach (RegistryHive hive in new RegistryHive[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
         {
             foreach (RegistryView view in new RegistryView[] { RegistryView.Registry64, RegistryView.Registry32 })
             {
                 try
                 {
-                    using (RegistryKey baseKey = RegistryKey.OpenBaseKey(root == Registry.CurrentUser ? RegistryHive.CurrentUser : RegistryHive.LocalMachine, view))
+                    using (RegistryKey baseKey = RegistryKey.OpenBaseKey(hive, view))
                     using (RegistryKey uninstall = baseKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall"))
                     {
                         if (uninstall == null) continue;
@@ -76,7 +76,11 @@ internal static class TronBootstrap
                             using (RegistryKey item = uninstall.OpenSubKey(name))
                             {
                                 string display = item == null ? "" : Convert.ToString(item.GetValue("DisplayName", ""));
-                                if (display.StartsWith("Windhawk", StringComparison.OrdinalIgnoreCase)) return true;
+                                if (display.StartsWith("Windhawk", StringComparison.OrdinalIgnoreCase)
+                                    && item != null
+                                    && ResolveWindhawkExecutable(
+                                        Convert.ToString(item.GetValue("InstallLocation", "")),
+                                        Convert.ToString(item.GetValue("DisplayIcon", ""))) != null) return true;
                             }
                         }
                     }
@@ -87,6 +91,28 @@ internal static class TronBootstrap
         return false;
     }
 
+    private static string ResolveWindhawkExecutable(string installLocation, string displayIcon)
+    {
+        if (!string.IsNullOrWhiteSpace(installLocation))
+        {
+            string executable = Path.Combine(installLocation.Trim(), "windhawk.exe");
+            if (File.Exists(executable)) return executable;
+        }
+        if (string.IsNullOrWhiteSpace(displayIcon)) return null;
+        string icon = displayIcon.Trim();
+        if (icon.StartsWith("\"", StringComparison.Ordinal))
+        {
+            int end = icon.IndexOf('"', 1);
+            if (end > 1) icon = icon.Substring(1, end - 1);
+        }
+        else
+        {
+            int end = icon.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+            if (end >= 0) icon = icon.Substring(0, end + 4);
+        }
+        return File.Exists(icon) ? icon : null;
+    }
+
     private static string FindWindhawkExecutable()
     {
         string[] candidates = {
@@ -95,6 +121,33 @@ internal static class TronBootstrap
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Windhawk", "windhawk.exe")
         };
         foreach (string candidate in candidates) if (File.Exists(candidate)) return candidate;
+        foreach (RegistryHive hive in new RegistryHive[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+        {
+            foreach (RegistryView view in new RegistryView[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                try
+                {
+                    using (RegistryKey baseKey = RegistryKey.OpenBaseKey(hive, view))
+                    using (RegistryKey uninstall = baseKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall"))
+                    {
+                        if (uninstall == null) continue;
+                        foreach (string name in uninstall.GetSubKeyNames())
+                        {
+                            using (RegistryKey item = uninstall.OpenSubKey(name))
+                            {
+                                string display = item == null ? "" : Convert.ToString(item.GetValue("DisplayName", ""));
+                                if (!display.StartsWith("Windhawk", StringComparison.OrdinalIgnoreCase) || item == null) continue;
+                                string executable = ResolveWindhawkExecutable(
+                                    Convert.ToString(item.GetValue("InstallLocation", "")),
+                                    Convert.ToString(item.GetValue("DisplayIcon", "")));
+                                if (executable != null) return executable;
+                            }
+                        }
+                    }
+                }
+                catch { /* inspection is best-effort */ }
+            }
+        }
         return null;
     }
 
@@ -151,7 +204,7 @@ internal static class TronBootstrap
             CheckBox startmenu = checkbox(InstallerLanguage.T("installer.shortcut.start"), true);
             y += 8;
             section(InstallerLanguage.T("installer.section.windows"));
-            CheckBox windhawk = checkbox(installed ? InstallerLanguage.T("installer.windhawk.existing") : InstallerLanguage.T("installer.windhawk.install"), false);
+            CheckBox windhawk = checkbox(installed ? InstallerLanguage.T("installer.windhawk.existing") : InstallerLanguage.T("installer.windhawk.install"), installed);
             desc(installed ? InstallerLanguage.T("installer.windhawk.existing.desc") : InstallerLanguage.T("installer.windhawk.install.desc"));
             CheckBox windhawkSilent = checkbox(InstallerLanguage.T("installer.windhawk.silent"), true);
             desc(InstallerLanguage.T("installer.windhawk.silent.desc"));
@@ -180,7 +233,7 @@ internal static class TronBootstrap
             Action refresh = () => {
                 bool requested = explorer.Checked || taskbar.Checked || startStyler.Checked;
                 if (requested && !windhawk.Checked) windhawk.Checked = true;
-                status.Text = "CORE ............ READY\nWINDHAWK ........ " + (installed ? "DETECTED" : windhawk.Checked ? "SELECTED" : "OPTIONAL") + "\nMOD LINKS ........ " + (requested ? "SELECTED" : "NONE") + "\nRAINMETER ........ " + (rainmeter.Checked ? "SELECTED" : "SKIPPED");
+                status.Text = "CORE ............ READY\nWINDHAWK ........ " + (installed ? "DETECTED" : windhawk.Checked ? "SELECTED" : "REQUIRED") + "\nMOD LINKS ........ " + (requested ? "SELECTED" : "NONE") + "\nRAINMETER ........ " + (rainmeter.Checked ? "SELECTED" : "SKIPPED");
             };
             windhawkSilent.Enabled = windhawk.Checked && !installed;
             windhawkTray.Enabled = windhawk.Checked;
@@ -207,6 +260,11 @@ internal static class TronBootstrap
             form.CancelButton = cancel;
             proceed.Click += (sender, ev) => {
                 if (string.IsNullOrWhiteSpace(pathField.Text)) { MessageBox.Show(form, InstallerLanguage.T("installer.path.required"), "BOCKIS Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                if (!windhawk.Checked)
+                {
+                    MessageBox.Show(form, "Windhawk ist für die Windows Style Integration erforderlich. Bitte bestätige die Komponente oder brich das Setup ab.", "BOCKIS Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
                 string summary = InstallerLanguage.Format("installer.confirm.summary", new System.Collections.Generic.Dictionary<string, string> {
                     { "windhawk", windhawk.Checked ? (installed ? InstallerLanguage.T("installer.status.existing") : InstallerLanguage.T("installer.status.install")) : InstallerLanguage.T("installer.status.skip") },
                     { "silent", windhawk.Checked && !installed && windhawkSilent.Checked ? InstallerLanguage.T("installer.yes") : InstallerLanguage.T("installer.no") },
@@ -283,7 +341,13 @@ internal static class TronBootstrap
         }
         else
         {
-            WriteLine("  [AUTO] Silent install: optional components disabled", ConsoleColor.DarkGray);
+            if (!IsWindhawkInstalled())
+            {
+                WriteLine("  [ABORT] Windhawk is required; silent setup cannot obtain consent to install it.", ConsoleColor.Red);
+                return 1;
+            }
+            choice.Windhawk = false;
+            WriteLine("  [AUTO] Existing Windhawk detected; no optional components will be installed", ConsoleColor.DarkGray);
         }
         string installPath = choice.Path;
         bool installRainmeter = choice.Rainmeter;
@@ -294,7 +358,7 @@ internal static class TronBootstrap
         WriteLine("  [INFO] Bootstrap: " + Process.GetCurrentProcess().ProcessName + ".exe", ConsoleColor.DarkGray);
 
         WriteSection("Runtime diagnostics");
-        RunDependencyScan();
+        RunDependencyScan(silent);
 
         string payloadPath = Path.Combine(Path.GetTempPath(), "Bockis-eDEX-Setup-Payload-" + Guid.NewGuid().ToString("N") + ".exe");
         string logPath = Path.Combine(Path.GetTempPath(), "Bockis-eDEX-Setup-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".log");
@@ -315,6 +379,7 @@ internal static class TronBootstrap
             Environment.SetEnvironmentVariable("EDEX_INSTALL_RAINMETER", installRainmeter ? "1" : "0");
             Environment.SetEnvironmentVariable("EDEX_INSTALL_WINDHAWK", choice.Windhawk ? "1" : "0");
             Environment.SetEnvironmentVariable("EDEX_WINDHAWK_SILENT", choice.WindhawkSilent ? "1" : "0");
+            Environment.SetEnvironmentVariable("EDEX_WINDHAWK_EXE", FindWindhawkExecutable() ?? "");
             Environment.SetEnvironmentVariable("EDEX_CREATE_DESKTOP_SHORTCUT", choice.DesktopShortcut ? "1" : "0");
             Environment.SetEnvironmentVariable("EDEX_CREATE_STARTMENU_SHORTCUT", choice.StartMenuShortcut ? "1" : "0");
 
@@ -367,8 +432,8 @@ internal static class TronBootstrap
                     WriteLine("  [FAIL] Expected application file: " + installedExe, ConsoleColor.Red);
                     WriteLine("  [LOG ] Saved installer log: " + logPath, ConsoleColor.DarkYellow);
                     ShowLogTail(logPath);
-                    WaitForClose();
-                    return installer.ExitCode;
+                    WaitForClose(silent);
+                    return installer.ExitCode != 0 ? installer.ExitCode : 1;
                 }
                 WriteLine("  [ OK ] Application verified: " + Path.GetFileName(installedExe), ConsoleColor.DarkCyan);
                 WriteLine("  [ OK ] Payload size: " + FormatSize(new FileInfo(installedExe).Length), ConsoleColor.DarkCyan);
@@ -409,7 +474,7 @@ internal static class TronBootstrap
             Beep(660, 80);
             WriteLine("  [DONE] Bockis-eDEX installation complete", ConsoleColor.Cyan);
             WriteLine("  [LOG ] Installer log: " + logPath, ConsoleColor.DarkGray);
-            WaitForClose();
+            WaitForClose(silent);
             return 0;
         }
         catch (Exception error)
@@ -417,7 +482,7 @@ internal static class TronBootstrap
             WriteLine("  [FAIL] " + error.Message, ConsoleColor.Red);
             WriteLine("  [LOG ] Installer log: " + logPath, ConsoleColor.DarkYellow);
             ShowLogTail(logPath);
-            WaitForClose();
+            WaitForClose(silent);
             return 1;
         }
         finally
@@ -444,7 +509,7 @@ internal static class TronBootstrap
         }
     }
 
-    private static void RunDependencyScan()
+    private static void RunDependencyScan(bool silent)
     {
         WriteLine("", ConsoleColor.DarkGray);
         WriteLine("  [SCAN] Checking Windows runtime dependencies", ConsoleColor.Cyan);
@@ -493,6 +558,21 @@ internal static class TronBootstrap
             return;
         }
 
+        if (silent)
+        {
+            WriteLine("  [WARN] Silent setup will not install the Visual C++ runtime without user consent", ConsoleColor.DarkYellow);
+            return;
+        }
+        if (MessageBox.Show(
+            "Der Microsoft Visual C++ Runtime fehlt. Möchtest du sie jetzt über winget installieren?",
+            "BOCKIS Setup",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+        {
+            WriteLine("  [WARN] Visual C++ runtime installation declined", ConsoleColor.DarkYellow);
+            return;
+        }
         WriteLine("  [DEP ] Installing Microsoft Visual C++ runtime via winget", ConsoleColor.Cyan);
         int exitCode = RunDependencyInstaller(winget,
             "install --id Microsoft.VCRedist.2015+.x64 --exact --silent --accept-source-agreements --accept-package-agreements");
@@ -595,8 +675,9 @@ internal static class TronBootstrap
         }
     }
 
-    private static void WaitForClose()
+    private static void WaitForClose(bool silent)
     {
+        if (silent) return;
         Console.WriteLine();
         WriteLine("  Press any key to close this installation console.", ConsoleColor.DarkCyan);
         try { Console.ReadKey(true); } catch { }

@@ -22,6 +22,13 @@
   field, which was unreachable with Tab before.
 - The desktop tour no longer starts while a panel tour is running and follows
   language changes immediately.
+- Corrupt settings are preserved for recovery instead of silently replaced;
+  settings and organizer journals are written atomically. Windows theme
+  transactions now distinguish committed changes during recovery, desktop
+  icon restoration requires a valid backup, and interrupted update responses
+  fail explicitly.
+- Windhawk is verified by its executable, required for the Windows Style
+  Integration installer flow, and installed only after explicit consent.
 
 ### Added
 
@@ -32,7 +39,8 @@
   integration and panel tours, with replay controls, per-panel automatic-start
   switches and a reset for saved tour progress.
 - Dedicated Theme Studio and Windows Style Integration walkthroughs highlight
-  their relevant pages and explain the opt-in, non-installing Windhawk flow.
+  their relevant pages and explain manual Windhawk mod management without
+  automatic mod installation.
 - Panel learning now includes temporary date, task-label and font-size previews,
   plus interactive panel moving; settings shortcuts from the desktop tour open
   the matching settings page directly.
@@ -43,16 +51,17 @@
 
 ### Added
 
-- **BOCKIS Windows Style Integration 1.0:** optional Windhawk 1.7.3 runtime
+- **BOCKIS Windows Style Integration 1.0:** required Windhawk 1.7.3 runtime
   detection in Theme Studio, with official setup links for the File Explorer
   Styler and Taskbar Styler pilot mods. Mods and their settings are never
   installed, updated or overwritten automatically.
 - **Graphical installer component selection:** dark WinForms bootstrapper with
   categories, descriptions, summary and explicit confirmation. Windhawk,
   Rainmeter, desktop/Start-menu shortcuts and launch-after-install are
-  selectable; choices are passed to NSIS via `EDEX_INSTALL_*` variables.
-  Optional silent Windhawk setup (`/S /STANDARD`) and tray-only start after
-  installation.
+  user-selectable. Windhawk requires explicit consent; setup aborts if it is
+  declined, and existing installations are reused. Choices are passed to NSIS
+  via `EDEX_INSTALL_*` variables. Silent Windhawk setup (`/S /STANDARD`) and
+  tray-only start after installation are optional.
 - **Automated Windows installer build:** GitHub Actions workflow
   (`windows-release.yml`) validates sources, runs tests, builds the NSIS
   setup and graphical bootstrapper, verifies `latest.yml`, writes

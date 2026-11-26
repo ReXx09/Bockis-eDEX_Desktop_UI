@@ -67,7 +67,7 @@
         <div class="studio-windows-import" data-id="windows-import-preview" hidden></div>
         <p class="studio-help">TaskbarSi ist experimentell: Windows 11 kann die Taskleisten-Größe je nach Version ignorieren oder zurücksetzen. Kontrastmodus steuert zusätzlich die eDEX-Oberfläche.</p>
         <h3 data-studio-anchor="windhawk">BOCKIS Windows Style Integration 1.0</h3>
-        <p class="studio-help">Windhawk ist optional und wird im eDEX-Setup nur nach Zustimmung installiert. Bestehende Windhawk-Installationen und Mods bleiben unangetastet. Mit der stabilen Windhawk-Version prüft eDEX die Runtime; Mods und ihre Einstellungen müssen manuell in Windhawk geprüft und verwaltet werden. Es werden keine Mods automatisch installiert, aktualisiert oder aktiviert.</p>
+        <p class="studio-help">Die Windows Style Integration benötigt Windhawk. Das eDEX-Setup installiert Windhawk nur nach ausdrücklicher Zustimmung; bestehende Installationen und Mods bleiben unangetastet. Mit der stabilen Windhawk-Version prüft eDEX die Runtime; Mods und ihre Einstellungen müssen manuell in Windhawk geprüft und verwaltet werden. Es werden keine Mods automatisch installiert, aktualisiert oder aktiviert.</p>
         <p class="studio-windhawk-status" data-id="windows-style-status" role="status">Windhawk-Status wird geprüft …</p>
         <div class="studio-windhawk-mods" data-id="windows-style-mods"></div>
         <div class="studio-actions"><button data-act="open-windhawk-install">Offizielle Windhawk-Seite öffnen</button></div>

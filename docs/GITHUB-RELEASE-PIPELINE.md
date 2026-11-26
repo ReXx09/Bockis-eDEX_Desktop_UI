@@ -46,6 +46,7 @@ Vor dem **Publish release** auf GitHub Release-Notizen ergänzen und den Install
 
 - Kein automatischer, unbeaufsichtigter Windows-Update-Installer; die bestehende eDEX-Updateprüfung kann GitHub Releases anzeigen, eine erprobte Selbstaktualisierung braucht weitere Tests.
 - Keine automatische Windhawk-Mod-Installation oder Windhawk-Aktivierung durch den GitHub-Build. Die vom Nutzer ausgewählten Optionen im installierten Setup bleiben maßgeblich.
+- Windhawk wird im interaktiven Setup nur nach ausdrücklicher Zustimmung installiert; stille Installationen setzen eine bereits vorhandene Windhawk-Installation voraus.
 - Keine automatische Freigabe oder Garantie, dass native Tests auf GitHub bestehen: Bei Fehlern gibt es keinen Release-Entwurf.
 - GitHub Actions führt Workflows erst aus, nachdem diese Dateien im GitHub-Repository liegen. Das ZIP allein erzeugt noch keinen GitHub-Release.
 

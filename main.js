@@ -723,7 +723,7 @@ if (!gotLock) {
         try {
           await windowsThemeRegistryStore.recover(backupFile);
           recoveredTransaction = true;
-          appLog.warn("windows-theme.recovery", "Unvollständige Windows-Theme-Transaktion beim Start zurückgerollt", {
+          appLog.warn("windows-theme.recovery", "Windows-Theme-Transaktion beim Start bereinigt oder zurückgesetzt", {
             backupEntries: recoveryStatus.backupEntries
           });
         } catch (error) {
@@ -921,7 +921,20 @@ function findWindhawkInstallation() {
     "          try {",
     "            $displayName = [string]$item.GetValue('DisplayName', '')",
     "            if ($displayName -match '^Windhawk(?:\\s|$)') {",
-    "              $items += [pscustomobject]@{ version = [string]$item.GetValue('DisplayVersion', ''); installLocation = [string]$item.GetValue('InstallLocation', '') }",
+    "              $location = [string]$item.GetValue('InstallLocation', '')",
+    "              $executable = if ($location) { Join-Path $location 'windhawk.exe' } else { '' }",
+    "              $executableExists = $false",
+    "              if ($executable) { $executableExists = Test-Path -LiteralPath $executable -PathType Leaf }",
+    "              if (-not $executableExists) {",
+    "                $icon = [string]$item.GetValue('DisplayIcon', '')",
+    "                if ($icon -match ('^\\s*' + [char]34 + '([^' + [char]34 + ']+\\.exe)' + [char]34)) { $executable = $Matches[1] }",
+    "                elseif ($icon -match '^\\s*(.+?\\.exe)(?:,\\s*\\d+)?\\s*$') { $executable = $Matches[1].Trim([char]34) }",
+    "              }",
+    "              $executableExists = $false",
+    "              if ($executable) { $executableExists = Test-Path -LiteralPath $executable -PathType Leaf }",
+    "              if ($executableExists) {",
+    "                $items += [pscustomobject]@{ version = [string]$item.GetValue('DisplayVersion', ''); installLocation = $location; executableExists = $true }",
+    "              }",
     "            }",
     "          } finally { $item.Dispose() }",
     "        }",

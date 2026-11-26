@@ -173,6 +173,36 @@ test("Recovers a registry transaction left behind by a process exit", async (t) 
   assert.equal(store.inspect(backupFile).pendingRecovery, false);
 });
 
+test("Does not roll back a committed theme restore when journal cleanup fails", async (t) => {
+  const key = "HKCU\\Software\\Microsoft\\Windows\\DWM";
+  const entry = { key, name: "AccentColor", value: 1 };
+  const id = entryId(key, "AccentColor");
+  const { backupFile, store, values } = makeRegistryStore(t, {
+    [id]: { exists: true, type: "REG_DWORD", data: 4 }
+  });
+  await store.apply(backupFile, [entry], {
+    [id]: { exists: true, type: "REG_DWORD", data: 9 }
+  });
+  const transactionFile = `${backupFile}.transaction.json`;
+  const originalUnlink = fs.unlinkSync;
+  fs.unlinkSync = function (file) {
+    if (file === transactionFile) throw new Error("simulated journal cleanup failure");
+    return originalUnlink.call(fs, file);
+  };
+  try {
+    await assert.rejects(store.restore(backupFile, [entry]), /simulated journal cleanup failure/);
+  } finally {
+    fs.unlinkSync = originalUnlink;
+  }
+
+  assert.equal(values.get(id).data, 4);
+  assert.equal(fs.existsSync(backupFile), false);
+  assert.equal(JSON.parse(fs.readFileSync(transactionFile, "utf8")).committed, true);
+  assert.equal(await store.recover(backupFile), true);
+  assert.equal(values.get(id).data, 4);
+  assert.equal(fs.existsSync(transactionFile), false);
+});
+
 test("Emergency restore can recover managed values when the transaction journal is damaged", async (t) => {
   const key = "HKCU\\Software\\Microsoft\\Windows\\DWM";
   const entry = { key, name: "AccentColor", value: 1 };

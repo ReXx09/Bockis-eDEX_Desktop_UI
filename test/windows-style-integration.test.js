@@ -22,12 +22,20 @@ test("Requires a stable Windhawk 1.x runtime and leaves pilot mods for manual ma
   assert.equal(missing.runtime, "missing");
   assert.ok(missing.mods.every((mod) => mod.status === "requires-windhawk"));
 
-  const stable = assessWindhawk("win32", { version: "1.7.3", installLocation: "C:\\Windhawk" });
+  const stable = assessWindhawk("win32", {
+    version: "1.7.3",
+    installLocation: "C:\\Windhawk",
+    executableExists: true
+  });
   assert.equal(stable.runtime, "compatible");
   assert.equal(stable.mods.length, 2);
   assert.ok(stable.mods.every((mod) => mod.status === "manual-verification-required"));
 
-  const preview = assessWindhawk("win32", { version: "2.0.0-alpha.8" });
+  const staleRegistryEntry = assessWindhawk("win32", { version: "1.7.3", executableExists: false });
+  assert.equal(staleRegistryEntry.installed, false);
+  assert.equal(staleRegistryEntry.runtime, "missing");
+
+  const preview = assessWindhawk("win32", { version: "2.0.0-alpha.8", executableExists: true });
   assert.equal(preview.runtime, "incompatible");
   assert.ok(preview.mods.every((mod) => mod.status === "blocked-by-runtime"));
 

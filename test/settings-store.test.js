@@ -46,6 +46,37 @@ test("Migrates legacy Windows color modes to independent features", (t) => {
   assert.equal("windowsColorMode" in saved, false);
 });
 
+test("Quarantines corrupt settings and leaves Windows theme changes disabled by default", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-settings-corrupt-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "organizer-settings.json");
+  fs.writeFileSync(file, "{invalid json");
+
+  const originalError = console.error;
+  console.error = () => {};
+  let settings;
+  try {
+    settings = loadSettings(dir);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(fs.existsSync(file), false);
+  const quarantine = fs.readdirSync(dir).find((name) => name.startsWith("organizer-settings.json.corrupt-"));
+  assert.ok(quarantine);
+  assert.equal(fs.readFileSync(path.join(dir, quarantine), "utf8"), "{invalid json");
+  assert.deepEqual(settings.windowsThemeFeatures, {
+    accentColor: false,
+    appsDarkMode: false,
+    systemDarkMode: false,
+    startTaskbarAccent: false,
+    windowTitleAccent: false,
+    transparencyEffects: false,
+    taskbarAlignment: false,
+    taskbarSize: false
+  });
+});
+
 test("Persists normalized per-display desktop and Windows options", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-desktop-settings-test-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
