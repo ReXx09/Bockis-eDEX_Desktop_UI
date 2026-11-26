@@ -5,21 +5,51 @@
   // Only these known, panel-owned inputs may participate in a learning exercise.
   const PRACTICE = Object.freeze({
     "setup:#panel-clock-mode": "select",
+    "setup:#panel-clock-date": "checkbox",
     "setup:#panel-ram-mode": "select",
     "setup:#panel-weather-location": "select",
     "setup:#panel-search-font": "number",
-    "setup:#panel-taskdock-tile-size": "select"
+    "setup:#panel-taskdock-tile-size": "select",
+    "setup:#panel-taskdock-show-labels": "checkbox",
+    "setup:#panel-font-scale": "number"
   });
   const t = (key) => window.edexI18n?.t?.(key) || key;
   const esc = (str) => String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const COMMON_TARGETS = Object.freeze({panel: "panel", scale: "zone-scale", edge: "zone-edge", menu: "panel-menu"});
   const COMMON = ["panel", "scale", "edge", "menu"].map((name) => ({
     id: `common-${name}`, titleKey: `panelGuide.common.${name}.title`,
-    descriptionKey: `panelGuide.common.${name}.body`, target: name === "menu" ? "panel-menu" : name === "scale" || name === "edge" ? "panel" : "panel"
+    descriptionKey: `panelGuide.common.${name}.body`, target: COMMON_TARGETS[name],
+    ...(name === "panel" ? {interaction: "move-panel"} : {}),
+    ...(name === "panel" ? {interaction: "move-panel"} : {})
   }));
+  const FONT_STEP = Object.freeze({
+    id: "common-font", titleKey: "panelGuide.common.font.title",
+    descriptionKey: "panelGuide.common.font.body", target: "setup:#panel-font-scale"
+  });
+  const FOCUSABLE = "button:not([disabled]), select:not([disabled]), input:not([disabled])";
+  // Places the card beside the highlighted area using its real size, so taller practice cards stay on screen.
+  function placeCard(card, r) {
+    const gap = 16, margin = 14;
+    const w = card.offsetWidth || Math.min(400, innerWidth - 28);
+    const h = card.offsetHeight || 240;
+    const clampX = (x) => Math.max(margin, Math.min(innerWidth - w - margin, x));
+    const clampY = (y) => Math.max(margin, Math.min(innerHeight - h - margin, y));
+    const candidates = [
+      {fits: r.bottom + gap + h <= innerHeight - margin, left: clampX(r.left), top: r.bottom + gap},
+      {fits: r.top - gap - h >= margin, left: clampX(r.left), top: r.top - gap - h},
+      {fits: r.right + gap + w <= innerWidth - margin, left: r.right + gap, top: clampY(r.top)},
+      {fits: r.left - gap - w >= margin, left: r.left - gap - w, top: clampY(r.top)}
+    ];
+    const spot = candidates.find(c => c.fits) || {left: innerWidth - w - margin, top: innerHeight - h - margin};
+    return {left: `${Math.max(margin, spot.left)}px`, top: `${Math.max(margin, spot.top)}px`};
+  }
   function getSteps(id, includeCommon) {
     const profile = window.edexPanelTourProfiles?.[id];
     if (!profile || !Array.isArray(profile.steps) || !profile.steps.length) return [];
-    return [...(includeCommon ? COMMON : []), ...profile.steps];
+    const specific = profile.steps.map((step, index) => !includeCommon && index === 0
+      ? {...step, interaction: "move-panel"}
+      : step);
+    return [...(includeCommon ? COMMON : []), ...specific, FONT_STEP];
   }
   function show(id, targetGetter, options = {}) {
     if (running || document.querySelector("#bockis-first-run, #bockis-desktop-tour")) return false;
@@ -31,6 +61,8 @@
     let pending = null;
     let previewUndo = null;
     let saving = false;
+    let panelMoved = false;
+    let dragStart = null;
     function clearVisualPreview() {
       const undo = previewUndo; previewUndo = null;
       if (typeof undo === "function") { try { undo(); } catch (error) { console.warn("Panel tour: preview cleanup failed", error); } }
@@ -46,7 +78,8 @@
       if (!pending) return;
       const {control, original} = pending;
       if (control?.isConnected) {
-        control.value = original;
+        if (control.type === "checkbox") control.checked = original;
+        else control.value = original;
         control.dispatchEvent(new Event("change", {bubbles: true}));
       }
       pending = null;
@@ -58,10 +91,14 @@
       if (!control || control.matches("[disabled], [readonly]")) return null;
       if (PRACTICE[target] === "select" && control.tagName !== "SELECT") return null;
       if (PRACTICE[target] === "number" && control.type !== "number") return null;
+      if (PRACTICE[target] === "checkbox" && control.type !== "checkbox") return null;
       return control;
     }
     function practiceMarkup(control) {
       if (!control) return "";
+      if (control.type === "checkbox") {
+        return `<div class="panel-tour-practice"><label for="panel-tour-try">${esc(t("panelTour.practice.label"))}</label><label class="panel-tour-practice-check"><input id="panel-tour-try" type="checkbox" ${control.checked ? "checked" : ""}> ${esc(control.parentElement?.textContent?.trim() || "")}</label><small>${esc(t("panelTour.practice.livePreview"))}</small><div class="panel-tour-practice-actions"><button type="button" data-discard>${esc(t("panelTour.practice.discard"))}</button><button type="button" data-apply>${esc(t("panelTour.practice.apply"))}</button></div></div>`;
+      }
       if (control.tagName === "SELECT") {
         const opts = [...control.options].filter(opt => !opt.disabled && opt.value !== "__custom__");
         return `<div class="panel-tour-practice"><label for="panel-tour-try">${esc(t("panelTour.practice.label"))}</label><select id="panel-tour-try">${opts.map(o => `<option value="${esc(o.value)}" ${o.value===control.value?"selected":""}>${esc(o.textContent)}</option>`).join("")}</select><small>${esc(t("panelTour.practice.livePreview"))}</small><div class="panel-tour-practice-actions"><button type="button" data-discard>${esc(t("panelTour.practice.discard"))}</button><button type="button" data-apply>${esc(t("panelTour.practice.apply"))}</button></div></div>`;
@@ -73,6 +110,13 @@
       restorePending();
       if (++index >= steps.length) close(); else render();
     }
+    function back() {
+      if (saving || index === 0) return;
+      restorePending();
+      index--;
+      panelMoved = false;
+      render();
+    }
     async function applyPractice() {
       if (saving || !pending?.control?.isConnected || !tourSetup?.isConnected) return;
       const save = tourSetup.querySelector("#panel-setup-save");
@@ -80,7 +124,7 @@
       saving = true;
       const apply = card.querySelector("[data-apply]");
       if (apply) apply.disabled = true;
-      for (const button of card.querySelectorAll("[data-skip], [data-next], [data-discard]")) button.disabled = true;
+      for (const button of card.querySelectorAll("[data-skip], [data-back], [data-next], [data-discard]")) button.disabled = true;
       // Existing setup save handler owns validation and persistence. We only await its result.
       const outcome = new Promise(resolve => {
         let timer;
@@ -108,7 +152,7 @@
         const msg = card.querySelector("[data-practice-error]");
         if (msg) msg.textContent = t("panelTour.practice.error");
         if (apply?.isConnected) apply.disabled = false;
-        for (const button of card.querySelectorAll("[data-skip], [data-next], [data-discard]")) button.disabled = false;
+        for (const button of card.querySelectorAll("[data-skip], [data-back], [data-next], [data-discard]")) button.disabled = false;
       }
     }
     const previousFocus = document.activeElement;
@@ -126,9 +170,14 @@
     const spot = document.createElement("div");
     spot.className = "panel-tour-spotlight";
     spot.setAttribute("aria-hidden", "true");
+    // Dims the central scale zone while the edge zone is explained, leaving the screen edges visible.
+    const zoneMask = document.createElement("div");
+    zoneMask.className = "panel-tour-zone-mask";
+    zoneMask.setAttribute("aria-hidden", "true");
+    zoneMask.hidden = true;
     const card = document.createElement("div");
     card.className = "panel-tour-card";
-    root.append(spot, card);
+    root.append(spot, zoneMask, card);
     document.body.append(root);
     function getPanel() {
       const el = typeof targetGetter === "function" ? targetGetter() : document.getElementById(`card_${id}`);
@@ -156,21 +205,73 @@
       }
       return panel;
     }
-    function getTarget() {
+    function zoneRect() {
+      if (typeof options.zoneRect !== "function") return null;
+      try {
+        const z = options.zoneRect();
+        const values = [z?.x, z?.y, z?.width, z?.height].map(Number);
+        if (!values.every(Number.isFinite) || values[2] <= 8 || values[3] <= 8) return null;
+        const [x, y, width, height] = values;
+        return {left: x, top: y, right: x + width, bottom: y + height, width, height};
+      } catch (error) { console.warn("Panel tour: zone unavailable", error); return null; }
+    }
+    const visible = (r) => r && r.width > 8 && r.height > 8 && r.bottom > 0 && r.right > 0 && r.left < innerWidth && r.top < innerHeight;
+    // Resolves the current step to a viewport rectangle; zone steps fall back to the panel when zones are off.
+    function getTargetRect() {
+      const target = steps[index]?.target;
+      if (target === "zone-scale" || target === "zone-edge") {
+        const zone = zoneRect();
+        if (visible(zone)) return {rect: zone, mode: target};
+      }
       const el = stepTarget();
       if (!el?.isConnected) return null;
       const rect = el.getBoundingClientRect();
-      return rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.right > 0 && rect.left < innerWidth && rect.top < innerHeight ? el : null;
+      return visible(rect) ? {rect, mode: "element"} : null;
+    }
+    function onDragStart(event) {
+      if (steps[index]?.interaction !== "move-panel") return;
+      const panel = getPanel();
+      if (!panel || panel.classList.contains("locked") || !event.target?.closest?.(".card-title")) return;
+      if (event.target.closest("button, input, select")) return;
+      dragStart = {left: panel.offsetLeft, top: panel.offsetTop};
+    }
+    function onDragEnd() {
+      if (!dragStart) return;
+      const initial = dragStart;
+      dragStart = null;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const panel = getPanel();
+        if (!panel || (Math.abs(panel.offsetLeft - initial.left) < 8 && Math.abs(panel.offsetTop - initial.top) < 8)) return;
+        panelMoved = true;
+        const status = card.querySelector("[data-interaction-status]");
+        if (status) status.textContent = t("panelTour.move.success");
+        card.classList.add("panel-tour-practice-complete");
+      }));
     }
     function layout() {
-      const el = getTarget();
-      root.classList.toggle("panel-tour-no-target", !el);
-      if (!el) {
+      const found = getTargetRect();
+      const interactive = steps[index]?.interaction === "move-panel";
+      root.classList.toggle("panel-tour-interactive", interactive);
+      root.classList.toggle("panel-tour-no-target", !found);
+      root.classList.toggle("panel-tour-edge", found?.mode === "zone-edge");
+      zoneMask.hidden = found?.mode !== "zone-edge";
+      card.style.transform = "none";
+      if (!found) {
         spot.hidden = true;
         Object.assign(card.style, {left: "50%", top: "50%", transform: "translate(-50%,-50%)"});
         return;
       }
-      const r = el.getBoundingClientRect();
+      const r = found.rect;
+      if (found.mode === "zone-edge") {
+        spot.hidden = true;
+        Object.assign(zoneMask.style, {left:`${r.left}px`, top:`${r.top}px`, width:`${r.width}px`, height:`${r.height}px`});
+        const w = card.offsetWidth || Math.min(400, innerWidth - 28), h = card.offsetHeight || 240;
+        Object.assign(card.style, {
+          left:`${Math.max(14, r.left + (r.width - w) / 2)}px`,
+          top:`${Math.max(14, Math.min(innerHeight - h - 14, r.top + (r.height - h) / 2))}px`
+        });
+        return;
+      }
       const x = Math.max(6, r.left - 5), y = Math.max(6, r.top - 5);
       Object.assign(spot.style, {
         left:`${x}px`, top:`${y}px`,
@@ -178,18 +279,15 @@
         height:`${Math.max(0, Math.min(innerHeight-y-6,r.height+10))}px`
       });
       spot.hidden = false;
-      const width = Math.min(400,innerWidth-28);
-      Object.assign(card.style, {
-        transform:"none",
-        left:`${Math.max(14,Math.min(innerWidth-width-14,r.left))}px`,
-        top:`${Math.max(14,Math.min(innerHeight-240,r.bottom+256<innerHeight?r.bottom+16:r.top-240))}px`
-      });
+      Object.assign(card.style, placeCard(card, r));
     }
     function close() {
       if (saving) return;
       restorePending();
       window.removeEventListener("resize",layout);
       window.removeEventListener("scroll",layout,true);
+      document.removeEventListener("pointerdown", onDragStart, true);
+      window.removeEventListener("pointerup", onDragEnd, true);
       document.removeEventListener("keydown",onKey,true);
       window.removeEventListener("edex:locale-changed",render);
       root.remove();
@@ -203,9 +301,11 @@
     function onKey(event) {
       if (event.key === "Escape") { event.preventDefault(); close(); }
       if (event.key === "Tab") {
-        const buttons = [...card.querySelectorAll("button")];
-        if (event.shiftKey && document.activeElement === buttons[0]) { event.preventDefault();buttons.at(-1).focus(); }
-        else if (!event.shiftKey && document.activeElement === buttons.at(-1)) { event.preventDefault();buttons[0].focus(); }
+        // Include the practice field, otherwise keyboard users can never reach it.
+        const items = [...card.querySelectorAll(FOCUSABLE)];
+        if (!items.length) return;
+        if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault();items.at(-1).focus(); }
+        else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault();items[0].focus(); }
       }
     }
     function render() {
@@ -216,19 +316,27 @@
       const heading = t(step.titleKey), body = t(step.descriptionKey);
       const practice = practiceControl();
       const group = step.id.startsWith("common-") ? t("panelTour.title") : t("panelGuide.specificIntro");
-      const hasTarget = Boolean(getTarget());
-      card.innerHTML = `<div class="panel-tour-kicker">BOCKIS // ${esc(group)}<span>${index+1} / ${steps.length}</span></div><h2>${esc(heading)}</h2><p>${esc(body)}</p>${hasTarget?"":`<small>${esc(t("panelTour.unavailable"))}</small>`}${practiceMarkup(practice)}<small data-practice-error role="status"></small><div class="panel-tour-actions"><button type="button" data-skip>${esc(t("panelTour.skip"))}</button><button type="button" data-next>${esc(t(index===steps.length-1?"panelTour.done":"panelTour.next"))}</button></div>`;
+      const hasTarget = Boolean(getTargetRect());
+      const moveStatus = step.interaction === "move-panel"
+        ? `<small data-interaction-status role="status">${esc(t(panelMoved ? "panelTour.move.success" : "panelTour.move.instruction"))}</small>`
+        : "";
+      card.innerHTML = `<div class="panel-tour-kicker">BOCKIS // ${esc(group)}<span>${index+1} / ${steps.length}</span></div><h2>${esc(heading)}</h2><p>${esc(body)}</p>${moveStatus}${hasTarget?"":`<small>${esc(t("panelTour.unavailable"))}</small>`}${practiceMarkup(practice)}<small data-practice-error role="status"></small><div class="panel-tour-actions"><button type="button" data-skip>${esc(t("panelTour.skip"))}</button><span class="panel-tour-nav">${index>0?`<button type="button" data-back>${esc(t("panelTour.back"))}</button>`:""}<button type="button" data-next>${esc(t(index===steps.length-1?"panelTour.done":"panelTour.next"))}</button></span></div>`;
       card.querySelector("[data-skip]").addEventListener("click",close);
+      card.querySelector("[data-back]")?.addEventListener("click", back);
       card.querySelector("[data-next]").addEventListener("click", next);
       if (practice) {
         const input = card.querySelector("#panel-tour-try");
-        input?.addEventListener("input", () => {
+        const updatePractice = () => {
           if (input.type === "number" && (!input.checkValidity() || !Number.isFinite(Number(input.value)))) return;
-          if (!pending || pending.control !== practice) pending = {control: practice, original: practice.value};
-          practice.value = input.value;
+          if (!pending || pending.control !== practice) {
+            pending = {control: practice, original: practice.type === "checkbox" ? practice.checked : practice.value};
+          }
+          if (input.type === "checkbox") practice.checked = input.checked;
+          else practice.value = input.value;
           practice.dispatchEvent(new Event("change", {bubbles:true}));
-          setVisualPreview(steps[index].target, practice.value);
-        });
+          setVisualPreview(steps[index].target, practice.type === "checkbox" ? practice.checked : practice.value);
+        };
+        input?.addEventListener(input.type === "checkbox" || input.tagName === "SELECT" ? "change" : "input", updatePractice);
         card.querySelector("[data-discard]")?.addEventListener("click", () => {
           restorePending();
           next();
@@ -244,6 +352,8 @@
     window.addEventListener("resize",layout);
     window.addEventListener("scroll",layout,true);
     window.addEventListener("edex:locale-changed",render);
+    document.addEventListener("pointerdown", onDragStart, true);
+    window.addEventListener("pointerup", onDragEnd, true);
     document.addEventListener("keydown",onKey,true);
     render();return true;
   }

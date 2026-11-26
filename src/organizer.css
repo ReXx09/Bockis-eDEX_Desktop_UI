@@ -4235,3 +4235,13 @@ div.modal_popup input[type="color"],
 .autostart-toolbar button, .path-browser-toolbar button {
   color: var(--color_button_text, var(--color_text)) !important;
 }
+.settings-tour-manager{display:grid;gap:10px}
+.settings-tour-card,.settings-tour-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px;border:1px solid #285564;border-radius:5px;background:#071923}
+.settings-tour-card>div,.settings-tour-row>div{display:grid;gap:4px;min-width:0}
+.settings-tour-card small,.settings-tour-row small{color:#8daeb7}
+.settings-tour-row{flex-wrap:wrap}
+.settings-tour-row label{display:flex;align-items:center;gap:6px;color:#a6c4cc}
+.settings-tour-row button,.settings-tour-card button,.settings-tour-footer button{min-height:36px;padding:6px 11px}
+.settings-tour-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
+.settings-tour-footer [data-tour-message]{color:#79e3bc}
+.settings-tour-footer [data-tour-message].is-error{color:#ff8585}

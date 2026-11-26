@@ -14,6 +14,12 @@ window.edexPanelTourProfiles = Object.freeze({
         "titleKey": "panelGuide.clock.format.title",
         "descriptionKey": "panelGuide.clock.format.body",
         "target": "setup:#panel-clock-mode"
+      },
+      {
+        "id": "date",
+        "titleKey": "panelGuide.clock.date.title",
+        "descriptionKey": "panelGuide.clock.date.body",
+        "target": "setup:#panel-clock-date"
       }
     ]
   },
@@ -354,6 +360,12 @@ window.edexPanelTourProfiles = Object.freeze({
         "titleKey": "panelGuide.taskdock.tiles.title",
         "descriptionKey": "panelGuide.taskdock.tiles.body",
         "target": "setup:#panel-taskdock-tile-size"
+      },
+      {
+        "id": "labels",
+        "titleKey": "panelGuide.taskdock.labels.title",
+        "descriptionKey": "panelGuide.taskdock.labels.body",
+        "target": "setup:#panel-taskdock-show-labels"
       }
     ]
   }

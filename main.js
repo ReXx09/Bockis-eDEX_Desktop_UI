@@ -649,8 +649,8 @@ function broadcast(channel, payload) {
   for (const win of windows.values()) {
     if (!win.isDestroyed()) win.webContents.send(channel, payload);
   }
-  // Keep the standalone Theme Studio in the same user-selected locale.
-  if (channel === "settings-updated" && themeStudioWindow && !themeStudioWindow.isDestroyed()) {
+  if ((channel === "settings-updated" || channel === "themes-updated")
+    && themeStudioWindow && !themeStudioWindow.isDestroyed()) {
     themeStudioWindow.webContents.send(channel, payload);
   }
 }
@@ -1408,10 +1408,19 @@ ipcMain.handle("theme-studio-list", (event) => {
   return { themes: listThemes(), active: settings.theme };
 });
 
+ipcMain.handle("theme-studio-load", (event, name) => {
+  requireTrustedWindow(event);
+  if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
+  if (!listThemes().includes(name)) throw new Error("Theme nicht gefunden");
+  return themeStudioStore.load(name);
+});
+
 ipcMain.handle("theme-studio-save", (event, payload) => {
   requireTrustedWindow(event);
   if (!themeStudioStore) throw new Error("Theme Studio ist noch nicht initialisiert");
-  return themeStudioStore.save(payload?.name, payload?.theme);
+  const saved = themeStudioStore.save(payload?.name, payload?.theme);
+  broadcast("themes-updated", saved.themes);
+  return saved;
 });
 
 ipcMain.handle("theme-studio-export", async (event, name) => {
@@ -1450,7 +1459,9 @@ ipcMain.handle("theme-studio-import", async (event) => {
     filters: [{ name: "Bockis Theme-Paket", extensions: ["json"] }]
   });
   if (result.canceled || !result.filePaths[0]) return { canceled: true };
-  return themeStudioStore.importPackage(result.filePaths[0]);
+  const imported = themeStudioStore.importPackage(result.filePaths[0]);
+  broadcast("themes-updated", imported.themes);
+  return imported;
 });
 
 ipcMain.handle("theme-studio-import-windows-theme", async (event) => {
@@ -1570,7 +1581,8 @@ ipcMain.handle("theme-studio-restore-backup", async (event, id) => {
   while (name !== snapshot.name && listThemes().includes(name)) {
     name = `${snapshot.name}_restored_${suffix++}`;
   }
-  themeStudioStore.save(name, snapshot.theme);
+  const saved = themeStudioStore.save(name, snapshot.theme);
+  broadcast("themes-updated", saved.themes);
   const source = snapshot.settings;
   const restoredSettings = {};
   for (const key of [
@@ -1583,7 +1595,7 @@ ipcMain.handle("theme-studio-restore-backup", async (event, id) => {
   settings = saveSettings(app.getPath("userData"), { ...restoredSettings, theme: name });
   themeStudioStore.recordActivity("restore", name);
   const theme = loadTheme(name);
-  const payload = { settings, theme, themeName: name, displays: listDisplays() };
+  const payload = { settings, theme, themeName: name, displays: listDisplays(), themeSelectionCommitted: true };
   broadcast("settings-updated", payload);
   scheduleWallpaper();
   const windowsApplied = process.platform === "win32"
@@ -1611,6 +1623,7 @@ ipcMain.handle("theme-studio-delete", (event, name) => {
       displays: listDisplays()
     });
   }
+  broadcast("themes-updated", names);
   return names;
 });
 
@@ -1637,7 +1650,8 @@ ipcMain.handle("theme-studio-activate", (event, name) => {
     settings,
     theme: loadTheme(resolved),
     themeName: resolved,
-    displays: listDisplays()
+    displays: listDisplays(),
+    themeSelectionCommitted: true
   };
   broadcast("settings-updated", payload);
   scheduleWallpaper();

@@ -23,9 +23,11 @@ function generate() {
         ram: ["#panel-ram-mode"],
         weather: ["#panel-weather-location"],
         filesearch: ["#panel-search-font"],
-        taskdock: ["#panel-taskdock-tile-size", "#panel-taskdock-show-labels"]
+        taskdock: ["#panel-taskdock-tile-size", "#panel-taskdock-show-labels"],
+        "*": ["#panel-font-scale"]
       };
       for (const selector of setupTargets[id] || []) allowedTargets.add(`setup:${selector}`);
+      for (const selector of setupTargets["*"]) allowedTargets.add(`setup:${selector}`);
       if (!allowedTargets.has(step.target)) throw new Error(`Unsupported target in ${id}/${step.id}`);
     }
   }

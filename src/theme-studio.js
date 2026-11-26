@@ -20,7 +20,7 @@
     if (embedded && externalNavigation) root.classList.add("studio-external-navigation");
     root.innerHTML = `
       <div class="studio-header"><div><strong data-i18n="studio.header">BOCKIS // THEME STUDIO 2.0</strong><small data-i18n="studio.subtitle">Theme-, Windows- und Desktop-Manager</small></div>
-      ${embedded ? '<button data-act="popout">↗ Eigenes Fenster</button>' : '<span class="studio-version">2.0</span>'}</div>
+      <span class="studio-guide-actions"><button type="button" data-act="guide-theme" data-i18n="studio.tour.theme">Theme-Tour</button><button type="button" data-act="guide-windows" data-i18n="studio.tour.windows">Windows-Tour</button>${embedded ? '<button data-act="popout">↗ Eigenes Fenster</button>' : '<span class="studio-version">2.0</span>'}</span></div>
       <nav class="studio-nav" aria-label="Theme-Studio-Bereiche">
         <button type="button" class="is-active" data-section="edex" aria-pressed="true"><span>▣</span>eDEX Design</button>
         <button type="button" data-section="windows" aria-pressed="false"><span>▱</span>Windows 11</button>
@@ -182,6 +182,122 @@
     root.__bockisShowPage = showPage;
     showPage("library");
     const get = (selector) => root.querySelector(selector);
+    function startStudioTour(kind) {
+      if (root.__bockisStudioTourClose) root.__bockisStudioTourClose(false);
+      const windows = kind === "windows";
+      const steps = windows
+        ? [
+          {page:"windows", selector:'[data-id="windows-features"]', key:"windowsFeatures"},
+          {page:"windhawk", selector:'[data-id="windows-style-status"]', key:"windowsStatus"},
+          {page:"windhawk", selector:'[data-id="windows-style-mods"]', key:"windowsMods"},
+          {page:"profiles", selector:'[data-id="windows-recovery-status"]', key:"windowsRestore"}
+        ]
+        : [
+          {page:"library", selector:'[data-id="themes"]', key:"themeLibrary"},
+          {page:"colors", selector:'[data-color="accent"]', key:"themeColors"},
+          {page:"panels", selector:'[data-theme-setting="panelStyle"]', key:"themePanels"},
+          {page:"preview", selector:'[data-act="preview"]', key:"themePreview"}
+        ];
+      let index = 0;
+      const previousFocus = document.activeElement;
+      const overlay = document.createElement("div");
+      overlay.className = "studio-tour";
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-label", window.edexI18n?.t?.("studio.tour.title") || "Theme Studio tour");
+      const spotlight = document.createElement("div");
+      spotlight.className = "studio-tour-spotlight";
+      const card = document.createElement("div");
+      card.className = "studio-tour-card";
+      overlay.append(spotlight, card);
+      root.append(overlay);
+      const local = (key) => window.edexI18n?.t?.(`studio.tour.${key}`) || key;
+      const markComplete = async () => {
+        const settings = studioBootstrap?.settings || {};
+        const panelTours = settings.panelTours || {seen: {}, disabled: {}, commonSeen: false};
+        const seen = {...panelTours.seen, [windows ? "windowsStyle" : "themeStudio"]: true};
+        const result = await api().saveSettings({panelTours: {...panelTours, seen}});
+        if (!result?.settings) throw new Error("Tour-Fortschritt konnte nicht gespeichert werden.");
+        studioBootstrap = {...studioBootstrap, settings: result.settings};
+      };
+      const close = (completed = false) => {
+        if (!overlay.isConnected) return;
+        window.removeEventListener("resize", layout);
+        window.removeEventListener("scroll", layout, true);
+        window.removeEventListener("edex:locale-changed", render);
+        document.removeEventListener("keydown", onKey, true);
+        overlay.remove();
+        root.__bockisStudioTourClose = null;
+        if (previousFocus?.isConnected) previousFocus.focus?.();
+        if (completed) markComplete().catch((error) => status(error.message || String(error), true));
+      };
+      const placeCard = (rect) => {
+        const margin = 14, gap = 16;
+        const width = card.offsetWidth || Math.min(390, innerWidth - 28);
+        const height = card.offsetHeight || 220;
+        const clampX = (value) => Math.max(margin, Math.min(innerWidth - width - margin, value));
+        const clampY = (value) => Math.max(margin, Math.min(innerHeight - height - margin, value));
+        const positions = [
+          rect.bottom + gap + height <= innerHeight - margin && {left:clampX(rect.left), top:rect.bottom+gap},
+          rect.top - gap - height >= margin && {left:clampX(rect.left), top:rect.top-gap-height},
+          rect.right + gap + width <= innerWidth - margin && {left:rect.right+gap, top:clampY(rect.top)},
+          rect.left - gap - width >= margin && {left:rect.left-gap-width, top:clampY(rect.top)}
+        ].filter(Boolean);
+        const position = positions[0] || {left:innerWidth-width-margin, top:innerHeight-height-margin};
+        card.style.left = `${Math.max(margin, position.left)}px`;
+        card.style.top = `${Math.max(margin, position.top)}px`;
+      };
+      function layout() {
+        const target = root.querySelector(steps[index].selector);
+        if (!target?.isConnected) {
+          spotlight.hidden = true;
+          card.style.left = "50%";
+          card.style.top = "50%";
+          card.style.transform = "translate(-50%, -50%)";
+          return;
+        }
+        const rect = target.getBoundingClientRect();
+        const x = Math.max(6, rect.left - 5), y = Math.max(6, rect.top - 5);
+        Object.assign(spotlight.style, {
+          left:`${x}px`, top:`${y}px`,
+          width:`${Math.max(0, Math.min(innerWidth-x-6, rect.width+10))}px`,
+          height:`${Math.max(0, Math.min(innerHeight-y-6, rect.height+10))}px`
+        });
+        spotlight.hidden = false;
+        card.style.transform = "none";
+        placeCard(rect);
+      }
+      function onKey(event) {
+        if (event.key === "Escape") { event.preventDefault(); close(false); }
+        if (event.key !== "Tab") return;
+        const buttons = [...card.querySelectorAll("button:not([disabled])")];
+        if (!buttons.length) return;
+        if (event.shiftKey && document.activeElement === buttons[0]) { event.preventDefault(); buttons.at(-1).focus(); }
+        else if (!event.shiftKey && document.activeElement === buttons.at(-1)) { event.preventDefault(); buttons[0].focus(); }
+      }
+      function render() {
+        if (!overlay.isConnected) return;
+        showPage(steps[index].page);
+        const step = steps[index];
+        card.innerHTML = `<div class="studio-tour-kicker">BOCKIS // ${escapeHtml(local(windows ? "windowsTitle" : "themeTitle"))}<span>${index+1} / ${steps.length}</span></div><h3>${escapeHtml(local(`${step.key}.title`))}</h3><p>${escapeHtml(local(`${step.key}.body`))}</p><div class="studio-tour-actions"><button type="button" data-skip>${escapeHtml(local("skip"))}</button><span>${index ? `<button type="button" data-back>${escapeHtml(local("back"))}</button>` : ""}<button type="button" data-next>${escapeHtml(local(index === steps.length-1 ? "done" : "next"))}</button></span></div>`;
+        card.querySelector("[data-skip]").addEventListener("click", () => close(false));
+        card.querySelector("[data-back]")?.addEventListener("click", () => {if (index > 0) {index--; render();}});
+        card.querySelector("[data-next]").addEventListener("click", () => {
+          if (index === steps.length - 1) close(true);
+          else {index++; render();}
+        });
+        layout();
+        card.querySelector("[data-next]")?.focus();
+      }
+      root.__bockisStudioTourClose = close;
+      window.addEventListener("resize", layout);
+      window.addEventListener("scroll", layout, true);
+      window.addEventListener("edex:locale-changed", render);
+      document.addEventListener("keydown", onKey, true);
+      render();
+      return true;
+    }
+    root.__bockisStartStudioTour = startStudioTour;
     let theme = defaultTheme();
     let selected = "tron";
     let inProgress = false;
@@ -190,6 +306,7 @@
     let desktopSettings = {};
     let importedDesktop = null;
     let activeWindowsFeatures = {};
+    const themeDropdown = get('[data-id="themes"]');
     const status = (message, error = false) => {
       const element = get('[data-id="status"]');
       element.textContent = message;
@@ -213,9 +330,19 @@
       terminalPreview.style.color = theme.terminal?.foreground || toHex(colors);
       terminalPreview.style.backgroundColor = theme.terminal?.background || colors.light_black;
     }
+    function isDraftDirty() {
+      const name = get('[data-id="name"]').value.trim();
+      return JSON.stringify(theme) !== JSON.stringify(originalTheme) || name !== selected;
+    }
+    function confirmDiscardDraft() {
+      return !isDraftDirty() || window.confirm(
+        window.edexI18n?.t?.("studio.confirmDiscard") || "Ungespeicherte Theme-Änderungen verwerfen und fortfahren?"
+      );
+    }
+    root.__bockisConfirmDiscardDraft = confirmDiscardDraft;
     function updateDraftStatus() {
       const name = get('[data-id="name"]').value.trim();
-      const dirty = JSON.stringify(theme) !== JSON.stringify(originalTheme) || name !== selected;
+      const dirty = isDraftDirty();
       root.dataset.themeDirty = String(dirty);
       const detail = get('[data-id="library-detail"]');
       if (detail) detail.textContent = `${name || "Neues Theme"} · ${dirty ? "Ungespeicherte Theme-Änderungen" : "Theme gespeichert / unverändert"}`;
@@ -557,37 +684,72 @@
         }
       });
     }
+    function setThemeOptions(themes, name) {
+      if (!Array.isArray(themes) || themes.some((item) => typeof item !== "string")) {
+        throw new Error("Theme-Liste ist ungültig.");
+      }
+      themeDropdown.replaceChildren();
+      for (const item of themes) {
+        const option = document.createElement("option");
+        option.value = item;
+        option.textContent = item;
+        themeDropdown.append(option);
+      }
+      themeDropdown.value = themes.includes(name) ? name : "";
+    }
+    root.__bockisSetThemeList = (themes) => {
+      try { setThemeOptions(themes, selected); }
+      catch (error) { status(error.message || String(error), true); }
+    };
     async function refreshList(selectName) {
       const result = await api().themeStudioList();
-      const dropdown = get('[data-id="themes"]');
-      dropdown.replaceChildren();
-      for (const name of result.themes) {
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        dropdown.append(option);
-      }
-      dropdown.value = selectName && result.themes.includes(selectName) ? selectName : result.active;
+      setThemeOptions(result.themes, result.themes.includes(selectName) ? selectName : result.active);
       return result;
     }
     async function load(name) {
       if (!name) throw new Error("Bitte Theme auswählen.");
-      theme = await api().getTheme(name);
+      theme = await api().themeStudioLoad(name);
       selected = name;
+      importedDesktop = null;
+      themeDropdown.value = name;
       originalTheme = JSON.parse(JSON.stringify(theme));
       get('[data-id="name"]').value = name;
       renderWindowsImport(theme.windowsThemeImport);
       refreshInputs();
       status(`Theme „${name}“ geladen. Änderungen am Theme bitte hier mit „Speichern“ sichern.`);
     }
+    async function loadSelection(name, force = false) {
+      if (!force && name === selected) return;
+      if (!confirmDiscardDraft()) {
+        themeDropdown.value = selected;
+        return;
+      }
+      try { await load(name); }
+      catch (error) {
+        themeDropdown.value = selected;
+        throw error;
+      }
+    }
     function busy(fn) {
       return async () => {
         if (inProgress) return;
         inProgress = true;
+        themeDropdown.disabled = true;
         try { await fn(); } catch (error) { status(error.message || String(error), true); }
-        finally { inProgress = false; }
+        finally {
+          inProgress = false;
+          themeDropdown.disabled = false;
+        }
       };
     }
+    themeDropdown.addEventListener("change", () => {
+      const name = themeDropdown.value;
+      if (inProgress) {
+        themeDropdown.value = selected;
+        return;
+      }
+      void busy(() => loadSelection(name))();
+    });
     root.querySelectorAll(".studio-nav [data-section]").forEach((button) => button.addEventListener("click", () => {
       const fallbackPage = { edex: "library", windows: "windows", desktop: "desktop", profiles: "profiles" };
       showPage(fallbackPage[button.dataset.section] || "library");
@@ -617,7 +779,9 @@
     root.querySelectorAll("[data-act]").forEach((button) => button.addEventListener("click", busy(async () => {
       const action = button.dataset.act;
       if (action === "popout") return api().themeStudioOpen();
-      if (action === "load") return load(get('[data-id="themes"]').value);
+      if (action === "guide-theme") return startStudioTour("theme");
+      if (action === "guide-windows") return startStudioTour("windows");
+      if (action === "load") return loadSelection(themeDropdown.value, true);
         if (action === "open-windhawk-install") {
           await api().themeStudioOpenWindowsStyleLink("install");
           return status("Offizielle Windhawk-Seite geöffnet. Installation und Mod-Auswahl bleiben deine Entscheidung.");
@@ -666,11 +830,13 @@
           return status("Windows-Akzentfarbe und Hell-/Dunkelmodus in den Theme-Entwurf übernommen.");
         }
         if (action === "import-windows-theme") {
+          if (!confirmDiscardDraft()) return;
           const result = await api().themeStudioImportWindowsTheme();
           if (result.canceled) return;
           theme = result.theme;
           selected = "";
           importedDesktop = null;
+          themeDropdown.value = "";
           originalTheme = JSON.parse(JSON.stringify(theme));
           get('[data-id="name"]').value = result.name;
           renderWindowsImport(result.imported);
@@ -683,6 +849,7 @@
           return;
         }
         if (action === "import-package") {
+          if (!confirmDiscardDraft()) return;
           const imported = await api().themeStudioImport();
           if (imported.canceled) return;
           theme = imported.theme;
@@ -702,7 +869,7 @@
         }
         if (action === "export-package") {
           const name = get('[data-id="name"]').value.trim() || selected;
-          if (!name || name !== selected) throw new Error("Speichere das Theme vor dem Export unter dem ausgewählten Namen.");
+          if (!name || name !== selected || isDraftDirty()) throw new Error("Speichere das Theme vor dem Export unter dem ausgewählten Namen.");
           const result = await api().themeStudioExport(name);
           if (!result.canceled) {
             await refreshProfileHistory();
@@ -746,8 +913,11 @@
           throw new Error(result.error || "Windows-Notfallwiederherstellung fehlgeschlagen.");
         }
       if (action === "new") {
+        if (!confirmDiscardDraft()) return;
         theme = defaultTheme();
         selected = "";
+        importedDesktop = null;
+        themeDropdown.value = "";
         originalTheme = JSON.parse(JSON.stringify(theme));
         get('[data-id="name"]').value = "mein_theme";
         renderWindowsImport(null);
@@ -768,6 +938,7 @@
       }
       if (action === "delete") {
         const name = get('[data-id="themes"]').value;
+        if (!name) throw new Error("Bitte Theme auswählen.");
         if (!window.confirm(`Eigenes Theme „${name}“ löschen? Es wird vorher gesichert.`)) return;
         await api().themeStudioDelete(name);
         const result = await refreshList();
@@ -785,7 +956,9 @@
       }
       if (action === "apply") {
         const name = get('[data-id="name"]').value.trim();
-        if (!name || name !== selected) return status("Bitte das Theme zuerst unter diesem Namen speichern.", true);
+        if (!name || name !== selected || isDraftDirty()) {
+          return status(window.edexI18n?.t?.("studio.saveBeforeActivate") || "Bitte zuerst die Theme-Änderungen speichern.", true);
+        }
         if (importedDesktop) {
           const patch = {};
           for (const key of [
@@ -806,11 +979,14 @@
     })));
     // The stand-alone editor receives shared settings changes from the main process.
     // Re-translate the existing elements without rebuilding its unsaved theme draft.
-    if (!embedded) api()?.onSettingsUpdated?.((payload) => {
-      const next = payload?.settings?.locale;
-      if (next) window.edexI18n?.setLocale?.(next);
-      window.edexI18n?.translatePage?.(root);
-    });
+    if (!embedded) {
+      api()?.onSettingsUpdated?.((payload) => {
+        const next = payload?.settings?.locale;
+        if (next) window.edexI18n?.setLocale?.(next);
+        window.edexI18n?.translatePage?.(root);
+      });
+      api()?.onThemesUpdated?.((themes) => root.__bockisSetThemeList(themes));
+    }
     // Localize once after the DOM is assembled; preserve the current theme draft.
     window.edexI18n?.translatePage?.(root);
     if (typeof window.addEventListener === "function") {
@@ -850,7 +1026,11 @@
     const defaultPage = { edex: "library", windows: "windows", desktop: "desktop", profiles: "profiles" };
     return root.__bockisShowPage(pages[anchor] || defaultPage[section] || "library");
   }
-  window.BockisThemeStudio = { mount, selectSection };
+  window.BockisThemeStudio = {
+    mount,
+    selectSection,
+    startTour: (root, kind) => root?.__bockisStartStudioTour?.(kind) === true
+  };
   document.addEventListener("DOMContentLoaded", () => {
     const standalone = document.querySelector("#theme-studio-root");
     if (standalone) mount(standalone);

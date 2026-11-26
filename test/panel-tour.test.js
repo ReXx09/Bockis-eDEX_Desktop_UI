@@ -27,9 +27,9 @@ test("panel tour flags survive settings saves and ignore malformed values", () =
   try {
     saveSettings(dir,{panelTours:{seen:{clock:true,"invalid!":true},disabled:{clock:true,ram:false}}});
     const settings = loadSettings(dir);
-    assert.deepEqual(settings.panelTours,{seen:{clock:true},disabled:{clock:true},commonSeen:false});
+    assert.deepEqual(settings.panelTours,{seen:{clock:true},disabled:{clock:true},commonSeen:false,desktopSeen:false});
     saveSettings(dir,{theme:"matrix"});
-    assert.deepEqual(loadSettings(dir).panelTours,{seen:{clock:true},disabled:{clock:true},commonSeen:false});
+    assert.deepEqual(loadSettings(dir).panelTours,{seen:{clock:true},disabled:{clock:true},commonSeen:false,desktopSeen:false});
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 test("all supported locales contain all tour labels", () => {
@@ -68,4 +68,21 @@ test("common basics are saved once and manual replay stays available", () => {
     saveSettings(dir,{panelTours:{seen:{weather:true},disabled:{ram:true},commonSeen:true}});
     assert.equal(loadSettings(dir).panelTours.commonSeen,true);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("panel guide adds a safe move exercise and a reversible panel-font practice step", () => {
+  assert.match(tour,/interaction: "move-panel"/);
+  assert.match(tour,/id: "common-font"/);
+  assert.match(tour,/target: "setup:#panel-font-scale"/);
+  assert.match(tour,/PRACTICE\[target\] === "checkbox"/);
+  assert.match(renderer,/setup:#panel-taskdock-show-labels/);
+  assert.match(renderer,/setup:#panel-clock-date/);
+});
+
+test("settings tour manager can launch and reset the supported guides", () => {
+  assert.match(renderer,/data-tour-reset/);
+  assert.match(renderer,/commonSeen: false, desktopSeen: false/);
+  assert.match(renderer,/startPanelTour\(id, \{includeCommon: true\}\)/);
+  assert.match(renderer,/BockisThemeStudio\?\.startTour/);
+  assert.match(renderer,/openSettings\(destination\)/);
 });

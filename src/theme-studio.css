@@ -34,3 +34,14 @@
 .bockis-studio .studio-header strong,.bockis-studio h3 {color:var(--color_heading_text,var(--studio-accent))}
 .bockis-studio .studio-help,.bockis-studio .studio-header small {color:var(--color_secondary_text,#8daeb7)}
 .bockis-studio button:not(.studio-primary) {color:var(--color_button_text,#b9e9f2)}
+.bockis-studio .studio-guide-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.bockis-studio .studio-tour{position:fixed;inset:0;z-index:2147483003;background:rgba(2,7,13,.72);color:#d6f3ff;font:15px/1.5 'Rajdhani','Segoe UI',sans-serif;pointer-events:auto}
+.bockis-studio .studio-tour-spotlight{position:fixed;border:2px solid #00cfff;border-radius:6px;box-shadow:0 0 0 9999px rgba(2,7,13,.22),0 0 24px #00aaff;pointer-events:none}
+.bockis-studio .studio-tour-spotlight[hidden]{display:none}
+.bockis-studio .studio-tour-card{position:fixed;width:min(390px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;background:#081b2b;border:1px solid #00b9eb;box-shadow:0 12px 40px #000;padding:18px}
+.bockis-studio .studio-tour-kicker,.bockis-studio .studio-tour-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.bockis-studio .studio-tour-kicker{font:12px 'Share Tech Mono',monospace;color:#00dfff}
+.bockis-studio .studio-tour-card h3{margin:12px 0;color:#f4fcff}
+.bockis-studio .studio-tour-card p{color:#d6f3ff}
+.bockis-studio .studio-tour-actions>span{display:flex;gap:8px}
+.bockis-studio .studio-tour button{min-height:40px}

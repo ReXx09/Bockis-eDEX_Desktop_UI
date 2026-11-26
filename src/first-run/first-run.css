@@ -23,6 +23,8 @@
 .bockis-desktop-tour h2{font-size:20px;color:#fff;margin:14px 0 8px}
 .bockis-desktop-tour p{margin:8px 0 18px}
 .bockis-desktop-tour .fr-tour-actions{display:flex;justify-content:space-between;gap:12px}
+.bockis-desktop-tour .fr-tour-nav{display:flex;gap:8px}
+.bockis-desktop-tour .fr-tour-open-settings{display:block;width:100%;margin:0 0 14px}
 .bockis-desktop-tour button{min-height:42px;padding:8px 14px;background:#102a3b;color:#e3f5ff;border:1px solid #279acc;cursor:pointer;font:inherit}
 .bockis-desktop-tour button:hover,.bockis-desktop-tour button:focus-visible{background:#17465c;outline:2px solid #63d9ff;outline-offset:2px}
 @media(max-width:520px){.bockis-desktop-tour .fr-tour-card{padding:12px}.bockis-desktop-tour h2{font-size:17px}}

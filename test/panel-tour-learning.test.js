@@ -25,7 +25,7 @@ test("interactive learning limits edits to existing trusted setup controls",()=>
   assert.match(tour,/opt\.value !== "__custom__"/);
 });
 test("preview is staged in setup and discarded when navigating or closing",()=>{
-  assert.match(tour,/pending = \{control: practice, original: practice\.value\}/);
+  assert.match(tour,/pending = \{control: practice, original: practice\.type === "checkbox" \? practice\.checked : practice\.value\}/);
   assert.match(tour,/control\.value = original/);
   assert.match(tour,/function close\(\) \{\s*if \(saving\) return;\s*restorePending\(\)/);
   assert.match(tour,/function next\(\) \{\s*if \(saving\) return;\s*restorePending\(\)/);

@@ -1,5 +1,44 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Custom themes:** choosing a theme in Theme Studio now loads the selected
+  draft, protects unsaved changes when switching or closing settings and
+  requires saving before activation. Theme lists update across open windows
+  after saving, importing or deleting, and studio activation no longer leaves
+  the general settings selection stale.
+- **Desktop tour:** the first step pointed at non-existent panel IDs
+  (`#card_cpuinfo`, `#card_hardwareInspector`, `#card_ramwatcher`) and now
+  highlights the real CPU, hardware monitor or RAM panel.
+- **Panel tour zone basics:** the "Scale zone" and "Edge zone" steps highlighted
+  the panel instead of the zones. They now spotlight the central scale zone and
+  mark the edge area; with zones disabled they fall back to the panel.
+- **Tour card placement:** both tours measure the real card size and place it
+  below, above, beside or in a corner, so taller practice cards no longer leave
+  the screen or cover the highlighted panel.
+- **Keyboard access:** the panel tour focus trap now includes the practice
+  field, which was unreachable with Tab before.
+- The desktop tour no longer starts while a panel tour is running and follows
+  language changes immediately.
+
+### Added
+
+- Back button in the desktop and panel tours (`firstRun.introBack`,
+  `panelTour.back` in en, de and zh-Hant).
+- All panel tour entry points use one shared `startPanelTour` helper.
+- A **Tours & Help** settings page lists desktop, Theme Studio, Windows
+  integration and panel tours, with replay controls, per-panel automatic-start
+  switches and a reset for saved tour progress.
+- Dedicated Theme Studio and Windows Style Integration walkthroughs highlight
+  their relevant pages and explain the opt-in, non-installing Windhawk flow.
+- Panel learning now includes temporary date, task-label and font-size previews,
+  plus interactive panel moving; settings shortcuts from the desktop tour open
+  the matching settings page directly.
+- German and Traditional Chinese tour strings repaired; generated locale
+  modules are rebuilt from the canonical JSON resources.
+
 ## [1.2.7.9] - 2026-11-25
 
 ### Added
@@ -50,6 +89,8 @@
   panel (2.3.1 hotfix).
 - Theme Studio crashed on mount when the taskbar fields were missing
   (`Cannot set properties of null`).
+- Keep Windows and Windhawk subpages attached while assembling Theme Studio,
+  fixing initialization failing on `replaceChildren` and leaving colors empty.
 - Collapsed settings submenus stayed visible because CSS overrode the `hidden`
   attribute; expanding a category no longer switches the active page.
 - Settings dialog was capped at 760 px; it now uses up to 1420 px, and the

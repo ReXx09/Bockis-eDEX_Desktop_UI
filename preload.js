@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld("edex", {
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   themeStudioOpen: () => ipcRenderer.invoke("theme-studio-open"),
   themeStudioList: () => ipcRenderer.invoke("theme-studio-list"),
+  themeStudioLoad: (name) => ipcRenderer.invoke("theme-studio-load", name),
   themeStudioSave: (name, theme) => ipcRenderer.invoke("theme-studio-save", { name, theme }),
   themeStudioDelete: (name) => ipcRenderer.invoke("theme-studio-delete", name),
   themeStudioExport: (name) => ipcRenderer.invoke("theme-studio-export", name),
@@ -169,6 +170,9 @@ contextBridge.exposeInMainWorld("edex", {
   },
   onSettingsUpdated: (fn) => {
     ipcRenderer.on("settings-updated", (_e, payload) => fn(payload));
+  },
+  onThemesUpdated: (fn) => {
+    ipcRenderer.on("themes-updated", (_e, themes) => fn(themes));
   },
   onUpdateCheckResult: (fn) => {
     ipcRenderer.on("update-check-result", (_e, payload) => fn(payload));

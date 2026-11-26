@@ -5,6 +5,12 @@ are **eDEX Design**, **Windows 11**, **Desktop**, and **Profile & Sicherheit**.
 It can edit eDEX colors, panel styles, and terminal fonts; preview changes on
 all open displays; and save or activate custom themes.
 
+Choosing a theme in the studio loads it for further editing. Unsaved changes
+must be confirmed before switching themes or closing settings. Save the draft
+before activating it; saved custom themes immediately appear in the general
+theme selection without restarting eDEX. Activating a theme in the studio also
+updates the open settings selection.
+
 The **Eigenes Fenster** button opens the same editor in a separate Electron
 window. Built-in themes remain read-only. Custom themes are stored below
 Electron's `userData` directory in `custom-themes`; overwritten or deleted

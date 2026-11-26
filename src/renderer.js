@@ -365,10 +365,12 @@ function clockLedColor() {
 }
 
 function clockShowDate() {
+  if (typeof panelTourClockDatePreview === "boolean") return panelTourClockDatePreview;
   return state.settings?.clockShowDate !== false;
 }
 
 let panelTourClockPreview = null;
+let panelTourClockDatePreview = null;
 function clockDisplayMode() {
   if (panelTourClockPreview !== null) return panelTourClockPreview;
   return state.settings?.clockDisplayMode === "analog" ? "analog" : "digital";
@@ -2660,15 +2662,27 @@ function previewPanelTourControl(target, value) {
   const panel = document.getElementById(`card_${({
     "setup:#panel-clock-mode": "clock", "setup:#panel-ram-mode": "ram",
     "setup:#panel-weather-location": "weather", "setup:#panel-search-font": "filesearch",
-    "setup:#panel-taskdock-tile-size": "taskdock"
+    "setup:#panel-taskdock-tile-size": "taskdock",
+    "setup:#panel-clock-date": "clock", "setup:#panel-taskdock-show-labels": "taskdock"
   })[target] || ""}`);
-  if (!panel) return null;
+  const setupPanelId = target === "setup:#panel-font-scale"
+    ? document.querySelector(".panel-setup-modal")?.dataset.panelId
+    : null;
+  const targetPanel = panel || (setupPanelId ? document.getElementById(`card_${setupPanelId}`) : null);
+  if (!targetPanel) return null;
   if (target === "setup:#panel-clock-mode") {
     if (!["digital", "analog"].includes(value)) return null;
     const prior = panelTourClockPreview;
     panelTourClockPreview = value;
     renderClock();
     return () => { panelTourClockPreview = prior; renderClock(); };
+  }
+  if (target === "setup:#panel-clock-date") {
+    if (typeof value !== "boolean") return null;
+    const prior = panelTourClockDatePreview;
+    panelTourClockDatePreview = value;
+    renderClock();
+    return () => { panelTourClockDatePreview = prior; renderClock(); };
   }
   if (target === "setup:#panel-ram-mode") {
     if (!["used", "free", "cached", "available", "total"].includes(value)) return null;
@@ -2688,9 +2702,23 @@ function previewPanelTourControl(target, value) {
   }
   if (target === "setup:#panel-taskdock-tile-size") {
     if (!["compact", "standard", "large"].includes(value)) return null;
-    const prior = panel.getAttribute("data-taskdock-tile-size");
-    panel.setAttribute("data-taskdock-tile-size", value);
-    return () => { if (prior === null) panel.removeAttribute("data-taskdock-tile-size"); else panel.setAttribute("data-taskdock-tile-size", prior); };
+    const prior = targetPanel.getAttribute("data-taskdock-tile-size");
+    targetPanel.setAttribute("data-taskdock-tile-size", value);
+    return () => { if (prior === null) targetPanel.removeAttribute("data-taskdock-tile-size"); else targetPanel.setAttribute("data-taskdock-tile-size", prior); };
+  }
+  if (target === "setup:#panel-taskdock-show-labels") {
+    if (typeof value !== "boolean") return null;
+    const prior = targetPanel.classList.contains("taskdock-labels-off");
+    targetPanel.classList.toggle("taskdock-labels-off", !value);
+    return () => targetPanel.classList.toggle("taskdock-labels-off", prior);
+  }
+  if (target === "setup:#panel-font-scale") {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0.7 || num > 1.8) return null;
+    const prior = targetPanel.style.getPropertyValue("--panel-font-scale");
+    const priority = targetPanel.style.getPropertyPriority("--panel-font-scale");
+    targetPanel.style.setProperty("--panel-font-scale", String(num));
+    return () => { if (prior) targetPanel.style.setProperty("--panel-font-scale", prior, priority); else targetPanel.style.removeProperty("--panel-font-scale"); };
   }
   if (target === "setup:#panel-weather-location") {
     if (!WEATHER_LOCATION_PRESETS.includes(value)) return null;
@@ -2699,7 +2727,7 @@ function previewPanelTourControl(target, value) {
     badge.className = "bockis-weather-location-preview";
     badge.textContent = value;
     badge.setAttribute("aria-label", `Preview location: ${value}`);
-    panel.append(badge);
+    targetPanel.append(badge);
     return () => badge.remove();
   }
   return null;
@@ -2708,13 +2736,44 @@ function previewPanelTourControl(target, value) {
 // Refresh visuals from persisted settings after a successful guided save.
 function syncPanelTourSavedVisual(target) {
   if (target === "setup:#panel-clock-mode") renderClock();
+  else if (target === "setup:#panel-clock-date") renderClock();
   else if (target === "setup:#panel-ram-mode") document.documentElement.dataset.ramGaugeMode = ramGaugeMode();
   else if (target === "setup:#panel-search-font") document.documentElement.style.setProperty("--search-font", `${searchFontSize()}px`);
   else if (target === "setup:#panel-taskdock-tile-size") {
     const card = document.getElementById("card_taskdock");
     if (card) card.dataset.taskdockTileSize = state.settings.taskDockTileSize || "standard";
   }
+  else if (target === "setup:#panel-taskdock-show-labels") {
+    document.getElementById("card_taskdock")?.classList.toggle("taskdock-labels-off", state.settings.taskDockShowLabels === false);
+  }
   // Weather location is reloaded by the standard panel save/rebuild flow.
+}
+
+// Central scale zone in viewport coordinates; null when zones are disabled.
+function panelTourZoneRect() {
+  if (state.settings?.windowZoneEnabled === false) return null;
+  const zone = window.edexDesktopLayout?.centralZoneRect?.();
+  if (!zone) return null;
+  const origin = document.getElementById("workspace")?.getBoundingClientRect() || { left: 0, top: 0 };
+  return { x: origin.left + zone.x, y: origin.top + zone.y, width: zone.width, height: zone.height };
+}
+
+function startPanelTour(id, { includeCommon = false } = {}) {
+  const card = () => document.getElementById(`card_${id}`);
+  return window.edexPanelTour?.show?.(id, card, {
+    includeCommon,
+    openSetup: () => openPanelSetup(document.getElementById(`card_${id}`)),
+    preview: previewPanelTourControl,
+    onSaved: syncPanelTourSavedVisual,
+    zoneRect: panelTourZoneRect
+  }) === true;
+}
+
+async function savePanelTourState(panelTours) {
+  const result = await window.edex.saveSettings({ panelTours });
+  if (!result?.settings) throw new Error("Tour-Einstellungen konnten nicht gespeichert werden.");
+  state.settings = result.settings;
+  return result.settings.panelTours;
 }
 
 function openPanelSetup(el) {
@@ -2818,6 +2877,7 @@ function openPanelSetup(el) {
     : "";
   const modal = document.createElement("div");
   modal.className = "modal_popup info panel-setup-modal";
+  modal.dataset.panelId = id;
   modal.innerHTML = `
     <h1>${escapeHtml(title)} - Setup</h1>
     <table><tr><th>Option</th><th>Wert</th></tr>${nameSetup}${zoneSetup}${tourSetup}${backgroundSetup}${iconSetup}${body}
@@ -2894,11 +2954,11 @@ function openPanelSetup(el) {
   });
   modal.querySelector("#panel-tour-replay")?.addEventListener("click", () => {
     modal.remove();
-    window.edexPanelTour?.show?.(id, () => document.getElementById(`card_${id}`), { includeCommon: false, openSetup: () => openPanelSetup(document.getElementById(`card_${id}`)), preview: previewPanelTourControl, onSaved: syncPanelTourSavedVisual });
+    startPanelTour(id, { includeCommon: false });
   });
   modal.querySelector("#panel-tour-replay-all")?.addEventListener("click", () => {
     modal.remove();
-    window.edexPanelTour?.show?.(id, () => document.getElementById(`card_${id}`), { includeCommon: true, openSetup: () => openPanelSetup(document.getElementById(`card_${id}`)), preview: previewPanelTourControl, onSaved: syncPanelTourSavedVisual });
+    startPanelTour(id, { includeCommon: true });
   });
   modal.querySelector("#panel-setup-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#panel-setup-save")?.addEventListener("click", async () => {
@@ -2912,7 +2972,13 @@ function openPanelSetup(el) {
       const disabled = { ...previous.disabled };
       if (tourDisabledNext) disabled[id] = true;
       else delete disabled[id];
-      patch.panelTours = { seen: { ...previous.seen }, disabled, commonSeen: previous.commonSeen === true };
+      patch.panelTours = {
+        ...previous,
+        seen: { ...previous.seen },
+        disabled,
+        commonSeen: previous.commonSeen === true,
+        desktopSeen: previous.desktopSeen === true
+      };
     }
     let weatherLocation = "";
     if (id === "weather") {
@@ -3407,9 +3473,15 @@ async function addPanel(id) {
     // Zone basics are presented only once across every panel type.
     const includeCommon = tours.commonSeen !== true;
     try {
-      const started = window.edexPanelTour?.show?.(id, () => document.getElementById(`card_${id}`), { includeCommon, openSetup: () => openPanelSetup(document.getElementById(`card_${id}`)), preview: previewPanelTourControl, onSaved: syncPanelTourSavedVisual });
+      const started = startPanelTour(id, { includeCommon });
       if (started) {
-        const updated = { seen: { ...tours.seen, [id]: true }, disabled: { ...tours.disabled }, commonSeen: true };
+        const updated = {
+          ...tours,
+          seen: { ...tours.seen, [id]: true },
+          disabled: { ...tours.disabled },
+          commonSeen: true,
+          desktopSeen: tours.desktopSeen === true
+        };
         const result = await window.edex.saveSettings({ panelTours: updated });
         state.settings = result.settings || { ...state.settings, panelTours: updated };
       }
@@ -6088,12 +6160,19 @@ async function doScan() {
   arrangeDesktop();
 }
 
-function closeSettings() {
-  if (document.querySelector(".theme-studio-in-settings")) {
+function confirmStudioDraftClose(modal) {
+  return modal.querySelector(".theme-studio-in-settings")?.__bockisConfirmDiscardDraft?.() !== false;
+}
+
+function closeSettings(draftConfirmed = false) {
+  const modal = document.getElementById("settingsEditor")?.closest(".modal_popup");
+  if (modal && !draftConfirmed && !confirmStudioDraftClose(modal)) return false;
+  if (modal?.querySelector(".theme-studio-in-settings")) {
     window.edex?.themeStudioResetPreview?.().catch?.(() => {});
   }
   clearSnapGuides();
-  document.getElementById("settingsEditor")?.closest(".modal_popup")?.remove();
+  modal?.remove();
+  return true;
 }
 
 function requestPresetName(parent) {
@@ -6210,6 +6289,27 @@ function openOrganizerSettings() {
     }
   });
   modal.querySelector("#organizer-close")?.addEventListener("click", () => modal.remove());
+}
+
+function updateAvailableThemes(themes) {
+  if (!Array.isArray(themes) || themes.some((name) => typeof name !== "string")) {
+    console.error("[Theme Studio] Ungültige Theme-Liste erhalten");
+    return;
+  }
+  state.themes = themes.slice();
+  const select = document.querySelector("#set-theme");
+  if (select) {
+    const previous = select.value;
+    const options = themes.map((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      return option;
+    });
+    select.replaceChildren(...options);
+    select.value = themes.includes(previous) ? previous : state.themeName;
+  }
+  document.querySelector(".theme-studio-in-settings")?.__bockisSetThemeList?.(themes);
 }
 
 function openSettings(focusPanel = "") {
@@ -6501,6 +6601,10 @@ function openSettings(focusPanel = "") {
     addPanel("panels", "Panels & Dock", "Desktop-Icons, Panels, Dock und Schriftoptionen verwalten.");
     addPanel("extensions", "Erweiterungen", "Rainmeter und Code-Regen-Effekte konfigurieren.");
     addPanel("windows-sync", "Windows-Synchronisierung", "Status der einzeln verwalteten Windows-Anpassungen.");
+    const tourManagerBody = addPanel("tours", "Touren & Hilfe", "Einführungen starten, ihren Status prüfen oder die Tour-Fortschritte zurücksetzen.");
+    const tourManager = document.createElement("div");
+    tourManager.className = "settings-tour-manager";
+    tourManagerBody.append(tourManager);
     const studioBody = addPanel("studio", "Theme Studio", "Themes, Windows-Styling und Wiederherstellung.");
     const studioHost = document.createElement("div");
     studioHost.className = "theme-studio-in-settings";
@@ -6545,7 +6649,8 @@ function openSettings(focusPanel = "") {
         id: "general", label: "Allgemein", icon: "⚙", children: [
           { id: "language", label: "Sprache", panel: "language" },
           { id: "presets", label: "Presets", panel: "presets" },
-          { id: "startup", label: "Start & Updates", panel: "startup" }
+          { id: "startup", label: "Start & Updates", panel: "startup" },
+          { id: "tours", label: "Touren & Hilfe", panel: "tours" }
         ]
       },
       {
@@ -6624,7 +6729,7 @@ function openSettings(focusPanel = "") {
         button.type = "button";
         button.className = "settings-submenu";
         button.dataset.submenu = child.id;
-        button.dataset.i18n = ({"language":"settings.nav.language","presets":"settings.nav.presets","startup":"settings.nav.startup","layout":"settings.nav.layout","background":"settings.nav.background","panels":"settings.nav.panels","extensions":"settings.nav.extensions","theme-library":"settings.nav.library","studio-colors":"settings.nav.colors","studio-panels":"settings.nav.design","studio-preview":"settings.nav.preview","windows-manager":"settings.nav.windows","windhawk":"settings.nav.windhawk","windows-sync":"settings.nav.sync","profiles":"settings.nav.profiles"})[child.id];
+        button.dataset.i18n = ({"language":"settings.nav.language","presets":"settings.nav.presets","startup":"settings.nav.startup","tours":"settings.nav.tours","layout":"settings.nav.layout","background":"settings.nav.background","panels":"settings.nav.panels","extensions":"settings.nav.extensions","theme-library":"settings.nav.library","studio-colors":"settings.nav.colors","studio-panels":"settings.nav.design","studio-preview":"settings.nav.preview","windows-manager":"settings.nav.windows","windhawk":"settings.nav.windhawk","windows-sync":"settings.nav.sync","profiles":"settings.nav.profiles"})[child.id];
         button.textContent = window.edexI18n?.t?.(button.dataset.i18n) || child.label;
         button.setAttribute("aria-current", "false");
         children.append(button);
@@ -6692,6 +6797,79 @@ function openSettings(focusPanel = "") {
     menuEntries.forEach(({ button, id }) => {
       button.addEventListener("click", () => activateSettingsSubmenu(id));
     });
+    const tourText = (key) => window.edexI18n?.t?.(key) || key;
+    const showTourMessage = (message, isError = false) => {
+      const element = tourManager.querySelector("[data-tour-message]");
+      if (element) {
+        element.textContent = message;
+        element.classList.toggle("is-error", isError);
+      }
+    };
+    const renderTourManager = () => {
+      const tours = state.settings?.panelTours || {seen: {}, disabled: {}, commonSeen: false, desktopSeen: false};
+      const status = (seen, disabled) => tourText(disabled
+        ? "settings.tours.disabled"
+        : seen ? "settings.tours.seen" : "settings.tours.pending");
+      const panelRows = Object.entries(PANEL_META).filter(([id]) => id !== "dock").map(([id, meta]) => {
+        const checked = tours.disabled?.[id] !== true;
+        const label = escapeHtml(tourText(`panel.title.${id}`) === `panel.title.${id}` ? meta.title : tourText(`panel.title.${id}`));
+        return `<div class="settings-tour-row"><div><strong>${label}</strong><small>${escapeHtml(status(tours.seen?.[id] === true, !checked))}</small></div><label><input type="checkbox" data-tour-auto="${escapeHtml(id)}" ${checked ? "checked" : ""}> ${escapeHtml(tourText("settings.tours.auto"))}</label><button type="button" data-tour-panel="${escapeHtml(id)}">${escapeHtml(tourText("settings.tours.startPanel"))}</button></div>`;
+      }).join("");
+      tourManager.innerHTML = `
+        <div class="settings-tour-card"><div><strong>${escapeHtml(tourText("settings.tours.desktop"))}</strong><small>${escapeHtml(status(tours.desktopSeen === true, false))}</small></div><button type="button" data-tour-action="desktop">${escapeHtml(tourText("settings.tours.start"))}</button></div>
+        <div class="settings-tour-card"><div><strong>${escapeHtml(tourText("settings.tours.theme"))}</strong><small>${escapeHtml(status(tours.seen?.themeStudio === true, false))}</small></div><button type="button" data-tour-action="theme">${escapeHtml(tourText("settings.tours.start"))}</button></div>
+        <div class="settings-tour-card"><div><strong>${escapeHtml(tourText("settings.tours.windows"))}</strong><small>${escapeHtml(status(tours.seen?.windowsStyle === true, false))}</small></div><button type="button" data-tour-action="windows">${escapeHtml(tourText("settings.tours.start"))}</button></div>
+        <h4>${escapeHtml(tourText("settings.tours.panelsHeading"))}</h4>
+        ${panelRows}
+        <div class="settings-tour-footer"><button type="button" data-tour-reset>${escapeHtml(tourText("settings.tours.reset"))}</button><span data-tour-message role="status" aria-live="polite"></span></div>`;
+      tourManager.querySelectorAll("[data-tour-auto]").forEach((input) => input.addEventListener("change", async () => {
+        const current = state.settings?.panelTours || {seen: {}, disabled: {}, commonSeen: false};
+        const disabled = {...current.disabled};
+        if (input.checked) delete disabled[input.dataset.tourAuto];
+        else disabled[input.dataset.tourAuto] = true;
+        try {
+          await savePanelTourState({...current, disabled});
+          renderTourManager();
+        } catch (error) {
+          input.checked = !input.checked;
+          showTourMessage(error.message || String(error), true);
+        }
+      }));
+      tourManager.querySelectorAll("[data-tour-panel]").forEach((button) => button.addEventListener("click", () => {
+        const id = button.dataset.tourPanel;
+        if (!closeSettings()) return;
+        if (!startPanelTour(id, {includeCommon: true})) toast(tourText("settings.tours.unavailable"));
+      }));
+      tourManager.querySelectorAll("[data-tour-action]").forEach((button) => button.addEventListener("click", () => {
+        const action = button.dataset.tourAction;
+        if (action === "desktop") {
+          if (!closeSettings()) return;
+          window.edexFirstRun?.showTour?.({
+            openSettings: (destination) => openSettings(destination),
+            onClose: () => savePanelTourState({
+              ...(state.settings?.panelTours || {seen: {}, disabled: {}, commonSeen: false}),
+              desktopSeen: true
+            }).catch((error) => toast(error.message || String(error)))
+          });
+          return;
+        }
+        activateSettingsSubmenu(action === "windows" ? "windhawk" : "studio-colors");
+        if (!window.BockisThemeStudio?.startTour?.(studioHost, action)) {
+          showTourMessage(tourText("settings.tours.unavailable"), true);
+        }
+      }));
+      tourManager.querySelector("[data-tour-reset]")?.addEventListener("click", async () => {
+        if (!window.confirm(tourText("settings.tours.confirmReset"))) return;
+        try {
+          await savePanelTourState({seen: {}, disabled: {}, commonSeen: false, desktopSeen: false});
+          renderTourManager();
+          showTourMessage(tourText("settings.tours.resetDone"));
+        } catch (error) {
+          showTourMessage(error.message || String(error), true);
+        }
+      });
+    };
+    renderTourManager();
     search.addEventListener("input", () => {
       const query = search.value.trim().toLocaleLowerCase();
       const matches = [];
@@ -6757,8 +6935,17 @@ function openSettings(focusPanel = "") {
   reopen.className = "first-run-reopen";
   reopen.textContent = window.edexI18n?.t?.("firstRun.restart") || "Restart setup";
   reopen.addEventListener("click", () => {
-    modal.remove();
-    window.edexFirstRun?.open({ state, previewTheme: applyTheme, force: true });
+    if (!closeSettings()) return;
+    window.edexFirstRun?.open({
+      state, previewTheme: applyTheme, force: true,
+      launchTour: () => window.edexFirstRun?.showTour?.({
+        openSettings: (destination) => openSettings(destination),
+        onClose: () => savePanelTourState({
+          ...(state.settings?.panelTours || {seen: {}, disabled: {}, commonSeen: false}),
+          desktopSeen: true
+        }).catch((error) => toast(error.message || String(error)))
+      })
+    });
   });
   modal.querySelector(".settings-navigation, .settings-sidebar, .settings-nav")?.appendChild(reopen)
     || modal.insertBefore(reopen, modal.firstChild.nextSibling);
@@ -6767,8 +6954,14 @@ function openSettings(focusPanel = "") {
   replayTour.className = "first-run-reopen";
   replayTour.textContent = window.edexI18n?.t?.("firstRun.startTour") || "Start desktop tour";
   replayTour.addEventListener("click", () => {
-    modal.remove();
-    window.edexFirstRun?.showTour?.();
+    if (!closeSettings()) return;
+    window.edexFirstRun?.showTour?.({
+      openSettings: (destination) => openSettings(destination),
+      onClose: () => savePanelTourState({
+        ...(state.settings?.panelTours || {seen: {}, disabled: {}, commonSeen: false}),
+        desktopSeen: true
+      }).catch((error) => toast(error.message || String(error)))
+    });
   });
   reopen.insertAdjacentElement("afterend", replayTour);
   modal.querySelector("#set-check-updates")?.addEventListener("click", async (event) => {
@@ -6832,9 +7025,11 @@ function openSettings(focusPanel = "") {
       statusEl.dataset.state = "unknown";
     }
   });
-  const focusSubmenu = focusPanel === "coderain"
-    ? "extensions"
-    : focusPanel === "clock" || focusPanel === "desktop" ? "panels" : "";
+  const focusSubmenu = menuEntries.has(focusPanel)
+    ? focusPanel
+    : focusPanel === "coderain"
+      ? "extensions"
+      : focusPanel === "clock" || focusPanel === "desktop" ? "panels" : "";
   if (focusSubmenu) activateSettingsSubmenu?.(focusSubmenu);
 
   const presetSelect = modal.querySelector("#set-preset");
@@ -6963,15 +7158,17 @@ function openSettings(focusPanel = "") {
     }
   });
   modal.querySelector("#set-cancel").onclick = () => {
+    if (!confirmStudioDraftClose(modal)) return;
     state.settings = { ...state.settings, layoutMode: prevLayoutMode };
     state.displayUiScale = prevUiScale;
     applyUiMetrics();
-    closeSettings();
+    closeSettings(true);
   };
   modal.querySelector("#set-quit").onclick = () => {
-    if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?")) window.edex.quitApp();
+    if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?") && confirmStudioDraftClose(modal)) window.edex.quitApp();
   };
   modal.querySelector("#set-save").onclick = async () => {
+    if (!confirmStudioDraftClose(modal)) return;
     state.iconView = modal.querySelector("#set-icon-view").value === "list" ? "list" : "grid";
     const themeName = modal.querySelector("#set-theme").value;
     const keepThemeWallpaper = Boolean(modal.querySelector("#set-keep-theme-wallpaper")?.checked);
@@ -7078,7 +7275,7 @@ function openSettings(focusPanel = "") {
     applyTheme(result.theme, wallpaper);
     applyClockMetrics();
     applyRainMetrics();
-    closeSettings();
+    closeSettings(true);
     toast(startupPreset
       ? `Einstellungen, Desktop-Layout und Start-Preset „${startupPresetName}“ gespeichert`
       : "Einstellungen und Desktop-Layout gespeichert");
@@ -7281,6 +7478,7 @@ window.addEventListener("keydown", (event) => {
   state.physicalSize = state.bootstrap.physicalSize || null;
   state.appVersion = state.bootstrap.appVersion || "";
   state.themes = state.bootstrap.themes || [];
+  window.edex.onThemesUpdated?.(updateAvailableThemes);
   state.wallpapers = state.bootstrap.wallpapers || [];
   state.themeName = state.bootstrap.themeName || "tron";
   state.includeFolders = Boolean(state.settings.includeFolders);
@@ -7530,10 +7728,15 @@ window.addEventListener("keydown", (event) => {
     const prevClock = clockScale();
     const prevMode = layoutMode();
     const prevUi = displayUiScale();
+    const previousThemeName = state.themeName;
     const previousLocale = state.settings.locale || "de";
     state.settings = payload.settings || state.settings;
     window.edexI18n?.setLocale?.(state.settings.locale || "de");
     state.themeName = payload.themeName || state.themeName;
+    if (payload.themeSelectionCommitted || state.themeName !== previousThemeName) {
+      const select = document.querySelector("#set-theme");
+      if (select && state.themes.includes(state.themeName)) select.value = state.themeName;
+    }
     if (payload.displays) state.displays = payload.displays;
     if (payload.theme) {
       applyTheme(payload.theme, state.settings.wallpaper || "grid");
@@ -7573,6 +7776,15 @@ window.addEventListener("keydown", (event) => {
   await arrangeDesktop();
   await doScan();
   if (state.primary && state.settings.firstRun?.completed === false) {
-    window.edexFirstRun?.open({ state, previewTheme: applyTheme });
+    window.edexFirstRun?.open({
+      state, previewTheme: applyTheme,
+      launchTour: () => window.edexFirstRun?.showTour?.({
+        openSettings: (destination) => openSettings(destination),
+        onClose: () => savePanelTourState({
+          ...(state.settings?.panelTours || {seen: {}, disabled: {}, commonSeen: false}),
+          desktopSeen: true
+        }).catch((error) => toast(error.message || String(error)))
+      })
+    });
   }
 })();

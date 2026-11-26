@@ -9,12 +9,26 @@ const profiles = JSON.parse(fs.readFileSync(path.join(root,"src/panel-tour/tours
 const renderer = fs.readFileSync(path.join(root,"src/renderer.js"),"utf8");
 const source = fs.readFileSync(path.join(root,"src/panel-tour/panel-tour.js"),"utf8");
 test("supported panel-specific controls have real setup fields", () => {
-  const expected = {clock:"#panel-clock-mode",ram:"#panel-ram-mode",weather:"#panel-weather-location",filesearch:"#panel-search-font",taskdock:"#panel-taskdock-tile-size"};
+  const expected = {
+    clock:"#panel-clock-mode",
+    "clock date":"#panel-clock-date",
+    ram:"#panel-ram-mode",
+    weather:"#panel-weather-location",
+    filesearch:"#panel-search-font",
+    taskdock:"#panel-taskdock-tile-size",
+    "taskdock labels":"#panel-taskdock-show-labels"
+  };
   for (const [panel,selector] of Object.entries(expected)) {
-    const steps = profiles[panel].steps;
-    assert.ok(steps.some(step=>step.target===`setup:${selector}`),`${panel} must address ${selector}`);
+    const profile = panel.startsWith("clock") ? profiles.clock : panel.startsWith("taskdock") ? profiles.taskdock : profiles[panel];
+    const steps = profile.steps;
+    if (panel === "clock date" || panel === "taskdock labels") {
+      assert.ok(steps.some(step=>step.target===`setup:${selector}`),`${panel} must address ${selector}`);
+    } else {
+      assert.ok(steps.some(step=>step.target===`setup:${selector}`),`${panel} must address ${selector}`);
+    }
     assert.ok(renderer.includes(`id="${selector.slice(1)}"`),`${selector} must exist in panel setup`);
   }
+  assert.ok(source.includes('target: "setup:#panel-font-scale"'), "shared tour step should preview panel font size");
 });
 test("manifest rejects unsupported selectors", () => {
   const original=profiles.clock.steps[0].target;
@@ -30,5 +44,5 @@ test("tour opens setup on demand and cleans it up without persisting changes", (
   assert.match(source,/tourSetup\?\.isConnected\) tourSetup\.remove\(\)/);
   assert.match(source,/target\.startsWith\("setup:"\)/);
   assert.match(renderer,/openSetup: \(\) => openPanelSetup\(document\.getElementById/);
-  assert.match(source,/name === "menu" \? "panel-menu"/);
+  assert.match(source,/menu: "panel-menu"/);
 });

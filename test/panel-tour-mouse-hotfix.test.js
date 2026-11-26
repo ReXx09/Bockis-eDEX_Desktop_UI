@@ -113,6 +113,7 @@ test("tour explicitly holds mouse input, skip releases it, and highlighted panel
   // The primary "Weiter" action must work in exactly the same capture state.
   assert.equal(window.edexPanelTour.show("weather",()=>panel),true);
   buttons.get("next").click();
+  buttons.get("next").click();
   assert.equal(window.edexPanelTour.isRunning(),false);
   assert.equal(document.body.classList.contains("is-ui-hold"),false);
   // If another modal owns the hold, closing the guide must preserve it.
@@ -124,4 +125,65 @@ test("tour explicitly holds mouse input, skip releases it, and highlighted panel
   const css=load("src/panel-tour/panel-tour.css");
   assert.match(css,/\.bockis-panel-tour\{[^}]*background:transparent/);
   assert.match(css,/\.panel-tour-no-target\{background:rgba/);
+});
+
+test("zone steps spotlight the real zones, back navigation works, and tall cards stay clear of the panel", () => {
+  const created = [];
+  const buttons = new Map();
+  const document = {
+    activeElement: null,
+    body: {classList: classes(), append(node){node.isConnected=true}},
+    querySelector(){return null},
+    getElementById(){return null},
+    createElement(name){
+      const el = {
+        tagName:name.toUpperCase(), classList:classes(), style:{}, hidden:false, isConnected:false,
+        offsetWidth:400, offsetHeight:300,
+        append(){}, setAttribute(){}, remove(){this.isConnected=false},
+        set innerHTML(html){
+          buttons.clear();
+          for (const [,key] of html.matchAll(/data-(skip|back|next)>/g)) {
+            const listeners={};
+            buttons.set(key,{disabled:false,addEventListener(type,fn){listeners[type]=fn},click(){listeners.click?.()},focus(){}});
+          }
+        },
+        querySelector(selector){
+          const match=selector.match(/^\[data-(skip|back|next)\]$/);
+          return match ? buttons.get(match[1]) || null : null;
+        },
+        querySelectorAll(){return []}
+      };
+      created.push(el);
+      return el;
+    },
+    addEventListener(){},removeEventListener(){}
+  };
+  const panel={isConnected:true,querySelector:()=>null,getBoundingClientRect:() => ({left:100,top:500,right:420,bottom:760,width:320,height:260})};
+  const window={
+    edex:{setMouseIgnore(){}},
+    edexPanelTourProfiles:{weather:{steps:[{id:"intro",titleKey:"t",descriptionKey:"b",target:"panel"}]}},
+    edexI18n:{t:key=>key},
+    addEventListener(){},removeEventListener(){}
+  };
+  vm.runInNewContext(load("src/panel-tour/panel-tour.js"), {window,document,innerWidth:1200,innerHeight:800,console,Event}, {filename:"panel-tour.js"});
+  const zoneRect = () => ({x:200,y:100,width:800,height:500});
+  assert.equal(window.edexPanelTour.show("weather",()=>panel,{includeCommon:true,zoneRect}),true);
+  const [root, spot, zoneMask, card] = created;
+  // Panel near the bottom: the 300px card must go above it instead of overlapping it.
+  assert.equal(card.style.top,"184px");
+  assert.equal(buttons.has("back"),false,"first step has no back button");
+  buttons.get("next").click();
+  assert.equal(spot.hidden,false);
+  assert.equal(spot.style.left,"195px","scale step highlights the central zone, not the panel");
+  assert.equal(spot.style.top,"95px");
+  buttons.get("next").click();
+  assert.equal(zoneMask.hidden,false,"edge step dims the central zone");
+  assert.equal(root.classList.contains("panel-tour-edge"),true);
+  assert.equal(spot.hidden,true);
+  buttons.get("back").click();
+  assert.equal(zoneMask.hidden,true);
+  assert.equal(root.classList.contains("panel-tour-edge"),false);
+  assert.equal(spot.style.left,"195px");
+  buttons.get("skip").click();
+  assert.equal(window.edexPanelTour.isRunning(),false);
 });

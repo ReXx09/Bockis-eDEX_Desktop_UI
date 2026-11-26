@@ -9,18 +9,20 @@ const tour = load("src/panel-tour/panel-tour.js");
 const renderer = load("src/renderer.js");
 
 test("all tour entry points pass the same temporary preview adapter", () => {
-  assert.equal(renderer.split("preview: previewPanelTourControl").length - 1, 3);
+  assert.equal(renderer.split("preview: previewPanelTourControl").length - 1, 1);
+  assert.equal(renderer.split("edexPanelTour?.show?.(").length - 1, 1, "only startPanelTour may open a panel tour");
+  assert.equal(renderer.match(/startPanelTour\(id, \{ includeCommon(?:: (?:true|false))? \}\)/g)?.length, 3);
   for (const control of ["clock-mode", "ram-mode", "weather-location", "search-font", "taskdock-tile-size"]) {
     assert.match(renderer, new RegExp(`setup:#panel-${control}`));
   }
 });
 test("preview is reversible and never calls a persistence API", () => {
-  const section = renderer.split("function previewPanelTourControl(target, value)")[1].split("function openPanelSetup(el)")[0];
+  const section = renderer.split("function previewPanelTourControl(target, value)")[1].split("// Refresh visuals from persisted settings")[0];
   assert.ok(section.includes("return () =>"));
   assert.doesNotMatch(section, /saveSettings\(|persistLayout\(|setRamGaugeMode\(|fetch\(/);
   assert.match(tour,/function restorePending\(\) \{\s*clearVisualPreview\(\)/);
   assert.match(tour,/practice\.dispatchEvent\(new Event\("change"/);
-  assert.match(tour,/setVisualPreview\(steps\[index\]\.target, practice\.value\)/);
+  assert.match(tour,/setVisualPreview\(steps\[index\]\.target, practice\.type === "checkbox" \? practice\.checked : practice\.value\)/);
   assert.match(tour,/if \(success\) \{[\s\S]*?clearVisualPreview\(\)/);
 });
 test("weather location uses an honest temporary badge, without fetching weather", () => {
@@ -32,5 +34,5 @@ test("weather location uses an honest temporary badge, without fetching weather"
 test("confirmed saves refresh the persisted panel appearance after removing the temporary preview", () => {
   assert.match(tour,/clearVisualPreview\(\);\s*try \{ options\.onSaved\?\.\(savedTarget\)/);
   assert.match(renderer,/function syncPanelTourSavedVisual\(target\)/);
-  assert.equal(renderer.split("onSaved: syncPanelTourSavedVisual").length - 1, 3);
+  assert.equal(renderer.split("onSaved: syncPanelTourSavedVisual").length - 1, 1);
 });

@@ -5,7 +5,7 @@
   const escape = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
   const tr = (key, params) => window.edexI18n?.t?.(`firstRun.${key}`, params) || key;
   let active = false;
-  async function open({ state, previewTheme, force = false } = {}) {
+  async function open({ state, previewTheme, force = false, launchTour } = {}) {
     if (active || !state?.settings || (!force && state.settings.firstRun?.completed !== false)) return;
     if (document.getElementById("bockis-first-run")) return;
     active = true;
@@ -99,7 +99,10 @@
           const updated=await window.edex.saveSettings(patch);
           if (!updated || !updated.settings) throw new Error("Settings update failed");
           close(false);
-          if (choices.showTips) showTour();
+          if (choices.showTips) {
+            if (typeof launchTour === "function") launchTour();
+            else showTour();
+          }
         } catch(err){
           const error=root.querySelector(".fr-error");
           if(error)error.textContent=tr("saveError",{message:err?.message||String(err)});
@@ -112,13 +115,13 @@
     render();
   }
   // Independently launchable, dismissible spotlight tour. Never modifies user preferences.
-  function showTour() {
-    if (document.getElementById("bockis-desktop-tour") || document.getElementById("bockis-first-run")) return;
+  function showTour({ openSettings, onClose } = {}) {
+    if (document.querySelector("#bockis-desktop-tour, #bockis-first-run, #bockis-panel-tour") || window.edexPanelTour?.isRunning?.()) return;
     const steps = [
-      {key:"introPanels", selectors:["#card_cpuinfo", "#card_hardwareInspector", "#card_ramwatcher", ".hud-card"]},
-      {key:"introThemes", selectors:["#settings-fab"]},
-      {key:"introDisplays", selectors:["#card_desktop", "#card_dock"]},
-      {key:"introWindows", selectors:["#settings-fab"]}
+      {key:"introPanels", selectors:["#card_cpu", "#card_hwinfo", "#card_ram", ".hud-card"]},
+      {key:"introThemes", selectors:["#settings-fab"], destination:"studio-colors"},
+      {key:"introDisplays", selectors:["#card_desktop", "#settings-fab"], destination:"layout"},
+      {key:"introWindows", selectors:["#settings-fab"], destination:"windhawk"}
     ];
     const previouslyHeld = document.body.classList.contains("is-ui-hold");
     const oldFocus = document.activeElement;
@@ -158,11 +161,18 @@
       spotlight.hidden = false;
       Object.assign(spotlight.style, {left:`${x}px`,top:`${y}px`,width:`${w}px`,height:`${h}px`});
       card.style.transform = "none";
-      const cardWidth = Math.min(390, innerWidth-28);
-      const below = r.bottom + 18;
-      const top = below + 210 < innerHeight ? below : Math.max(14, r.top - 224);
-      card.style.top = `${Math.min(Math.max(top,14),Math.max(14,innerHeight-230))}px`;
-      card.style.left = `${Math.min(Math.max(r.left,14),innerWidth-cardWidth-14)}px`;
+      // Use the measured card size so the card never leaves the screen or covers its target.
+      const cw = card.offsetWidth || Math.min(390, innerWidth-28), ch = card.offsetHeight || 230, m = 14, g = 18;
+      const clampX = (v) => Math.max(m, Math.min(innerWidth-cw-m, v));
+      const clampY = (v) => Math.max(m, Math.min(innerHeight-ch-m, v));
+      const spot = [
+        r.bottom+g+ch <= innerHeight-m && {left:clampX(r.left), top:r.bottom+g},
+        r.top-g-ch >= m && {left:clampX(r.left), top:r.top-g-ch},
+        r.right+g+cw <= innerWidth-m && {left:r.right+g, top:clampY(r.top)},
+        r.left-g-cw >= m && {left:r.left-g-cw, top:clampY(r.top)}
+      ].find(Boolean) || {left:innerWidth-cw-m, top:innerHeight-ch-m};
+      card.style.left = `${Math.max(m, spot.left)}px`;
+      card.style.top = `${Math.max(m, spot.top)}px`;
     };
     const onKey = (event) => {
       if (event.key === "Escape") { event.preventDefault(); dismiss(); }
@@ -177,23 +187,34 @@
     const dismiss = () => {
       window.removeEventListener("resize", layout);
       window.removeEventListener("scroll", layout, true);
+      window.removeEventListener("edex:locale-changed", render);
       document.removeEventListener("keydown", onKey, true);
       tour.remove();
       if (!previouslyHeld) document.body.classList.remove("is-ui-hold");
       if (oldFocus?.isConnected && typeof oldFocus.focus === "function") oldFocus.focus();
+      try { onClose?.(); } catch (error) { console.warn("Desktop tour completion could not be recorded:", error); }
     };
-    const render = () => {
-      card.innerHTML = `<div class="fr-tour-top">BOCKIS // ${escape(tr("introTitle"))}<span>${step+1} / ${steps.length}</span></div><h2>${escape(tr("introStep"+String(step+1)))}</h2><p>${escape(tr(steps[step].key))}</p><div class="fr-tour-actions"><button type="button" data-skip>${escape(tr("introSkip"))}</button><button type="button" data-next>${escape(step===steps.length-1 ? tr("introDone") : tr("introNext"))}</button></div>`;
+    function render() {
+      if (!tour.isConnected) return;
+      const stepData = steps[step];
+      card.innerHTML = `<div class="fr-tour-top">BOCKIS // ${escape(tr("introTitle"))}<span>${step+1} / ${steps.length}</span></div><h2>${escape(tr("introStep"+String(step+1)))}</h2><p>${escape(tr(stepData.key))}</p>${stepData.destination && typeof openSettings === "function" ? `<button type="button" class="fr-tour-open-settings" data-open-settings>${escape(tr("openSettings"))}</button>` : ""}<div class="fr-tour-actions"><button type="button" data-skip>${escape(tr("introSkip"))}</button><span class="fr-tour-nav">${step>0?`<button type="button" data-back>${escape(tr("introBack"))}</button>`:""}<button type="button" data-next>${escape(step===steps.length-1 ? tr("introDone") : tr("introNext"))}</button></span></div>`;
       card.querySelector("[data-skip]").addEventListener("click", dismiss);
+      card.querySelector("[data-back]")?.addEventListener("click", () => {if (step > 0) {step--; render();}});
+      card.querySelector("[data-open-settings]")?.addEventListener("click", () => {
+        const destination = stepData.destination;
+        dismiss();
+        openSettings(destination);
+      });
       card.querySelector("[data-next]").addEventListener("click", () => {if (++step === steps.length) dismiss(); else render();});
       layout();
       card.querySelector("[data-next]")?.focus();
-    };
+    }
     document.body.classList.add("is-ui-hold");
     window.edex?.setMouseIgnore?.(false);
     document.body.appendChild(tour);
     window.addEventListener("resize", layout);
     window.addEventListener("scroll", layout, true);
+    window.addEventListener("edex:locale-changed", render);
     document.addEventListener("keydown", onKey, true);
     render();
   }
