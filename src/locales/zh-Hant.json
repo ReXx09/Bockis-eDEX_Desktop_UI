@@ -21,6 +21,8 @@
   "settings.nav.profiles": "設定檔與還原",
   "settings.search": "搜尋設定…",
   "settings.save": "儲存設定",
+  "settings.saving": "正在儲存設定…",
+  "settings.saveFailed": "無法完整儲存或套用設定：{error}",
   "settings.close": "關閉",
   "settings.quit": "結束程式",
   "settings.noChanges": "沒有未儲存的變更",

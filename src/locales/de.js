@@ -22,6 +22,8 @@ window.edexI18n.register("de", {
   "settings.nav.profiles": "Profile & Wiederherstellung",
   "settings.search": "Einstellungen suchen …",
   "settings.save": "Einstellungen speichern",
+  "settings.saving": "Einstellungen werden gespeichert …",
+  "settings.saveFailed": "Einstellungen konnten nicht vollständig gespeichert oder angewendet werden: {error}",
   "settings.close": "Schließen",
   "settings.quit": "Programm beenden",
   "settings.noChanges": "Keine ungespeicherten Änderungen",

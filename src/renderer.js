@@ -6530,6 +6530,7 @@ function openSettings(focusPanel = "") {
     </div>
   `;
   const settingsTable = modal.querySelector("#settingsEditor");
+  const menuEntries = new Map();
   let activateSettingsSubmenu = null;
   if (settingsTable) {
     const headings = [...modal.querySelectorAll(":scope > h2")];
@@ -6699,8 +6700,6 @@ function openSettings(focusPanel = "") {
     const navigation = document.createElement("nav");
     navigation.className = "settings-navigation";
     navigation.setAttribute("aria-label", "Einstellungskategorien");
-    const menuEntries = new Map();
-
     navigationTree.forEach((category, index) => {
       const group = document.createElement("section");
       group.className = "settings-navigation-group";
@@ -7167,8 +7166,7 @@ function openSettings(focusPanel = "") {
   modal.querySelector("#set-quit").onclick = () => {
     if (window.confirm("Bockis-eDEX Desktop UI wirklich beenden?") && confirmStudioDraftClose(modal)) window.edex.quitApp();
   };
-  modal.querySelector("#set-save").onclick = async () => {
-    if (!confirmStudioDraftClose(modal)) return;
+  async function saveGeneralSettings() {
     state.iconView = modal.querySelector("#set-icon-view").value === "list" ? "list" : "grid";
     const themeName = modal.querySelector("#set-theme").value;
     const keepThemeWallpaper = Boolean(modal.querySelector("#set-keep-theme-wallpaper")?.checked);
@@ -7280,6 +7278,31 @@ function openSettings(focusPanel = "") {
       ? `Einstellungen, Desktop-Layout und Start-Preset „${startupPresetName}“ gespeichert`
       : "Einstellungen und Desktop-Layout gespeichert");
     rebuildWorkspace();
+  }
+  modal.querySelector("#set-save").onclick = async () => {
+    if (!confirmStudioDraftClose(modal)) return;
+    const workspace = modal.querySelector(".settings-workspace");
+    const wasInert = Boolean(workspace?.inert);
+    const buttons = ["#set-save", "#set-cancel", "#set-quit"]
+      .map((selector) => modal.querySelector(selector)).filter(Boolean);
+    const disabled = buttons.map((button) => button.disabled);
+    if (workspace) workspace.inert = true;
+    buttons.forEach((button) => { button.disabled = true; });
+    setSaveStatus(window.edexI18n?.t?.("settings.saving") || "Einstellungen werden gespeichert …", true);
+    try {
+      await saveGeneralSettings();
+    } catch (error) {
+      console.error("[Settings] Speichern fehlgeschlagen:", error);
+      const detail = String(error?.message || error)
+        .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, "");
+      const message = window.edexI18n?.t?.("settings.saveFailed", { error: detail })
+        || `Einstellungen konnten nicht vollständig gespeichert oder angewendet werden: ${detail}`;
+      setSaveStatus(message, true);
+      toast(message);
+    } finally {
+      if (workspace) workspace.inert = wasInert;
+      buttons.forEach((button, index) => { button.disabled = disabled[index]; });
+    }
   };
 }
 

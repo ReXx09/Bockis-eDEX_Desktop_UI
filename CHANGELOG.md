@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Settings:** fixed a navigation initialization error that left the save,
+  close and quit buttons unresponsive. Editing is locked while settings are
+  saving so later changes cannot be lost. Save failures are reported and the
+  settings window stays open for a retry.
 - **Theme Studio:** keep the selected custom theme and its save name in sync,
   protect drafts while asynchronous operations are running, and request
   confirmation before overwriting a different existing theme. Case-only name

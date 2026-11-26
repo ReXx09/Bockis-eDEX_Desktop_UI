@@ -22,6 +22,8 @@ window.edexI18n.register("en", {
   "settings.nav.profiles": "Profiles & Recovery",
   "settings.search": "Search settings…",
   "settings.save": "Save settings",
+  "settings.saving": "Saving settings…",
+  "settings.saveFailed": "Settings could not be fully saved or applied: {error}",
   "settings.close": "Close",
   "settings.quit": "Quit application",
   "settings.noChanges": "No unsaved changes",
