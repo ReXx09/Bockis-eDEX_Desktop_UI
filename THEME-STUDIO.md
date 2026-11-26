@@ -14,7 +14,17 @@ updates the open settings selection.
 The **Eigenes Fenster** button opens the same editor in a separate Electron
 window. Built-in themes remain read-only. Custom themes are stored below
 Electron's `userData` directory in `custom-themes`; overwritten or deleted
-custom themes are copied to `custom-themes-backups`.
+custom themes are copied to `custom-themes-backups`. The **Speichername**
+field determines the save destination and is populated when a theme is
+selected. Changing it saves a copy; replacing a different existing theme
+requires confirmation. Editing controls are temporarily locked while the
+editor loads or saves a theme so later changes cannot be lost. On
+case-insensitive filesystems, use the exact capitalization shown in the theme
+list to avoid overwriting a different name unintentionally.
+
+If the activity log cannot be updated, the studio reports that warning
+separately after the theme has been saved or activated; the saved theme and
+the existing activity file are not discarded.
 
 Windows synchronization is managed per feature: accent color, app/system dark
 mode, Start/taskbar accent, title-bar accent, transparency, taskbar alignment,

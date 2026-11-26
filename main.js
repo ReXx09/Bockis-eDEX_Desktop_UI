@@ -1658,7 +1658,7 @@ ipcMain.handle("theme-studio-activate", (event, name) => {
   const resolved = resolveThemeName(name);
   if (resolved !== name) throw new Error("Theme nicht gefunden");
   settings = saveSettings(app.getPath("userData"), { theme: resolved });
-  themeStudioStore?.recordActivity("activate", resolved);
+  const warning = themeStudioStore?.recordActivityWarning("activate", resolved);
   const payload = {
     settings,
     theme: loadTheme(resolved),
@@ -1668,7 +1668,7 @@ ipcMain.handle("theme-studio-activate", (event, name) => {
   };
   broadcast("settings-updated", payload);
   scheduleWallpaper();
-  return payload;
+  return warning ? { ...payload, warning } : payload;
 });
 
 ipcMain.handle("get-theme", (event, name) => {

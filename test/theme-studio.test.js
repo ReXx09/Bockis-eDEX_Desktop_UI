@@ -148,6 +148,253 @@ test("Custom theme creation, loading, listing and deletion", (t) => {
   assert.equal(fs.readdirSync(path.join(dir, "custom-themes-backups")).length, 2);
 });
 
+test("Editing a selected custom theme saves to that theme and leaves the original unchanged", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-theme-edit-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const assets = path.join(__dirname, "..", "assets", "themes");
+  const store = createStore(dir, assets);
+  const original = fs.readFileSync(path.join(assets, "blade.json"), "utf8");
+  store.save("blade-rexx", store.load("blade"));
+
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "theme-studio.js"), "utf8");
+  const loadStart = source.indexOf("    async function load(name) {");
+  const loadEnd = source.indexOf('    root.querySelectorAll(".studio-nav [data-section]")', loadStart);
+  const saveStart = source.indexOf('      if (action === "save") {');
+  const saveEnd = source.indexOf('      if (action === "delete") {', saveStart);
+  assert.ok(loadStart !== -1 && loadEnd > loadStart && saveStart !== -1 && saveEnd > saveStart);
+
+  let onChange;
+  const nameInput = { value: "blade", disabled: false };
+  const themeDropdown = {
+    value: "blade",
+    disabled: false,
+    options: store.list().map((name) => ({ value: name })),
+    addEventListener(type, handler) { if (type === "change") onChange = handler; }
+  };
+  const api = {
+    themeStudioLoad: async (name) => store.load(name),
+    themeStudioSave: async (name, theme) => store.save(name, theme)
+  };
+  const context = {
+    theme: store.load("blade"),
+    originalTheme: store.load("blade"),
+    selected: "blade",
+    importedDesktop: null,
+    inProgress: false,
+    themeDropdown,
+    root: { querySelectorAll: () => [themeDropdown, nameInput] },
+    get: () => nameInput,
+    api: () => api,
+    window: { confirm: () => true },
+    confirmDiscardDraft: () => true,
+    renderWindowsImport: () => {},
+    refreshInputs: () => {},
+    updateDraftStatus: () => {},
+    refreshList: async () => {},
+    refreshProfileHistory: async () => {},
+    refreshHistoryAfterCommit: async () => "",
+    setThemeOptions: (themes, name) => { themeDropdown.options = themes.map((item) => ({ value: item })); themeDropdown.value = name; },
+    errorMessage: (error) => error.message,
+    status: () => {}
+  };
+  vm.runInNewContext(source.slice(loadStart, loadEnd), context);
+  vm.runInNewContext(`async function saveDraft() { const action = "save"; ${source.slice(saveStart, saveEnd)} }`, context);
+
+  themeDropdown.value = "blade-rexx";
+  onChange();
+  await new Promise(setImmediate);
+  assert.equal(context.selected, "blade-rexx");
+  assert.equal(nameInput.value, "blade-rexx");
+  context.theme.colors.r = 229;
+  context.theme.colors.text = "#e5cfc8";
+  await context.saveDraft();
+
+  const reopened = createStore(dir, assets).load("blade-rexx");
+  assert.equal(reopened.colors.r, 229);
+  assert.equal(reopened.colors.text, "#e5cfc8");
+  assert.equal(fs.readFileSync(path.join(assets, "blade.json"), "utf8"), original);
+  assert.equal(fs.readdirSync(path.join(dir, "custom-themes-backups")).length, 1);
+});
+
+test("Locks theme inputs during asynchronous operations and restores their previous disabled states", async () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "theme-studio.js"), "utf8");
+  const start = source.indexOf("    function busy(fn) {");
+  const end = source.indexOf('    themeDropdown.addEventListener("change"', start);
+  assert.ok(start !== -1 && end > start);
+  const themeDropdown = { disabled: false };
+  const nameInput = { disabled: false };
+  const colorInput = { disabled: false };
+  const previouslyDisabled = { disabled: true };
+  const controls = [themeDropdown, nameInput, colorInput, previouslyDisabled];
+  const context = {
+    inProgress: false,
+    themeDropdown,
+    root: { querySelectorAll: () => controls },
+    errorMessage: (error) => error.message,
+    status: () => {}
+  };
+  vm.runInNewContext(source.slice(start, end), context);
+
+  let finish;
+  const wait = new Promise((resolve) => { finish = resolve; });
+  const operation = context.busy(() => wait)();
+  assert.ok(controls.every((control) => control.disabled));
+  finish();
+  await operation;
+  assert.deepEqual(controls.map((control) => control.disabled), [false, false, false, true]);
+});
+
+test("Requires confirmation before overwriting a different custom theme", async () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "theme-studio.js"), "utf8");
+  const start = source.indexOf('      if (action === "save") {');
+  const end = source.indexOf('      if (action === "delete") {', start);
+  assert.ok(start !== -1 && end > start);
+  let confirmed = false;
+  const savedNames = [];
+  const nameInput = { value: "other-custom" };
+  const context = {
+    selected: "blade-rexx",
+    theme: { colors: { r: 12, g: 34, b: 56 } },
+    originalTheme: {},
+    themeDropdown: { options: [{ value: "blade-rexx" }, { value: "other-custom" }] },
+    get: () => nameInput,
+    window: { confirm: () => confirmed },
+    api: () => ({
+      themeStudioSave: async (name, theme) => {
+        savedNames.push(name);
+        return { name, theme, themes: ["blade-rexx", "other-custom"] };
+      }
+    }),
+    setThemeOptions: () => {},
+    refreshInputs: () => {},
+    refreshList: async () => {},
+    refreshProfileHistory: async () => {},
+    refreshHistoryAfterCommit: async () => "",
+    updateDraftStatus: () => {},
+    status: () => {}
+  };
+  vm.runInNewContext(`async function saveDraft() { const action = "save"; ${source.slice(start, end)} }`, context);
+
+  await context.saveDraft();
+  assert.deepEqual(savedNames, []);
+  confirmed = true;
+  await context.saveDraft();
+  assert.deepEqual(savedNames, ["other-custom"]);
+});
+
+test("Rejects case-only custom theme name collisions on case-insensitive filesystems", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-theme-case-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const store = createStore(dir, path.join(__dirname, "..", "assets", "themes"));
+  store.save("myTheme", { colors: { r: 12, g: 34, b: 56 } });
+  if (!fs.existsSync(path.join(dir, "custom-themes", "MYTHEME.json"))) {
+    return t.skip("The test filesystem distinguishes name casing");
+  }
+
+  assert.throws(
+    () => store.save("MYTHEME", { colors: { r: 65, g: 43, b: 21 } }),
+    /genauso schreiben/
+  );
+  assert.equal(store.load("myTheme").colors.r, 12);
+  assert.ok(store.list().includes("myTheme"));
+});
+
+test("Shows a successful save and its warning when history cannot be updated", async () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "theme-studio.js"), "utf8");
+  const historyStart = source.indexOf("    async function refreshHistoryAfterCommit(warning) {");
+  const historyEnd = source.indexOf("    async function refreshWindowsRecovery()", historyStart);
+  const saveStart = source.indexOf('      if (action === "save") {');
+  const saveEnd = source.indexOf('      if (action === "delete") {', saveStart);
+  assert.ok(historyStart !== -1 && historyEnd > historyStart && saveStart !== -1 && saveEnd > saveStart);
+
+  let warning = "Änderungsprotokoll konnte nicht aktualisiert werden.";
+  let historyRequests = 0;
+  const messages = [];
+  const nameInput = { value: "myTheme" };
+  const context = {
+    selected: "myTheme",
+    theme: { colors: { r: 12 } },
+    themeDropdown: { options: [{ value: "myTheme" }] },
+    get: () => nameInput,
+    window: {},
+    api: () => ({
+      themeStudioSave: async (name, theme) => ({ name, theme, themes: [name], warning })
+    }),
+    setThemeOptions: () => {},
+    refreshInputs: () => {},
+    refreshProfileHistory: async () => { historyRequests++; throw new Error("history unavailable"); },
+    errorMessage: (error) => error.message,
+    status: (message, error) => messages.push({ message, error })
+  };
+  vm.runInNewContext(source.slice(historyStart, historyEnd), context);
+  vm.runInNewContext(`async function saveDraft() { const action = "save"; ${source.slice(saveStart, saveEnd)} }`, context);
+
+  await context.saveDraft();
+  assert.equal(context.selected, "myTheme");
+  assert.match(messages[0].message, /gespeichert.*Änderungsprotokoll/);
+  assert.equal(messages[0].error, true);
+  assert.equal(historyRequests, 0);
+
+  warning = undefined;
+  await context.saveDraft();
+  assert.match(messages[1].message, /gespeichert.*history unavailable/);
+  assert.equal(messages[1].error, true);
+  assert.equal(historyRequests, 1);
+});
+
+test("Reports a saved custom theme even when the activity history is corrupt", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-theme-history-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const store = createStore(dir, path.join(__dirname, "..", "assets", "themes"));
+  const history = path.join(dir, "theme-studio-activity.json");
+  fs.writeFileSync(history, "{invalid");
+  t.mock.method(console, "error", () => {});
+
+  const saved = store.save("blade-rexx", { colors: { r: 229, g: 207, b: 200 } });
+
+  assert.equal(store.load("blade-rexx").colors.r, 229);
+  assert.ok(saved.themes.includes("blade-rexx"));
+  assert.match(saved.warning, /Änderungsprotokoll/);
+  assert.equal(fs.readFileSync(history, "utf8"), "{invalid");
+});
+
+test("Activates a saved custom theme despite a corrupt activity history", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bockis-theme-activate-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const store = createStore(dir, path.join(__dirname, "..", "assets", "themes"));
+  store.save("blade-rexx", { colors: { r: 229, g: 207, b: 200 } });
+  fs.writeFileSync(path.join(dir, "theme-studio-activity.json"), "{invalid");
+  t.mock.method(console, "error", () => {});
+
+  const handlers = new Map();
+  const events = [];
+  const context = {
+    ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+    requireTrustedWindow: () => ({}),
+    resolveThemeName: (name) => store.list().includes(name) ? name : "tron",
+    themeStudioStore: store,
+    settings: { theme: "blade" },
+    app: { getPath: () => dir },
+    saveSettings: (_directory, patch) => ({ theme: patch.theme }),
+    loadTheme: (name) => store.load(name),
+    listDisplays: () => [],
+    broadcast: (channel, payload) => events.push({ channel, payload }),
+    scheduleWallpaper: () => {}
+  };
+  const source = fs.readFileSync(path.join(__dirname, "..", "main.js"), "utf8");
+  const start = source.indexOf('ipcMain.handle("theme-studio-activate",');
+  const end = source.indexOf("\nipcMain.handle(", start + 1);
+  assert.ok(start !== -1 && end > start);
+  vm.runInNewContext(source.slice(start, end), context);
+
+  const result = handlers.get("theme-studio-activate")({}, "blade-rexx");
+
+  assert.equal(result.themeName, "blade-rexx");
+  assert.match(result.warning, /Änderungsprotokoll/);
+  assert.equal(events.at(-1).channel, "settings-updated");
+  assert.equal(events.at(-1).payload.theme.colors.r, 229);
+});
+
 test("Theme picker loads the selected draft and preserves edits when switching is cancelled", async () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "src", "theme-studio.js"), "utf8");
   const start = source.indexOf("    async function loadSelection(");
@@ -167,7 +414,9 @@ test("Theme picker loads the selected draft and preserves edits when switching i
     selected: "blade",
     inProgress: false,
     themeDropdown,
+    root: { querySelectorAll: () => [themeDropdown] },
     confirmDiscardDraft: () => allowDiscard,
+    errorMessage: (error) => error.message,
     status: (message, error) => errors.push({ message, error })
   };
   context.load = async (name) => {
@@ -311,6 +560,7 @@ test("Activating an edited theme requires saving the current draft first", async
     window: { edexI18n: { t: () => "Save changes first" } },
     status: (message, error) => messages.push({ message, error }),
     refreshProfileHistory: async () => {},
+    refreshHistoryAfterCommit: async () => "",
     api: () => ({
       themeStudioActivate: async (name) => activated.push(name),
       themeStudioResetPreview: async () => {}

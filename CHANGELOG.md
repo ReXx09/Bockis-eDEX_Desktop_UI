@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **Theme Studio:** keep the selected custom theme and its save name in sync,
+  protect drafts while asynchronous operations are running, and request
+  confirmation before overwriting a different existing theme. Case-only name
+  collisions are rejected on case-insensitive filesystems. Saving or activating
+  a theme now reports activity-history failures separately instead of
+  incorrectly reporting that the theme operation failed.
 - **Custom themes:** choosing a theme in Theme Studio now loads the selected
   draft, protects unsaved changes when switching or closing settings and
   requires saving before activation. Theme lists update across open windows

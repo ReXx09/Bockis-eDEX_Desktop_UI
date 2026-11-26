@@ -5,6 +5,8 @@
   const toHex = (colors) => `#${["r", "g", "b"].map((key) => clamp(colors[key]).toString(16).padStart(2, "0")).join("")}`;
   const fromHex = (value) => ({ r: parseInt(value.slice(1, 3), 16), g: parseInt(value.slice(3, 5), 16), b: parseInt(value.slice(5, 7), 16) });
   const validHex = (value) => /^#[\da-f]{6}$/i.test(value);
+  const errorMessage = (error) => String(error?.message || error)
+    .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, "");
   const defaultTheme = () => ({
     colors: { r: 0, g: 234, b: 255, black: "#000000", light_black: "#05080d", grey: "#262828", text: "#00eaff", heading: "#00eaff", secondaryText: "#00eaff", buttonText: "#00eaff", red: "#ff3c3c", yellow: "#ffd23c" },
     panelStyle: "square",
@@ -30,7 +32,7 @@
       <div class="studio-toolbar" data-studio-anchor="theme-library">
        <label>Theme <select data-id="themes" aria-label="Theme auswählen"></select></label>
        <button data-act="load" data-i18n="studio.load">Laden</button><button data-act="new" data-i18n="studio.new">Neues Theme</button>
-       <label>Name <input data-id="name" maxlength="48" placeholder="mein_theme" spellcheck="false"></label>
+       <label><span data-i18n="studio.name">Speichername</span> <input data-id="name" maxlength="48" placeholder="mein_theme" spellcheck="false"></label>
        <button data-act="save" class="studio-primary" data-i18n="studio.save">Speichern</button><button data-act="delete" data-i18n="studio.delete">Löschen</button>
       </div>
       <section class="studio-section is-active" data-section-panel="edex">
@@ -539,6 +541,17 @@
         list.append(item);
       }
     }
+    async function refreshHistoryAfterCommit(warning) {
+      if (warning) return warning;
+      try {
+        await refreshProfileHistory();
+        return "";
+      } catch (error) {
+        const message = errorMessage(error);
+        return window.edexI18n?.t?.("studio.historyUnavailable", { error: message })
+          || `Verlauf und Backupliste konnten nicht aktualisiert werden: ${message}`;
+      }
+    }
     async function refreshWindowsRecovery() {
       const indicator = get('[data-id="windows-recovery-status"]');
       const button = get('[data-act="windows-emergency-restore"]');
@@ -732,15 +745,21 @@
     }
     function busy(fn) {
       return async () => {
-        if (inProgress) return;
-        inProgress = true;
-        themeDropdown.disabled = true;
-        try { await fn(); } catch (error) { status(error.message || String(error), true); }
-        finally {
-          inProgress = false;
-          themeDropdown.disabled = false;
-        }
+        try { return await lockThemeFields(fn); }
+        catch (error) { status(errorMessage(error), true); }
       };
+    }
+    async function lockThemeFields(fn) {
+      if (inProgress) return;
+      inProgress = true;
+      const controls = [...root.querySelectorAll('[data-id="themes"], [data-id="name"], [data-color], [data-hex], [data-theme-setting]')];
+      const disabled = controls.map((control) => control.disabled);
+      controls.forEach((control) => { control.disabled = true; });
+      try { return await fn(); }
+      finally {
+        controls.forEach((control, index) => { control.disabled = disabled[index]; });
+        inProgress = false;
+      }
     }
     themeDropdown.addEventListener("change", () => {
       const name = themeDropdown.value;
@@ -927,14 +946,25 @@
       }
       if (action === "save") {
         const name = get('[data-id="name"]').value.trim();
+        if (name !== selected && [...themeDropdown.options].some((option) => option.value === name)) {
+          const prompt = window.edexI18n?.t?.("studio.confirmOverwrite", { name })
+            || `Das Theme „${name}“ existiert bereits. Soll der aktuelle Entwurf unter diesem Namen gespeichert werden? Eigene Themes werden vorher gesichert; Original-Themes bleiben schreibgeschützt.`;
+          if (!window.confirm(prompt)) return;
+        }
         const saved = await api().themeStudioSave(name, theme);
         theme = saved.theme;
         selected = saved.name;
         originalTheme = JSON.parse(JSON.stringify(theme));
-        await refreshList(selected);
-        await refreshProfileHistory();
-        updateDraftStatus();
-        return status(`Theme „${selected}“ gespeichert (bestehende Version gesichert).`);
+        get('[data-id="name"]').value = selected;
+        setThemeOptions(saved.themes, selected);
+        refreshInputs();
+        const warning = await refreshHistoryAfterCommit(saved.warning);
+        if (warning) {
+          return status(window.edexI18n?.t?.("studio.savedWithWarning", { name: selected, warning })
+            || `Theme „${selected}“ gespeichert. ${warning}`, true);
+        }
+        return status(window.edexI18n?.t?.("studio.saved", { name: selected })
+          || `Theme „${selected}“ gespeichert.`);
       }
       if (action === "delete") {
         const name = get('[data-id="themes"]').value;
@@ -971,9 +1001,13 @@
           if (Object.keys(patch).length) await api().saveSettings(patch);
           importedDesktop = null;
         }
-        await api().themeStudioActivate(selected);
+        const activation = await api().themeStudioActivate(selected);
         await api().themeStudioResetPreview();
-        await refreshProfileHistory();
+        const warning = await refreshHistoryAfterCommit(activation?.warning);
+        if (warning) {
+          return status(window.edexI18n?.t?.("studio.activatedWithWarning", { name: selected, warning })
+            || `Theme „${selected}“ aktiviert. ${warning}`, true);
+        }
         return status(`Theme „${selected}“ aktiviert – alle eDEX-Monitore synchronisiert.`);
       }
     })));
@@ -996,8 +1030,10 @@
     }
     (async () => {
       try {
-        const result = await refreshList();
-        await load(result.active || "tron");
+        await lockThemeFields(async () => {
+          const result = await refreshList();
+          await load(result.active || "tron");
+        });
         const bootstrap = await api().bootstrap();
         studioBootstrap = bootstrap;
         desktopSettings = bootstrap?.settings || {};
@@ -1011,7 +1047,7 @@
         await refreshWindowsRecovery();
         await refreshWindowsStyleStatus();
       } catch (error) {
-        status(`Initialisierung fehlgeschlagen: ${error.message}`, true);
+        status(`Initialisierung fehlgeschlagen: ${errorMessage(error)}`, true);
       }
     })();
   }
