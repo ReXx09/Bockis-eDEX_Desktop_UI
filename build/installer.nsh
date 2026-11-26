@@ -62,25 +62,26 @@ FunctionEnd
   !ifndef BUILD_UNINSTALLER
     Call DetectWindhawk
     ${If} $WindhawkInstalled != "1"
-      ${If} ${Silent}
-        ReadEnvStr $0 EDEX_WINDHAWK_CONSENT
-        ${If} $0 != "1"
-          Abort "Windhawk is required by this Bockis-eDEX installer. Run the interactive setup and approve Windhawk installation."
-        ${EndIf}
-      ${Else}
-        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "BOCKIS Windows Style Integration benötigt Windhawk.$\r$\n$\r$\nWindhawk kann Windows-Programme mit Mods anpassen. Bockis-eDEX installiert keine Mods und ändert keine bestehenden Windhawk-Einstellungen. Die offizielle stabile Windhawk-Installation wird nur nach deiner Zustimmung gestartet.$\r$\n$\r$\nWenn du Nein wählst, wird auch die Bockis-eDEX-Installation abgebrochen.$\r$\n$\r$\nWindhawk jetzt installieren?" IDYES installWindhawk
-        Abort "Windhawk installation was declined."
-        installWindhawk:
-          SetOutPath "$PLUGINSDIR"
-          File /oname=Windhawk-Setup.exe "${BUILD_RESOURCES_DIR}\Windhawk-Setup.exe"
+      ReadEnvStr $0 EDEX_INSTALL_WINDHAWK
+      ${If} $0 == "1"
+        SetOutPath "$PLUGINSDIR"
+        File /oname=Windhawk-Setup.exe "${BUILD_RESOURCES_DIR}\Windhawk-Setup.exe"
+        ReadEnvStr $1 EDEX_WINDHAWK_SILENT
+        ${If} $1 == "1"
+          ; Windhawk v1.7.3 supports /S /STANDARD for an unattended standard setup.
+          ; Selection and confirmation are handled by the BOCKIS bootstrapper.
+          ExecWait '"$PLUGINSDIR\Windhawk-Setup.exe" /S /STANDARD' $R0
+        ${Else}
           ExecWait '"$PLUGINSDIR\Windhawk-Setup.exe"' $R0
-          ${If} $R0 != 0
-            Abort "Windhawk setup did not complete successfully. Bockis-eDEX was not installed."
-          ${EndIf}
+        ${EndIf}
+        ${If} $R0 != 0
+          MessageBox MB_OK|MB_ICONEXCLAMATION "Windhawk wurde nicht erfolgreich installiert. Bockis-eDEX wird ohne Windows-Styling-Erweiterung installiert."
+        ${Else}
           Call DetectWindhawk
           ${If} $WindhawkInstalled != "1"
-            Abort "Windhawk was not detected after setup. Bockis-eDEX was not installed."
+            MessageBox MB_OK|MB_ICONEXCLAMATION "Windhawk konnte nach der Installation nicht erkannt werden. Die eDEX-Installation wird fortgesetzt."
           ${EndIf}
+        ${EndIf}
       ${EndIf}
     ${EndIf}
   !endif
@@ -88,9 +89,15 @@ FunctionEnd
 
 !macro customInstall
   SetShellVarContext current
-  CreateShortCut "$DESKTOP\Bockis-eDEX Desktop UI.lnk" "$INSTDIR\Bockis-eDEX Desktop UI.exe" "" "$INSTDIR\Bockis-eDEX Desktop UI.exe" 0 SW_SHOWNORMAL
-  CreateDirectory "$SMPROGRAMS\Bockis-eDEX Desktop UI"
-  CreateShortCut "$SMPROGRAMS\Bockis-eDEX Desktop UI\Bockis-eDEX Desktop UI.lnk" "$INSTDIR\Bockis-eDEX Desktop UI.exe" "" "$INSTDIR\Bockis-eDEX Desktop UI.exe" 0 SW_SHOWNORMAL
+  ReadEnvStr $0 EDEX_CREATE_DESKTOP_SHORTCUT
+  ${If} $0 != "0"
+    CreateShortCut "$DESKTOP\Bockis-eDEX Desktop UI.lnk" "$INSTDIR\Bockis-eDEX Desktop UI.exe" "" "$INSTDIR\Bockis-eDEX Desktop UI.exe" 0 SW_SHOWNORMAL
+  ${EndIf}
+  ReadEnvStr $0 EDEX_CREATE_STARTMENU_SHORTCUT
+  ${If} $0 != "0"
+    CreateDirectory "$SMPROGRAMS\Bockis-eDEX Desktop UI"
+    CreateShortCut "$SMPROGRAMS\Bockis-eDEX Desktop UI\Bockis-eDEX Desktop UI.lnk" "$INSTDIR\Bockis-eDEX Desktop UI.exe" "" "$INSTDIR\Bockis-eDEX Desktop UI.exe" 0 SW_SHOWNORMAL
+  ${EndIf}
   ReadEnvStr $0 EDEX_INSTALL_RAINMETER
   ${If} $0 == "1"
     File /oname=$PLUGINSDIR\Rainmeter-Setup.exe "${BUILD_RESOURCES_DIR}\Rainmeter-Setup.exe"
@@ -104,6 +111,7 @@ FunctionEnd
   ${EndIf}
   SetRegView 64
   ${If} $0 == ""
+    IfSilent pawnIOCheckDone
     MessageBox MB_YESNO|MB_ICONQUESTION "PawnIO ist nicht installiert. Ohne den Treiber sind möglicherweise nicht alle Hardware-Sensoren verfügbar.$\r$\n$\r$\nMöchtest du die offizielle PawnIO-Downloadseite öffnen? Bockis-eDEX installiert keine Kernel-Treiber." IDYES openPawnIOPage
     Goto pawnIOCheckDone
     openPawnIOPage:

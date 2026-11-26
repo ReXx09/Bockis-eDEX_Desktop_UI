@@ -118,7 +118,7 @@ div#mod_conninfo.offline h3:last-child {
     padding: 0.28vh 0.12vw;
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
     background: transparent;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     font: inherit;
     font-size: clamp(8px, 1.05vh, 12px);
     letter-spacing: 0.06em;
@@ -138,7 +138,7 @@ div#mod_conninfo.offline h3:last-child {
     width: 100%;
     min-height: 0;
     padding: 0;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.58);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.58);
     font-size: 0.68em;
     letter-spacing: 0.12em;
     text-align: left;
@@ -202,7 +202,7 @@ div#mod_conninfo.offline h3:last-child {
 
 #mod_conninfo .conninfo-current span,
 #mod_conninfo .conninfo-total span {
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.58);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.58);
     flex: 0 0 auto;
     font-size: 0.78em;
     letter-spacing: 0.1em;
@@ -212,7 +212,7 @@ div#mod_conninfo.offline h3:last-child {
 #mod_conninfo .conninfo-total strong {
     min-width: 0;
     overflow: hidden;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     font-family: var(--font_main);
     font-size: 1.05em;
     font-weight: 400;

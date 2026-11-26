@@ -131,6 +131,19 @@ Das Log kann direkt in der UI geöffnet werden: Im zentralen Menü **Plugin-Pane
 
 Das **Autostart-Panel** wird ebenfalls über **Plugin-Panels** hinzugefügt. Es aktualisiert die Windows-Autostart-Einträge automatisch und kann über die Aktualisieren-Schaltfläche sofort neu geladen werden. Das **Task-Dock** übernimmt angeheftete Windows-Apps automatisch; ein Klick auf ein Icon startet die jeweilige Verknüpfung.
 
+## Download für Windows-Nutzer (ohne npm)
+
+**Fertige Installationsdatei:** [GitHub Releases](https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases/latest).
+
+1. Unter **Assets** die Datei `Bockis-eDEX-Desktop-UI-Setup-<version>.exe` herunterladen.
+2. Die SHA-256-Prüfsumme bei Bedarf mit `SHA256SUMS.txt` vergleichen.
+3. Die EXE starten und im grafischen BOCKIS-Setup optionale Komponenten wie Windhawk nur bei Bedarf auswählen.
+4. Beim ersten Start hilft die optionale Ersteinrichtung bei Sprache, Monitoren und Theme-Auswahl.
+
+**Kein Node.js, npm oder Quellcode-Download erforderlich.** Falls noch kein öffentlicher Release vorhanden ist, ist der Link vorerst leer. Nicht signierte EXE-Dateien können eine Windows-SmartScreen-Warnung auslösen; Herausgeber und Prüfsumme vor dem Ausführen prüfen.
+
+Für Entwickler: GitHub Actions erzeugt nach Tests zunächst nur einen **Release-Entwurf**. Er muss auf GitHub manuell freigegeben werden. Details: [Release-Anleitung](docs/GITHUB-RELEASE-PIPELINE.md).
+
 ## Windows-Installer erstellen
 
 Für die native ConPTY-Komponente `node-pty` benötigt der Rechner, auf dem der Installer gebaut wird, die **Visual Studio Build Tools** mit der Workload **Desktopentwicklung mit C++**. Diese Werkzeuge werden nicht auf dem Zielrechner benötigt.
@@ -188,7 +201,7 @@ npm test
 
 - Repository: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI
 - Releases: https://github.com/ReXx09/Bockis-eDEX_Desktop_UI/releases
-- Aktueller Release: `v1.2.7.6`
+- Verfügbare veröffentlichte Versionen sind unter **Releases** einsehbar (kein fest codierter Aktualitätsstand).
 
 ## Lizenz und Quellen
 

@@ -1,5 +1,115 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Custom themes:** choosing a theme in Theme Studio now loads the selected
+  draft, protects unsaved changes when switching or closing settings and
+  requires saving before activation. Theme lists update across open windows
+  after saving, importing or deleting, and studio activation no longer leaves
+  the general settings selection stale.
+- **Desktop tour:** the first step pointed at non-existent panel IDs
+  (`#card_cpuinfo`, `#card_hardwareInspector`, `#card_ramwatcher`) and now
+  highlights the real CPU, hardware monitor or RAM panel.
+- **Panel tour zone basics:** the "Scale zone" and "Edge zone" steps highlighted
+  the panel instead of the zones. They now spotlight the central scale zone and
+  mark the edge area; with zones disabled they fall back to the panel.
+- **Tour card placement:** both tours measure the real card size and place it
+  below, above, beside or in a corner, so taller practice cards no longer leave
+  the screen or cover the highlighted panel.
+- **Keyboard access:** the panel tour focus trap now includes the practice
+  field, which was unreachable with Tab before.
+- The desktop tour no longer starts while a panel tour is running and follows
+  language changes immediately.
+
+### Added
+
+- Back button in the desktop and panel tours (`firstRun.introBack`,
+  `panelTour.back` in en, de and zh-Hant).
+- All panel tour entry points use one shared `startPanelTour` helper.
+- A **Tours & Help** settings page lists desktop, Theme Studio, Windows
+  integration and panel tours, with replay controls, per-panel automatic-start
+  switches and a reset for saved tour progress.
+- Dedicated Theme Studio and Windows Style Integration walkthroughs highlight
+  their relevant pages and explain the opt-in, non-installing Windhawk flow.
+- Panel learning now includes temporary date, task-label and font-size previews,
+  plus interactive panel moving; settings shortcuts from the desktop tour open
+  the matching settings page directly.
+- German and Traditional Chinese tour strings repaired; generated locale
+  modules are rebuilt from the canonical JSON resources.
+
+## [1.2.7.9] - 2026-11-25
+
+### Added
+
+- **BOCKIS Windows Style Integration 1.0:** optional Windhawk 1.7.3 runtime
+  detection in Theme Studio, with official setup links for the File Explorer
+  Styler and Taskbar Styler pilot mods. Mods and their settings are never
+  installed, updated or overwritten automatically.
+- **Graphical installer component selection:** dark WinForms bootstrapper with
+  categories, descriptions, summary and explicit confirmation. Windhawk,
+  Rainmeter, desktop/Start-menu shortcuts and launch-after-install are
+  selectable; choices are passed to NSIS via `EDEX_INSTALL_*` variables.
+  Optional silent Windhawk setup (`/S /STANDARD`) and tray-only start after
+  installation.
+- **Automated Windows installer build:** GitHub Actions workflow
+  (`windows-release.yml`) validates sources, runs tests, builds the NSIS
+  setup and graphical bootstrapper, verifies `latest.yml`, writes
+  `SHA256SUMS.txt` and prepares a draft release for `v*` tags. End users no
+  longer need Node.js or npm.
+- **Three-level settings navigation:** main categories, collapsible submenus
+  and dedicated views instead of one long scrolling page, including search.
+- **Theme Studio subpages:** library, eDEX colors, windows & panels, live
+  preview (with before/after comparison), Windows color manager and Windows
+  Style Integration as independent pages sharing one theme draft; unsaved
+  theme drafts are flagged in the navigation and settings footer.
+- **Text color roles:** separate `colors.text`, `colors.heading`,
+  `colors.secondaryText` and `colors.buttonText`, exposed as CSS variables;
+  existing themes fall back to the accent color.
+- **BOCKIS Language Engine 2.0/2.1:** key-based i18n with English as canonical
+  fallback plus German and Traditional Chinese (341 keys). Panels, Theme
+  Studio and the installer bootstrapper use stable keys; installer strings are
+  generated from the same locale files. `i18n:check` runs before tests and
+  builds. A legacy compatibility layer still covers unmigrated texts.
+- **First Run Experience 1.0:** six-step setup wizard (language, monitors,
+  theme, optional features, summary) on the primary monitor, saved atomically;
+  existing profiles are migrated as already set up.
+- **Desktop Spotlight Tour 1.1:** optional four-step guided tour after setup,
+  replayable from the settings.
+- **Panel Tour 1.0–2.3:** first-add introductions for all 21 panel types with
+  common zone basics, targeted spotlights on real setup controls, an
+  interactive learning mode and temporary live previews that are only
+  persisted through the regular panel-setup save.
+
+### Fixed
+
+- Panel Tour buttons were not clickable because the tour overlay was missing
+  from the desktop hit-test; the spotlight no longer darkens the highlighted
+  panel (2.3.1 hotfix).
+- Theme Studio crashed on mount when the taskbar fields were missing
+  (`Cannot set properties of null`).
+- Keep Windows and Windhawk subpages attached while assembling Theme Studio,
+  fixing initialization failing on `replaceChildren` and leaving colors empty.
+- Collapsed settings submenus stayed visible because CSS overrode the `hidden`
+  attribute; expanding a category no longer switches the active page.
+- Settings dialog was capped at 760 px; it now uses up to 1420 px, and the
+  embedded Theme Studio switches to one column in narrow layouts.
+- "Windows & panels" submenu pointed to the desktop section.
+- Language switching no longer degrades text through repeated translation.
+- Saving a theme preserves JSON fields not managed by the editor.
+- Windows registry backups recover interrupted transactions after a process
+  exit and offer an emergency restore when the journal is damaged.
+
+### Validation
+
+- `npm run i18n:check`, `npm run panel-tour:check` and
+  `npm run release:preflight` passed.
+- JavaScript syntax checks passed for all runtime files.
+- Project tests passed; the Windows installer was built and verified.
+- Windows 11/Electron runtime, multi-monitor and installer UI tests are still
+  pending.
+
 ## [1.2.7.8] - 2026-11-24
 
 ### Fixed

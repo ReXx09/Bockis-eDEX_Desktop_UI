@@ -53,7 +53,7 @@ div#mod_toplist .toplist-filter {
     padding: 0.35vh 0.2vw;
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
     background: transparent;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     font: inherit;
     font-size: clamp(8px, 1.2vh, 13px);
     letter-spacing: 0.08vh;

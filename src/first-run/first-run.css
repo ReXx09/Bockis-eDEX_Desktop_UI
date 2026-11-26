@@ -1,0 +1,30 @@
+.bockis-first-run {position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,7,13,.82);font:15px/1.55 'Rajdhani', 'Segoe UI', sans-serif;color:#c6e8f7;box-sizing:border-box;pointer-events:auto}
+.bockis-first-run * {box-sizing:border-box}
+.bockis-first-run .fr-card {width:min(760px,96vw);max-height:min(790px,94vh);overflow-y:auto;background:#09131e;border:1px solid #159de1;box-shadow:0 0 24px #002b4a,0 15px 55px #000;padding:26px;display:flex;flex-direction:column;gap:18px}
+.bockis-first-run .fr-top{display:flex;justify-content:space-between;gap:15px;align-items:center;color:#00cfff;font:600 16px 'Share Tech Mono',monospace;letter-spacing:.06em}
+.bockis-first-run .fr-progress{display:flex;gap:7px}.bockis-first-run .fr-progress i{display:block;flex:1;height:4px;background:#20344a}.bockis-first-run .fr-progress i.on{background:#04b7fc}
+.bockis-first-run .fr-content{min-height:190px}.bockis-first-run h2{margin:0 0 15px;color:#e0f7ff;font-size:25px}.bockis-first-run p{margin:10px 0 18px}
+.bockis-first-run select{display:block;width:100%;margin:8px 0;padding:10px 14px;background:#0c1c2a;border:1px solid #167bb3;color:#e1f6ff;font:inherit}
+.bockis-first-run .fr-label{display:block;max-width:460px}.bockis-first-run .fr-check{display:flex;align-items:flex-start;gap:12px;margin:14px 0;padding:8px 0;cursor:pointer}.bockis-first-run input[type=checkbox]{width:19px;height:19px;accent-color:#00bfff;flex-shrink:0}
+.bockis-first-run .fr-highlight{border:1px solid #155c82;color:#04c6ec;background:#102338;padding:22px;text-align:center;font-family:monospace}
+.bockis-first-run .fr-displays{display:flex;gap:12px;flex-wrap:wrap}.bockis-first-run .fr-display{border:1px solid #2877a4;background:#102334;padding:16px;min-width:165px;display:flex;flex-direction:column;gap:5px}.bockis-first-run .fr-display small{color:#00cfff}
+.bockis-first-run .fr-summary{border:1px solid #1b526e}.bockis-first-run .fr-summary-row{display:flex;justify-content:space-between;gap:15px;padding:9px 13px;border-bottom:1px solid #1b526e}.bockis-first-run .fr-summary-row:last-child{border:0}
+.bockis-first-run .fr-footer{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.bockis-first-run .fr-footer span{flex:1}.bockis-first-run button{background:#0d2738;border:1px solid #279acc;color:#bcecff;padding:9px 15px;font:inherit;cursor:pointer;min-height:40px}.bockis-first-run button:hover{background:#14415b}.bockis-first-run button:disabled{opacity:.38;cursor:default}.bockis-first-run .fr-error{color:#ff8a7d;min-height:1em}
+.first-run-reopen{display:block;margin:12px 5px;padding:8px;width:calc(100% - 10px);white-space:normal}
+@media(max-width:640px){.bockis-first-run{padding:10px}.bockis-first-run .fr-card{padding:15px}.bockis-first-run .fr-top{font-size:12px}.bockis-first-run .fr-footer button{flex:1}}
+
+/* Guided desktop spotlight: actions stay reachable; spotlight is visual only. */
+.bockis-desktop-tour{position:fixed;inset:0;z-index:2147483001;background:rgba(2,7,13,.69);pointer-events:auto;color:#dcf6ff;font:15px/1.5 'Rajdhani','Segoe UI',sans-serif}
+.bockis-desktop-tour *{box-sizing:border-box}
+.bockis-desktop-tour .fr-spotlight{position:fixed;border:2px solid #00cfff;border-radius:7px;box-shadow:0 0 0 9999px rgba(2,7,13,.22),0 0 26px #00aaff;pointer-events:none;z-index:1}
+.bockis-desktop-tour .fr-spotlight[hidden]{display:none!important}
+.bockis-desktop-tour .fr-tour-card{position:fixed;width:min(390px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;background:#0a1825;border:1px solid #00a9eb;box-shadow:0 12px 40px #000;padding:20px;z-index:2}
+.bockis-desktop-tour .fr-tour-top{display:flex;justify-content:space-between;gap:10px;color:#00cfff;font-family:'Share Tech Mono',monospace;font-size:12px}
+.bockis-desktop-tour h2{font-size:20px;color:#fff;margin:14px 0 8px}
+.bockis-desktop-tour p{margin:8px 0 18px}
+.bockis-desktop-tour .fr-tour-actions{display:flex;justify-content:space-between;gap:12px}
+.bockis-desktop-tour .fr-tour-nav{display:flex;gap:8px}
+.bockis-desktop-tour .fr-tour-open-settings{display:block;width:100%;margin:0 0 14px}
+.bockis-desktop-tour button{min-height:42px;padding:8px 14px;background:#102a3b;color:#e3f5ff;border:1px solid #279acc;cursor:pointer;font:inherit}
+.bockis-desktop-tour button:hover,.bockis-desktop-tour button:focus-visible{background:#17465c;outline:2px solid #63d9ff;outline-offset:2px}
+@media(max-width:520px){.bockis-desktop-tour .fr-tour-card{padding:12px}.bockis-desktop-tour h2{font-size:17px}}

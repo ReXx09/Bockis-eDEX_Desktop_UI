@@ -14,6 +14,8 @@ const blockmap = `${installer}.blockmap`;
 const latest = path.join(dist, 'latest.yml');
 const assemblyInfo = path.join(dist, 'tron-assembly-info.cs');
 const bootstrapSource = path.join(root, 'build', 'tron_bootstrap.cs');
+const languageSource = path.join(root, 'build', 'installer-language.generated.cs');
+require('./i18n-installer-build.js');
 const bootstrapManifest = path.join(root, 'build', 'tron_bootstrap.manifest');
 const icon = path.join(root, 'assets', 'icons', 'branding', 'app.ico');
 const cscCandidates = [
@@ -42,7 +44,10 @@ try {
     `/out:${installer}`,
     `/resource:${payload},TRON_PAYLOAD.exe`,
     '/reference:System.dll',
+    '/reference:System.Windows.Forms.dll',
+    '/reference:System.Drawing.dll',
     bootstrapSource,
+    languageSource,
     assemblyInfo
   ];
   if (fs.existsSync(icon)) args.unshift(`/win32icon:${icon}`);

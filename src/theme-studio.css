@@ -4,3 +4,44 @@
 .bockis-studio .studio-header{align-items:flex-start}.bockis-studio .studio-version{border-radius:99px;background:#1a2930;color:#9eb6bd;padding:4px 9px;font-size:11px}.bockis-studio .studio-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 16px}.bockis-studio .studio-nav button{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-height:62px;background:#0a1116;border-color:#1d2b31}.bockis-studio .studio-nav button span{font-size:15px}.bockis-studio .studio-nav button.is-active{outline:2px solid #00aaff;outline-offset:1px}.bockis-studio .studio-section{border:1px solid #263a42;border-radius:7px;background:#09151c;padding:16px;margin-bottom:12px}.bockis-studio .studio-section[hidden]{display:none}.bockis-studio .studio-setting,.bockis-studio .studio-option-row label,.bockis-studio .studio-desktop-grid label{display:flex;flex-direction:column;gap:6px;color:#a6c4cc}.bockis-studio .studio-option-row{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:15px 0}.bockis-studio .studio-desktop-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.bockis-studio .studio-check{display:flex;align-items:center;gap:8px;margin-top:12px;color:#b9e9f2}.bockis-studio .studio-check input{min-height:0}.bockis-studio .studio-sync-feature-label{min-width:0}.bockis-studio .studio-activity{max-height:210px;overflow:auto;padding-left:22px;color:#aac6cd;font-size:12px;line-height:1.8}.bockis-studio .studio-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}.bockis-studio .studio-compare[hidden]{display:none}.bockis-studio .studio-compare-card{display:grid;gap:7px;padding:12px;border:1px solid #2a4953;border-radius:5px}.bockis-studio .studio-swatch{display:block;min-height:34px;padding:8px;border:1px solid #44616a;color:#fff;text-shadow:0 1px 2px #000}.bockis-studio .studio-preview{font-family:var(--studio-font),monospace;border-radius:var(--studio-radius,5px)}.bockis-studio .studio-preview[data-panel-style="rounded"]{border-radius:14px}.bockis-studio .studio-preview[data-panel-style="glass"]{backdrop-filter:blur(8px);box-shadow:inset 0 0 30px #0009,0 0 18px #00eaff22}.bockis-studio{font-family:var(--studio-main-font),Consolas,'Segoe UI',monospace}@media(max-width:600px){.bockis-studio .studio-desktop-grid{grid-template-columns:1fr}.bockis-studio .studio-sync-feature{grid-template-columns:minmax(0,1fr) auto}.bockis-studio .studio-sync-feature button:last-child{grid-column:2}}
 .bockis-studio .studio-windows-import{border:1px solid #234551;border-radius:5px;padding:8px 12px;color:#a6c4cc}.bockis-studio .studio-windows-import[hidden]{display:none}.bockis-studio .studio-windows-import p{margin:5px 0;overflow-wrap:anywhere}
 .bockis-studio .studio-windhawk-status{padding:10px;border:1px solid #234551;border-radius:5px;color:#b9e9f2}.bockis-studio .studio-windhawk-mods{display:grid;gap:8px}.bockis-studio .studio-windhawk-mod{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #234551;border-radius:5px}.bockis-studio .studio-windhawk-mod strong,.bockis-studio .studio-windhawk-mod small{display:block}.bockis-studio .studio-windhawk-mod small{margin-top:5px;color:#8daeb7;line-height:1.4}
+
+/* Independent Studio pages: no duplicate inputs or remounting. */
+.bockis-studio .studio-subpage[hidden] { display: none !important; }
+.bockis-studio .studio-subpage { min-width:0; }
+.bockis-studio .studio-library-detail {
+  border:1px solid #285563;border-radius:5px;padding:18px;
+  background:#0c2430;color:#a9d5e1;line-height:1.6;
+}
+.bockis-studio .studio-subpage[data-studio-page="colors"] .studio-colors {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:970px;
+}
+.bockis-studio .studio-subpage[data-studio-page="panels"] .studio-setting {max-width:620px;margin:12px 0;}
+.bockis-studio .studio-subpage[data-studio-page="preview"] .studio-preview {min-height:310px;}
+.bockis-studio .studio-subpage[data-studio-page="preview"] .studio-preview-grid svg {height:75px;}
+.bockis-studio[data-theme-dirty="true"] [data-act="save"] {box-shadow: 0 0 0 2px #ffc35e;}
+@media(max-width:760px){.bockis-studio .studio-subpage[data-studio-page="colors"] .studio-colors{grid-template-columns:1fr;}}
+
+/* Independent text color: borders and graphs retain --studio-accent. */
+.bockis-studio .studio-preview{color:var(--studio-text,var(--studio-accent));}
+.bockis-studio .studio-preview-grid b,.bockis-studio .studio-preview-top{color:var(--studio-text,var(--studio-accent));}
+
+
+/* Theme role preview; independent of accent-based outlines/graphs. */
+.bockis-studio .studio-preview-color-types {display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:14px}
+.bockis-studio .studio-preview-color-types strong {color:var(--studio-heading,var(--studio-text))}
+.bockis-studio .studio-preview-color-types span {color:var(--studio-secondary-text,var(--studio-text))}
+.bockis-studio .studio-preview-color-types button {color:var(--studio-button-text,var(--studio-text));background:var(--studio-surface);opacity:1}
+.bockis-studio .studio-header strong,.bockis-studio h3 {color:var(--color_heading_text,var(--studio-accent))}
+.bockis-studio .studio-help,.bockis-studio .studio-header small {color:var(--color_secondary_text,#8daeb7)}
+.bockis-studio button:not(.studio-primary) {color:var(--color_button_text,#b9e9f2)}
+.bockis-studio .studio-guide-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.bockis-studio .studio-tour{position:fixed;inset:0;z-index:2147483003;background:rgba(2,7,13,.72);color:#d6f3ff;font:15px/1.5 'Rajdhani','Segoe UI',sans-serif;pointer-events:auto}
+.bockis-studio .studio-tour-spotlight{position:fixed;border:2px solid #00cfff;border-radius:6px;box-shadow:0 0 0 9999px rgba(2,7,13,.22),0 0 24px #00aaff;pointer-events:none}
+.bockis-studio .studio-tour-spotlight[hidden]{display:none}
+.bockis-studio .studio-tour-card{position:fixed;width:min(390px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;background:#081b2b;border:1px solid #00b9eb;box-shadow:0 12px 40px #000;padding:18px}
+.bockis-studio .studio-tour-kicker,.bockis-studio .studio-tour-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.bockis-studio .studio-tour-kicker{font:12px 'Share Tech Mono',monospace;color:#00dfff}
+.bockis-studio .studio-tour-card h3{margin:12px 0;color:#f4fcff}
+.bockis-studio .studio-tour-card p{color:#d6f3ff}
+.bockis-studio .studio-tour-actions>span{display:flex;gap:8px}
+.bockis-studio .studio-tour button{min-height:40px}

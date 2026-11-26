@@ -27,7 +27,7 @@ section#boot_screen.brand_boot {
     justify-content: center;
     flex-direction: column;
     background: radial-gradient(circle at center, rgba(var(--color_r), var(--color_g), var(--color_b), 0.08), transparent 48%), rgb(2, 8, 14);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
 }
 
 section#boot_screen.brand_boot .brand_logo {
@@ -68,7 +68,7 @@ section#boot_screen.boot_terminal {
         repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0 1px, transparent 1px 3px),
         radial-gradient(circle at 50% 35%, rgba(var(--color_r), var(--color_g), var(--color_b), 0.09), transparent 55%),
         rgb(2, 6, 10);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     font-family: var(--font_mono), monospace;
     font-size: clamp(10px, 1.5vh, 15px);
     line-height: 1.3;
@@ -111,13 +111,13 @@ section#boot_screen.boot_terminal {
     flex: 0 0 auto;
     padding-bottom: 1vh;
     border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     font-size: clamp(10px, 1.35vh, 14px);
     letter-spacing: 0.14em;
 }
 
 .boot-pane-title span {
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.5);
 }
 
 .boot-brand-pane {
@@ -161,12 +161,12 @@ section#boot_screen.boot_terminal::after {
     font-size: clamp(8px, 1.15vh, 13px);
     line-height: 1.12;
     white-space: pre;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     text-shadow: 0 0 1vh rgba(var(--color_r), var(--color_g), var(--color_b), 0.6);
 }
 
 .boot-tagline {
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.55);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.55);
     letter-spacing: 0.12em;
     margin-top: 0.35vh;
 }
@@ -179,7 +179,7 @@ section#boot_screen.boot_terminal::after {
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.42);
     padding: 0.2em 0.9em;
     background: transparent;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.6);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.6);
     font: inherit;
     font-size: 0.85em;
     cursor: pointer;
@@ -214,7 +214,7 @@ section#boot_screen.boot_terminal::after {
 .boot-log .ok { color: #2cffb0; }
 .boot-log .w { color: #ffcc4d; }
 .boot-log .er { color: #ff3d6e; }
-.boot-log .d { color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5); }
+.boot-log .d { color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.5); }
 .boot-log .b { font-weight: 700; }
 .boot-log .hi { color: #fff; text-shadow: 0 0 1vh #fff; }
 .boot-log .boot-bar {
@@ -239,7 +239,7 @@ section#boot_screen.boot_terminal::after {
     justify-content: space-between;
     gap: 1rem;
     margin-bottom: 0.65vh;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.72);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.72);
     font-size: 0.85em;
     letter-spacing: 0.1em;
 }
@@ -295,7 +295,7 @@ section#boot_screen.boot_terminal::after {
 
 .boot-final .sub {
     letter-spacing: 0.35em;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.6);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.6);
 }
 
 .boot-final .count { color: #2cffb0; }
@@ -376,7 +376,7 @@ section#shutdown_screen {
         repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0 1px, transparent 1px 3px),
         radial-gradient(circle at 50% 50%, rgba(var(--color_r), var(--color_g), var(--color_b), 0.09), transparent 48%),
         rgb(2, 6, 10);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     font-family: var(--font_mono), monospace;
 }
 
@@ -401,12 +401,12 @@ section#shutdown_screen {
     gap: 1rem;
     border-bottom: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.38);
     padding-bottom: 0.7rem;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.68);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.68);
     font-size: clamp(9px, 1.35vh, 14px);
     letter-spacing: 0.12em;
 }
 
-.shutdown-terminal-head strong { color: rgb(var(--color_r), var(--color_g), var(--color_b)); }
+.shutdown-terminal-head strong { color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b))); }
 
 .shutdown-log {
     min-height: 17rem;
@@ -439,7 +439,7 @@ section#shutdown_screen {
 }
 
 .shutdown-brand span {
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.62);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.62);
     font-size: clamp(9px, 1.25vh, 13px);
     letter-spacing: 0.2em;
 }
@@ -521,7 +521,7 @@ section#shutdown_screen.is-crt-off .crt-dot {
 }
 
 .shutdown-row > span:first-child,
-.shutdown-row b { color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.48); }
+.shutdown-row b { color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.48); }
 .shutdown-row strong { color: #2cffb0; font-weight: 400; letter-spacing: 0.08em; }
 .shutdown-row.wait strong { color: #ffcc4d; }
 
@@ -550,7 +550,7 @@ section#shutdown_screen.is-crt-off .crt-dot {
 }
 
 .shutdown-final span {
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.62);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.62);
     font-size: clamp(9px, 1.25vh, 13px);
     letter-spacing: 0.2em;
 }
@@ -632,7 +632,7 @@ section#boot_screen h1::before {
     display: block;
     transform: translateY(100%) translateX(-2%);
     clip-path: polygon(100% 0%, 100% 40%, 0% 40%, 0% 0%);
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.8);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.8);
 
     animation-name: derezzer_top;
     animation-duration: 50ms;
@@ -660,7 +660,7 @@ section#boot_screen h1::after {
     display: block;
     transform: translateY(-100%) translateX(2%);
     clip-path: polygon(100% 40%, 100% 100%, 0% 100%, 0% 40%);
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.9);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.9);
 
     animation-name: derezzer_bottom;
     animation-duration: 50ms;

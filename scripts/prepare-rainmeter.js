@@ -46,9 +46,11 @@ async function download() {
   }
   if (fs.existsSync(output)) fs.rmSync(output, { force: true });
 
-  const release = await request(apiUrl, {
-    "User-Agent": "Bockis-eDEX-Desktop-UI-build"
-  });
+  const apiHeaders = { "User-Agent": "Bockis-eDEX-Desktop-UI-build" };
+  // Authenticated API calls avoid the shared-IP rate limit on CI runners; the token is not sent to download hosts.
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (token) apiHeaders.Authorization = `Bearer ${token}`;
+  const release = await request(apiUrl, apiHeaders);
   let metadata = "";
   for await (const chunk of release) metadata += chunk;
   const assets = JSON.parse(metadata).assets || [];

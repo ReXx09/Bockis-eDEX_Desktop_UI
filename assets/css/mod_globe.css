@@ -103,7 +103,7 @@ div#mod_globe i.mod_globe_headerInfo {
     top: 0;
     z-index: 1;
     background: rgba(3, 8, 13, 0.96);
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.62);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.62);
     font-size: 0.9em;
 }
 
@@ -114,7 +114,7 @@ div#mod_globe i.mod_globe_headerInfo {
 }
 
 .globe-list-row strong {
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
 }
 
 .globe-list-row.incoming strong { color: #00ff75; }
@@ -122,7 +122,7 @@ div#mod_globe i.mod_globe_headerInfo {
 
 .globe-list-empty {
     padding: 1rem 0.5rem;
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.65);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.65);
 }
 
 .globe-filter {
@@ -135,7 +135,7 @@ div#mod_globe i.mod_globe_headerInfo {
     padding: 0.12vh 0.45vh;
     border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.04);
-    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.62);
+    color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.62);
     font: inherit;
     font-size: 1.02vh;
     letter-spacing: 0.08em;
@@ -147,7 +147,7 @@ div#mod_globe i.mod_globe_headerInfo {
 .globe-filter.on {
     border-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
     background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.18);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     outline: none;
 }
 

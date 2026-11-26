@@ -48,7 +48,7 @@
     line-height: 1.25;
     letter-spacing: 0.04em;
     text-align: right;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     text-shadow: 0 0 0.45rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.28);
     overflow: hidden;
     text-overflow: ellipsis;

@@ -12,13 +12,21 @@ const expectedSha256 = "5116cc1703384aac88b8d7a3b57f172aea5da32b6df7355fb2f8247d
 const apiUrl = `https://api.github.com/repos/ramensoftware/windhawk/releases/tags/${releaseTag}`;
 const maxInstallerBytes = 20 * 1024 * 1024;
 
+function githubHeaders(url) {
+  const headers = { "User-Agent": "Bockis-eDEX-Desktop-UI-build" };
+  // Authenticated API calls avoid the shared-IP rate limit on CI runners; never forward the token to download hosts.
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (token && url.hostname === "api.github.com") headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
 function request(url, redirects = 0) {
   if (redirects > 5) return Promise.reject(new Error("Too many redirects while downloading Windhawk."));
   const parsed = new URL(url);
   if (parsed.protocol !== "https:") return Promise.reject(new Error("Windhawk download must use HTTPS."));
   return new Promise((resolve, reject) => {
     https.get(parsed, {
-      headers: { "User-Agent": "Bockis-eDEX-Desktop-UI-build" },
+      headers: githubHeaders(parsed),
       timeout: 30000
     }, (response) => {
       if ([301, 302, 307, 308].includes(response.statusCode)) {

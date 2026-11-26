@@ -730,10 +730,24 @@
         + parseInt(panelMatch[1].slice(2, 4), 16) * 0.587
         + parseInt(panelMatch[1].slice(4, 6), 16) * 0.114)
       : 0;
-    const panelText = panelLuma > 150 ? "#101820" : "#d7f8ff";
+    const accentHex = `#${[r, g, b].map((part) => Math.max(0, Math.min(255, Number(part) || 0)).toString(16).padStart(2, "0")).join("")}`;
+    const textColor = /^#[0-9a-f]{6}$/i.test(c.text || "") ? c.text : accentHex;
+    const textRgb = [1, 3, 5].map((index) => parseInt(textColor.slice(index, index + 2), 16));
+    const panelText = c.text ? textColor : (panelLuma > 150 ? "#101820" : "#d7f8ff");
     document.documentElement.style.setProperty("--color_r", r);
     document.documentElement.style.setProperty("--color_g", g);
     document.documentElement.style.setProperty("--color_b", b);
+    document.documentElement.style.setProperty("--color_text_r", textRgb[0]);
+    document.documentElement.style.setProperty("--color_text_g", textRgb[1]);
+    document.documentElement.style.setProperty("--color_text_b", textRgb[2]);
+    document.documentElement.style.setProperty("--color_text", textColor);
+    // Optional role-specific colors fall back to the original UI text color.
+    for (const [role, source] of [
+      ["heading", c.heading], ["secondary", c.secondaryText], ["button", c.buttonText]
+    ]) {
+      const chosen = /^#[0-9a-f]{6}$/i.test(source || "") ? source : textColor;
+      document.documentElement.style.setProperty(`--color_${role}_text`, chosen);
+    }
     document.documentElement.style.setProperty("--color_black", panelBase);
     document.documentElement.style.setProperty("--color_light_black", panelLight);
     document.documentElement.style.setProperty("--color_grey", c.grey || "#262828");

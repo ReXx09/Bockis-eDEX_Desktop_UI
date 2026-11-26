@@ -3,7 +3,7 @@
 (function () {
   function bodyHtml() {
     return `
-      <div id="mod_calculator" class="calc-root" tabindex="0" aria-label="Rechner">
+      <div id="mod_calculator" class="calc-root" tabindex="0" aria-label="Rechner" data-i18n-aria-label="panel.calculator.name">
         <div class="calc-screen">
           <div class="calc-expr" id="calc_expr"></div>
           <div class="calc-display" id="calc_display">0</div>
@@ -79,7 +79,7 @@
     let error = false;
 
     const paint = () => {
-      displayEl.textContent = error ? "Error" : current;
+      displayEl.textContent = error ? (window.edexI18n?.t?.("panel.calculator.error") || "Error") : current;
       if (pending != null && acc != null && !error) {
         exprEl.textContent = `${formatNum(acc)} ${OP_LABEL[pending] || pending}`;
       } else {

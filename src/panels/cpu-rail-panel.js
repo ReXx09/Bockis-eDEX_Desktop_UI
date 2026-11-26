@@ -490,7 +490,7 @@
 
     const { x, y, w, h } = CHIP;
     return `
-      <svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="xMidYMid meet" aria-label="CPU-Kernüberwachung">
+      <svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="xMidYMid meet" aria-label="CPU-Kernüberwachung" data-i18n-aria-label="panel.cpu.cores">
         ${tracePaths}
         ${compEls}
         ${padEls}
@@ -520,22 +520,22 @@
             <b data-cpu-rail-detail-title>CPU-Kern</b>
             <span data-cpu-rail-detail-value>Hover über einen Kern</span>
           </div>
-          <canvas class="cpu-rail-wave" data-cpu-rail-wave aria-label="Live CPU-Wellenformen"></canvas>
+          <canvas class="cpu-rail-wave" data-cpu-rail-wave aria-label="Live CPU-Wellenformen" data-i18n-aria-label="panel.cpu.wave"></canvas>
         </div>
         <div class="cpu-rail-meta">
           <span class="cpu-rail-load-metric">RAIL <b data-cpu-rail-load>—%</b>
-            <span class="cpu-rail-meter" role="meter" aria-label="CPU-Last, keine Spannungsmessung" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span class="cpu-rail-meter" role="meter" aria-label="CPU-Last, keine Spannungsmessung" data-i18n-aria-label="panel.cpu.load" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
               <i data-cpu-rail-meter-fill></i>
             </span>
           </span>
           <span>THREADS <b data-cpu-rail-cores>—</b></span>
-          <span class="cpu-rail-clock-metric" title="Live-Takt aus dem Windows-Prozessorzähler">
+          <span class="cpu-rail-clock-metric" title="Live-Takt aus dem Windows-Prozessorzähler" data-i18n-title="panel.cpu.clock">
             CLK <b data-cpu-rail-clk>—</b>
             <svg class="cpu-rail-clk-wave" data-cpu-rail-clk-wave viewBox="0 0 42 10" preserveAspectRatio="none" aria-hidden="true">
               <path d="M0 7 H5 V2 H10 V7 H15 V2 H20 V7 H25 V2 H30 V7 H35 V2 H40 V7 H42"/>
             </svg>
           </span>
-          <span title="ACPI-Zonentemperatur als Proxy; kein Throttling-Nachweis">TEMP <b data-cpu-rail-temp>—</b></span>
+          <span title="ACPI-Zonentemperatur als Proxy; kein Throttling-Nachweis" data-i18n-title="panel.cpu.temperature">TEMP <b data-cpu-rail-temp>—</b></span>
           <span>CACHE <b data-cpu-rail-cache>—</b></span>
           <span>SPEED <b data-cpu-rail-speed>1.00x</b></span>
           <button type="button" class="cpu-rail-action" data-cpu-rail-action="pause">PAUSE</button>
@@ -841,8 +841,8 @@
         const load = Number(latestCpu?.percents?.[index]);
         if (!Number.isFinite(load)) return;
         if (detail) detail.hidden = false;
-        if (detailTitle) detailTitle.textContent = `THREAD ${index + 1}`;
-        if (detailValue) detailValue.textContent = `${Math.round(load)}% LOAD`;
+        if (detailTitle) detailTitle.textContent = (window.edexI18n?.t?.("panel.cpu.thread", { number: index + 1 }) || `THREAD ${index + 1}`);
+        if (detailValue) detailValue.textContent = (window.edexI18n?.t?.("panel.cpu.loadValue", {percent:Math.round(load)}) || `${Math.round(load)}% LOAD`);
       };
       const hideCore = () => {
         if (detail) detail.hidden = true;
@@ -880,7 +880,7 @@
           } else if (action === "processes") {
             const processes = await window.edex?.getTopProcesses?.();
             if (detail) detail.hidden = false;
-            if (detailTitle) detailTitle.textContent = "TOP PROCESSES";
+            if (detailTitle) detailTitle.textContent = (window.edexI18n?.t?.("panel.cpu.top") || "TOP PROCESSES");
             if (detailValue) {
               const rows = Array.isArray(processes?.list)
                 ? processes.list.slice(0, 3)

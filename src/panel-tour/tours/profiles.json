@@ -1,0 +1,374 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "clock": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "time",
+          "titleKey": "panelGuide.clock.time.title",
+          "descriptionKey": "panelGuide.clock.time.body",
+          "target": "panel"
+        },
+        {
+          "id": "format",
+          "titleKey": "panelGuide.clock.format.title",
+          "descriptionKey": "panelGuide.clock.format.body",
+          "target": "setup:#panel-clock-mode"
+        },
+        {
+          "id": "date",
+          "titleKey": "panelGuide.clock.date.title",
+          "descriptionKey": "panelGuide.clock.date.body",
+          "target": "setup:#panel-clock-date"
+        }
+      ]
+    },
+    "coderain": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "rain",
+          "titleKey": "panelGuide.coderain.rain.title",
+          "descriptionKey": "panelGuide.coderain.rain.body",
+          "target": "panel"
+        },
+        {
+          "id": "tuning",
+          "titleKey": "panelGuide.coderain.tuning.title",
+          "descriptionKey": "panelGuide.coderain.tuning.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "cpu": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "usage",
+          "titleKey": "panelGuide.cpu.usage.title",
+          "descriptionKey": "panelGuide.cpu.usage.body",
+          "target": "panel"
+        },
+        {
+          "id": "details",
+          "titleKey": "panelGuide.cpu.details.title",
+          "descriptionKey": "panelGuide.cpu.details.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "ram": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "usage",
+          "titleKey": "panelGuide.ram.usage.title",
+          "descriptionKey": "panelGuide.ram.usage.body",
+          "target": "panel"
+        },
+        {
+          "id": "modes",
+          "titleKey": "panelGuide.ram.modes.title",
+          "descriptionKey": "panelGuide.ram.modes.body",
+          "target": "setup:#panel-ram-mode"
+        }
+      ]
+    },
+    "toplist": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "processes",
+          "titleKey": "panelGuide.toplist.processes.title",
+          "descriptionKey": "panelGuide.toplist.processes.body",
+          "target": "panel"
+        },
+        {
+          "id": "overview",
+          "titleKey": "panelGuide.toplist.overview.title",
+          "descriptionKey": "panelGuide.toplist.overview.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "globe": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "globe",
+          "titleKey": "panelGuide.globe.globe.title",
+          "descriptionKey": "panelGuide.globe.globe.body",
+          "target": "panel"
+        },
+        {
+          "id": "interaction",
+          "titleKey": "panelGuide.globe.interaction.title",
+          "descriptionKey": "panelGuide.globe.interaction.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "conninfo": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "traffic",
+          "titleKey": "panelGuide.conninfo.traffic.title",
+          "descriptionKey": "panelGuide.conninfo.traffic.body",
+          "target": "panel"
+        },
+        {
+          "id": "readings",
+          "titleKey": "panelGuide.conninfo.readings.title",
+          "descriptionKey": "panelGuide.conninfo.readings.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "calendar": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "dates",
+          "titleKey": "panelGuide.calendar.dates.title",
+          "descriptionKey": "panelGuide.calendar.dates.body",
+          "target": "panel"
+        },
+        {
+          "id": "schedule",
+          "titleKey": "panelGuide.calendar.schedule.title",
+          "descriptionKey": "panelGuide.calendar.schedule.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "drives": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "storage",
+          "titleKey": "panelGuide.drives.storage.title",
+          "descriptionKey": "panelGuide.drives.storage.body",
+          "target": "panel"
+        },
+        {
+          "id": "capacity",
+          "titleKey": "panelGuide.drives.capacity.title",
+          "descriptionKey": "panelGuide.drives.capacity.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "filesearch": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "search",
+          "titleKey": "panelGuide.filesearch.search.title",
+          "descriptionKey": "panelGuide.filesearch.search.body",
+          "target": "panel"
+        },
+        {
+          "id": "font",
+          "titleKey": "panelGuide.filesearch.font.title",
+          "descriptionKey": "panelGuide.filesearch.font.body",
+          "target": "setup:#panel-search-font"
+        }
+      ]
+    },
+    "terminal": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "shell",
+          "titleKey": "panelGuide.terminal.shell.title",
+          "descriptionKey": "panelGuide.terminal.shell.body",
+          "target": "panel"
+        },
+        {
+          "id": "appearance",
+          "titleKey": "panelGuide.terminal.appearance.title",
+          "descriptionKey": "panelGuide.terminal.appearance.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "weather": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "forecast",
+          "titleKey": "panelGuide.weather.forecast.title",
+          "descriptionKey": "panelGuide.weather.forecast.body",
+          "target": "panel"
+        },
+        {
+          "id": "location",
+          "titleKey": "panelGuide.weather.location.title",
+          "descriptionKey": "panelGuide.weather.location.body",
+          "target": "setup:#panel-weather-location"
+        }
+      ]
+    },
+    "hwinfo": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "hardware",
+          "titleKey": "panelGuide.hwinfo.hardware.title",
+          "descriptionKey": "panelGuide.hwinfo.hardware.body",
+          "target": "panel"
+        },
+        {
+          "id": "sensors",
+          "titleKey": "panelGuide.hwinfo.sensors.title",
+          "descriptionKey": "panelGuide.hwinfo.sensors.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "cockpit": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "dashboard",
+          "titleKey": "panelGuide.cockpit.dashboard.title",
+          "descriptionKey": "panelGuide.cockpit.dashboard.body",
+          "target": "panel"
+        },
+        {
+          "id": "layout",
+          "titleKey": "panelGuide.cockpit.layout.title",
+          "descriptionKey": "panelGuide.cockpit.layout.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "cassette": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "player",
+          "titleKey": "panelGuide.cassette.player.title",
+          "descriptionKey": "panelGuide.cassette.player.body",
+          "target": "panel"
+        },
+        {
+          "id": "controls",
+          "titleKey": "panelGuide.cassette.controls.title",
+          "descriptionKey": "panelGuide.cassette.controls.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "ddj": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "mixing",
+          "titleKey": "panelGuide.ddj.mixing.title",
+          "descriptionKey": "panelGuide.ddj.mixing.body",
+          "target": "panel"
+        },
+        {
+          "id": "controls",
+          "titleKey": "panelGuide.ddj.controls.title",
+          "descriptionKey": "panelGuide.ddj.controls.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "cpuRail": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "rail",
+          "titleKey": "panelGuide.cpuRail.rail.title",
+          "descriptionKey": "panelGuide.cpuRail.rail.body",
+          "target": "panel"
+        },
+        {
+          "id": "effects",
+          "titleKey": "panelGuide.cpuRail.effects.title",
+          "descriptionKey": "panelGuide.cpuRail.effects.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "calculator": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "calculate",
+          "titleKey": "panelGuide.calculator.calculate.title",
+          "descriptionKey": "panelGuide.calculator.calculate.body",
+          "target": "panel"
+        },
+        {
+          "id": "operations",
+          "titleKey": "panelGuide.calculator.operations.title",
+          "descriptionKey": "panelGuide.calculator.operations.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "autostart": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "startup",
+          "titleKey": "panelGuide.autostart.startup.title",
+          "descriptionKey": "panelGuide.autostart.startup.body",
+          "target": "panel"
+        },
+        {
+          "id": "management",
+          "titleKey": "panelGuide.autostart.management.title",
+          "descriptionKey": "panelGuide.autostart.management.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "log": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "events",
+          "titleKey": "panelGuide.log.events.title",
+          "descriptionKey": "panelGuide.log.events.body",
+          "target": "panel"
+        },
+        {
+          "id": "details",
+          "titleKey": "panelGuide.log.details.title",
+          "descriptionKey": "panelGuide.log.details.body",
+          "target": "panel"
+        }
+      ]
+    },
+    "taskdock": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "tasks",
+          "titleKey": "panelGuide.taskdock.tasks.title",
+          "descriptionKey": "panelGuide.taskdock.tasks.body",
+          "target": "panel"
+        },
+        {
+          "id": "tiles",
+          "titleKey": "panelGuide.taskdock.tiles.title",
+          "descriptionKey": "panelGuide.taskdock.tiles.body",
+          "target": "setup:#panel-taskdock-tile-size"
+        },
+        {
+          "id": "labels",
+          "titleKey": "panelGuide.taskdock.labels.title",
+          "descriptionKey": "panelGuide.taskdock.labels.body",
+          "target": "setup:#panel-taskdock-show-labels"
+        }
+      ]
+    }
+  }
+}

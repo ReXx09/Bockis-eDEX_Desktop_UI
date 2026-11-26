@@ -169,7 +169,7 @@
     const model = buildModel(snapshot, selectedGpuId);
     if (model.gpuId) root.dataset.hardwareGpu = model.gpuId;
     const selector = model.gpus.length > 1
-      ? `<select data-hardware-gpu aria-label="Grafikkarte">${model.gpus.map((gpu) =>
+      ? `<select data-hardware-gpu aria-label="Grafikkarte" data-i18n-aria-label="panel.hardware.gpu">${model.gpus.map((gpu) =>
         `<option value="${escape(gpu.id)}"${gpu.id === model.gpuId ? " selected" : ""}>${escape(gpu.name)}</option>`).join("")}</select>` : "";
     const template = root.ownerDocument.createElement("template");
     template.innerHTML = processor("CPU", model.cpu) + processor("GPU", model.gpu, selector)

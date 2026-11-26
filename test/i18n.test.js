@@ -10,7 +10,9 @@ function loadI18n() {
     window: {}
   };
   const source = fs.readFileSync(path.join(__dirname, "..", "src", "i18n.js"), "utf8");
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "src", "locales", "legacy-compat.js"), "utf8"), context);
   vm.runInNewContext(source, context, { filename: "src/i18n.js" });
+  for (const language of ["en", "de", "zh-Hant"]) vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "src", "locales", `${language}.js`), "utf8"), context);
   return context.window.edexI18n;
 }
 
@@ -48,8 +50,40 @@ test("zh-Hant keeps Chinese UI translations", () => {
   assert.equal(i18n.locale(), "zh-Hant");
 });
 
-test("unknown locales fall back to German", () => {
+test("unknown locales fall back to English", () => {
   const i18n = loadI18n();
   i18n.setLocale("fr");
-  assert.equal(i18n.locale(), "de");
+  assert.equal(i18n.locale(), "en");
+});
+test("Settings navigation and typography roles translate in all three languages", () => {
+  const i18n = loadI18n();
+  for (const [locale, expected] of [
+    ["de", ["Version / Updates", "Mit Windows starten", "Haupttext"]],
+    ["en", ["Version & Updates", "Start with Windows", "Main text"]],
+    ["zh-Hant", ["版本與更新", "隨 Windows 啟動", "主要文字"]]
+  ]) {
+    i18n.setLocale(locale);
+    for (const [index, input] of ["Version / Updates", "Mit Windows starten", "Haupttext"].entries()) {
+      assert.equal(i18n.translateValue(input), expected[index]);
+    }
+  }
+});
+
+test("Page translations are reversible after a language switch", () => {
+  const original = "  Mit Windows starten  ";
+  const node = { nodeValue: original };
+  const root = { nodeType: 1, hasAttribute: () => false, querySelectorAll: () => [] };
+  const document = {
+    documentElement: {},
+    createTreeWalker: () => ({ currentNode: null, nextNode() { if (this.done) return false; this.done = true; this.currentNode = node; return true; } })
+  };
+  const context = { document, NodeFilter: { SHOW_TEXT: 4 }, window: {} };
+  for (const file of ["locales/legacy-compat.js", "i18n.js", "locales/en.js", "locales/de.js", "locales/zh-Hant.js"]) vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "src", file), "utf8"), context);
+  const i18n = context.window.edexI18n;
+  i18n.setLocale("en"); i18n.translatePage(root);
+  assert.equal(node.nodeValue, "  Start with Windows  ");
+  i18n.setLocale("zh-Hant"); i18n.translatePage(root);
+  assert.equal(node.nodeValue, "  隨 Windows 啟動  ");
+  i18n.setLocale("de"); i18n.translatePage(root);
+  assert.equal(node.nodeValue, original);
 });

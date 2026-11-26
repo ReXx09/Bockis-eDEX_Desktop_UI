@@ -34,7 +34,7 @@
               <span class="rev">− REV</span>
               <span class="fwd">FWD +</span>
             </div>
-            <div class="ddj-jog" data-ddj-jog tabindex="0" aria-label="Jog wheel">
+            <div class="ddj-jog" data-ddj-jog tabindex="0" aria-label="Jog wheel" data-i18n-aria-label="panel.ddj.jog">
               <div class="ddj-jog-spin" data-ddj-spin>
                 <div class="ddj-jog-dimples"></div>
                 <div class="ddj-jog-platter"></div>
@@ -128,7 +128,7 @@
           <span>4CH · MAGVEL</span>
           <span>MASTER <b data-ddj-master-read>70</b></span>
         </div>
-        <div class="ddj-mode-bar" role="tablist" aria-label="Audio-Modus">
+        <div class="ddj-mode-bar" role="tablist" aria-label="Audio-Modus" data-i18n-aria-label="panel.ddj.audio">
           <button type="button" data-ddj-mode="cockpit" role="tab">ADVANCED DJ</button>
           <button type="button" class="active" data-ddj-mode="media" role="tab">MEDIA CONTROL</button>
           <button type="button" data-ddj-mode="system" role="tab">SYSTEM AUDIO</button>
@@ -285,7 +285,7 @@
       const button = event.currentTarget;
       const muted = button.dataset.muted === "1";
       button.dataset.muted = muted ? "0" : "1";
-      button.textContent = muted ? "MUTE OFF" : "MUTE ON";
+      button.textContent = window.edexI18n?.t?.(muted ? "panel.ddj.muteOff" : "panel.ddj.muteOn") || (muted ? "MUTE OFF" : "MUTE ON");
       setStatus(muted ? "SYSTEM AUDIO UNMUTED" : "SYSTEM AUDIO MUTED");
     });
     root.querySelector("[data-ddj-output]")?.addEventListener("click", () => {
@@ -533,7 +533,7 @@
         const mediaPlay = root.querySelector("[data-ddj-media-play]");
         if (mediaTrack) mediaTrack.textContent = d.track.title;
         if (mediaMeta) mediaMeta.textContent = `${effectiveBpm(d).toFixed(1)} BPM · ${d.track.key}`;
-        if (mediaPlay) mediaPlay.textContent = d.playing ? "PAUSE" : "PLAY";
+        if (mediaPlay) mediaPlay.textContent = window.edexI18n?.t?.(d.playing ? "panel.ddj.pause" : "panel.ddj.play") || (d.playing ? "PAUSE" : "PLAY");
       }
       const jog = el.querySelector("[data-ddj-jog]");
       const spin = el.querySelector("[data-ddj-spin]");

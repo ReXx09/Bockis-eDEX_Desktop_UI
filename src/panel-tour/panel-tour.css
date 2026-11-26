@@ -1,0 +1,41 @@
+.bockis-panel-tour{position:fixed;inset:0;z-index:2147483002;background:transparent;color:#d6f3ff;font:16px/1.5 'Rajdhani','Segoe UI',sans-serif;pointer-events:auto}
+.bockis-panel-tour *{box-sizing:border-box}
+.bockis-panel-tour .panel-tour-spotlight{position:fixed;border:2px solid #00cfff;border-radius:6px;box-shadow:0 0 0 9999px rgba(2,7,13,.73),0 0 22px #00aaff;pointer-events:none}
+.bockis-panel-tour .panel-tour-spotlight[hidden]{display:none!important}
+.bockis-panel-tour .panel-tour-card{position:fixed;width:min(400px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;background:#081b2b;border:1px solid #00b9eb;box-shadow:0 12px 40px #000;padding:20px}
+.bockis-panel-tour .panel-tour-kicker{display:flex;justify-content:space-between;gap:14px;font:13px 'Share Tech Mono',monospace;color:#00dfff}
+.bockis-panel-tour h2{margin:14px 0 10px;color:#f4fcff;font-size:23px}
+.bockis-panel-tour p{margin:0 0 16px}
+.bockis-panel-tour small{display:block;color:#f6cc85;margin-bottom:12px}
+.bockis-panel-tour .panel-tour-actions{display:flex;gap:12px;justify-content:space-between}
+.bockis-panel-tour button{cursor:pointer;min-height:42px;padding:9px 16px;font:inherit;color:#cbefff;background:#102f43;border:1px solid #299dd1}
+.bockis-panel-tour button:focus-visible{outline:2px solid #8af2ff;outline-offset:2px}
+@media(max-width:560px){.bockis-panel-tour .panel-tour-card{padding:12px}.bockis-panel-tour h2{font-size:18px}}
+
+.panel-tour-help-actions{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0}.panel-tour-help-actions button{min-height:36px;padding:7px 10px;white-space:normal}.panel-setup-modal [data-i18n="panelGuide.commonAuto"]{display:block;opacity:.75;max-width:440px}
+
+/* Optional hands-on lesson: changes remain in the setup form until confirmed. */
+.bockis-panel-tour .panel-tour-practice{display:grid;gap:8px;margin:12px 0;padding:12px;border:1px solid #236e8e;background:#102b3d}
+.bockis-panel-tour .panel-tour-practice label{color:#67dcff;font-weight:600}
+.bockis-panel-tour .panel-tour-practice select,.bockis-panel-tour .panel-tour-practice input{width:100%;min-height:38px;padding:5px;color:#e8faff;background:#081b2b;border:1px solid #29a6d0;font:inherit}
+.bockis-panel-tour .panel-tour-practice .panel-tour-practice-check{display:flex;align-items:center;gap:8px}
+.bockis-panel-tour .panel-tour-practice .panel-tour-practice-check input{width:auto;min-height:0}
+.bockis-panel-tour .panel-tour-practice-actions{display:flex;gap:8px;flex-wrap:wrap}
+.bockis-panel-tour .panel-tour-practice-actions button{flex:1}
+.bockis-panel-tour [data-practice-error]:empty{display:none}
+
+/* Temporary, visible location indicator; removed with the live preview. */
+.bockis-weather-location-preview{position:absolute;top:40px;right:9px;z-index:10;max-width:75%;padding:5px 9px;background:#102b3de8;color:#72ddff;border:1px solid #24c6ea;font:12px 'Share Tech Mono',monospace;pointer-events:none;box-shadow:0 0 9px #00adf344}
+
+/* When a target is not visible, shade the desktop while keeping the dialog readable. */
+.bockis-panel-tour.panel-tour-no-target{background:rgba(2,7,13,.73)}
+
+/* Edge-zone lesson: the screen border stays bright, the central scale zone is dimmed. */
+.bockis-panel-tour.panel-tour-edge{box-shadow:inset 0 0 0 3px #00cfff,inset 0 0 28px #00aaff88}
+.bockis-panel-tour .panel-tour-zone-mask{position:fixed;background:rgba(2,7,13,.73);border:2px dashed #00cfff;pointer-events:none}
+.bockis-panel-tour .panel-tour-zone-mask[hidden]{display:none!important}
+.bockis-panel-tour .panel-tour-nav{display:flex;gap:8px}
+.bockis-panel-tour.panel-tour-interactive{pointer-events:none}
+.bockis-panel-tour.panel-tour-interactive .panel-tour-card{pointer-events:auto}
+.bockis-panel-tour.panel-tour-interactive .panel-tour-card small[data-interaction-status]{color:#f6cc85}
+.bockis-panel-tour.panel-tour-interactive .panel-tour-card.panel-tour-practice-complete small[data-interaction-status]{color:#7ef0bf}

@@ -4,8 +4,8 @@ function panelBody(id) {
     case "clock":
       return `
         <div id="mod_clock">
-          <div id="mod_clock_led" class="led-matrix" aria-label="點陣時鐘"></div>
-          <div id="mod_clock_analog" class="analog-clock" aria-label="Analoge Uhr" hidden>
+          <div id="mod_clock_led" class="led-matrix" aria-label="點陣時鐘" data-i18n-aria-label="panel.clock.digital"></div>
+          <div id="mod_clock_analog" class="analog-clock" aria-label="Analoge Uhr" data-i18n-aria-label="panel.clock.analog" hidden>
             <span class="analog-clock-number number-12">12</span>
             <span class="analog-clock-number number-3">3</span>
             <span class="analog-clock-number number-6">6</span>
@@ -31,10 +31,10 @@ function panelBody(id) {
       return `
         <div class="weather-root">
           <div class="weather-toolbar">
-            <input type="search" data-weather-location value="Berlin" placeholder="Ort suchen …" spellcheck="false" />
-            <button type="button" data-weather-refresh title="Wetter aktualisieren">↻</button>
+            <input type="search" data-weather-location value="Berlin" placeholder="Ort suchen …" data-i18n-placeholder="panel.weather.search" spellcheck="false" />
+            <button type="button" data-weather-refresh title="Wetter aktualisieren" data-i18n-title="panel.weather.refresh">↻</button>
           </div>
-          <div class="weather-status" data-weather-status>Wetter wird geladen …</div>
+          <div class="weather-status" data-weather-status data-i18n="panel.weather.loading">Wetter wird geladen …</div>
           <div class="weather-current" data-weather-current></div>
           <div class="weather-days" data-weather-days></div>
         </div>`;
@@ -77,11 +77,11 @@ function panelBody(id) {
             <section class="hwinfo-prereq">
               <div>
                 <h1>HARDWARE SENSOR CONNECTOR</h1>
-                <p id="mod_hardwareInspector_hwinfo" data-hardware-status data-state="checking" role="status">Voraussetzungen werden geprüft …</p>
-                <small>Livewerte über LibreHardwareMonitor und den PawnIO-Treiber.</small>
+                <p id="mod_hardwareInspector_hwinfo" data-hardware-status data-state="checking" role="status" data-i18n="panel.hardware.checking">Voraussetzungen werden geprüft …</p>
+                <small data-i18n="panel.hardware.sensorNote">Livewerte über LibreHardwareMonitor und den PawnIO-Treiber.</small>
               </div>
               <div class="hwinfo-prereq-actions">
-                <button type="button" data-hardware-scan>Prüfen</button>
+                <button type="button" data-hardware-scan data-i18n="panel.hardware.scan">Prüfen</button>
               </div>
             </section>
             <section class="hwinfo-log">
@@ -94,7 +94,7 @@ function panelBody(id) {
     case "toplist":
       return `
         <div id="mod_toplist">
-          <div class="toplist-filters" role="group" aria-label="Prozessfilter">
+          <div class="toplist-filters" role="group" aria-label="Prozessfilter" data-i18n-aria-label="panel.process.filters">
             <button type="button" class="toplist-filter on" data-top-sort="cpu">CPU</button>
             <button type="button" class="toplist-filter" data-top-sort="mem">MEM</button>
             <button type="button" class="toplist-filter" data-top-sort="energy">ENERGY</button>
@@ -107,7 +107,7 @@ function panelBody(id) {
       return `
         <div id="mod_ramwatcher">
           <div id="mod_ramwatcher_inner">
-            <div class="ram-gauge-filters" role="group" aria-label="RAM-Anzeige">
+            <div class="ram-gauge-filters" role="group" aria-label="RAM-Anzeige" data-i18n-aria-label="panel.ram.display">
               ${[["used", "USED"], ["free", "FREE"], ["cached", "CACHED"], ["available", "AVAIL"], ["total", "TOTAL"]].map(([value, label]) => `<button type="button" class="ram-gauge-filter${ramGaugeMode() === value ? " on" : ""}" data-ram-gauge="${value}">${label}</button>`).join("")}
             </div>
             <div class="ramwatcher-meta"><i id="mod_ramwatcher_info"></i></div>
@@ -181,13 +181,13 @@ function panelBody(id) {
         <div id="mod_globe">
           <div id="mod_globe_innercontainer">
             <div class="globe-meta"><i class="mod_globe_headerInfo">0.0000, 0.0000</i></div>
-            <div class="globe-view-switch" role="group" aria-label="Ansicht">
+            <div class="globe-view-switch" role="group" aria-label="Ansicht" data-i18n-aria-label="panel.globe.view">
               <button type="button" class="globe-filter on" data-globe-view="globe">GLOBE</button>
               <button type="button" class="globe-filter" data-globe-view="list">LISTE</button>
             </div>
             <div id="mod_globe_canvas_placeholder"></div>
             <div class="globe-connections-list" hidden></div>
-            <div class="globe-filters" role="group" aria-label="Verbindungsfilter">
+            <div class="globe-filters" role="group" aria-label="Verbindungsfilter" data-i18n-aria-label="panel.globe.connectionFilters">
               <button type="button" class="globe-filter on" data-globe-filter="world">WORLD</button>
               <button type="button" class="globe-filter" data-globe-filter="outgoing">OUT</button>
               <button type="button" class="globe-filter" data-globe-filter="incoming">IN</button>
@@ -200,7 +200,7 @@ function panelBody(id) {
       return `
         <div id="mod_conninfo" data-conn-mode="live">
           <div id="mod_conninfo_innercontainer">
-            <div class="conninfo-filters" role="group" aria-label="Netzwerkansicht">
+            <div class="conninfo-filters" role="group" aria-label="Netzwerkansicht" data-i18n-aria-label="panel.network.view">
               <button type="button" class="conninfo-filter on" data-conn-view="live">LIVE</button>
               <button type="button" class="conninfo-filter" data-conn-view="total">TOTAL</button>
               <button type="button" class="conninfo-filter" data-conn-view="up">UP</button>
@@ -244,7 +244,7 @@ function panelBody(id) {
       return `
         <div class="fs-root">
           <div class="fs-toolbar">
-            <input id="fs_query" type="search" spellcheck="false" placeholder="Lokale/LAN-Dateien suchen …" />
+            <input id="fs_query" type="search" spellcheck="false" placeholder="Lokale/LAN-Dateien suchen …" data-i18n-placeholder="panel.files.search" />
             <button type="button" id="fs_go">Suchen</button>
           </div>
           <div class="fs-status" id="fs_status">Suchbegriff eingeben</div>
@@ -256,8 +256,8 @@ function panelBody(id) {
           <div class="terminal-toolbar">
             <span class="terminal-status" data-terminal-status>PowerShell-Konsole bereit</span>
             <div class="terminal-grid-tools">
-              <label>GRID <select class="terminal-select" data-terminal-layout aria-label="Terminal-Grid-Größe"><option value="1x1">1×1</option><option value="2x2">2×2</option></select></label>
-              <button type="button" data-terminal-add title="Terminal-Grid hinzufügen">+</button>
+              <label>GRID <select class="terminal-select" data-terminal-layout aria-label="Terminal-Grid-Größe" data-i18n-aria-label="panel.terminal.grid"><option value="1x1">1×1</option><option value="2x2">2×2</option></select></label>
+              <button type="button" data-terminal-add title="Terminal-Grid hinzufügen" data-i18n-title="panel.terminal.add">+</button>
             </div>
           </div>
           <div class="terminal-grid" data-terminal-grid></div>
@@ -277,13 +277,13 @@ function panelBody(id) {
         <div id="mod_log" class="log-panel">
           <div class="log-toolbar">
             <span data-log-file>Log wird geladen …</span>
-            <select data-log-level aria-label="Log-Level">
+            <select data-log-level aria-label="Log-Level" data-i18n-aria-label="panel.log.level">
               <option value="all">ALLE</option>
               <option value="error">ERROR</option>
               <option value="warn">WARN</option>
               <option value="info">INFO</option>
             </select>
-            <button type="button" data-log-refresh title="Log aktualisieren">↻</button>
+            <button type="button" data-log-refresh title="Log aktualisieren" data-i18n-title="panel.log.refresh">↻</button>
           </div>
           <div class="log-list" data-log-list></div>
         </div>`;
@@ -292,14 +292,14 @@ function panelBody(id) {
         <div id="mod_autostart" class="autostart-panel">
           <div class="autostart-toolbar">
             <span data-autostart-count>Autostart-Einträge werden geladen …</span>
-            <button type="button" data-autostart-refresh title="Autostart aktualisieren">↻</button>
+            <button type="button" data-autostart-refresh title="Autostart aktualisieren" data-i18n-title="panel.autostart.refresh">↻</button>
           </div>
           <div class="autostart-list" data-autostart-list></div>
         </div>`;
     case "dock":
       return window.dockPanel?.bodyHtml?.() || `<div class="path-empty">Dock-Modul nicht geladen</div>`;
     case "taskdock":
-      return `<div id="task-dock-panel" class="task-dock-panel"><div class="dock-items task-dock-items" data-task-dock-items aria-label="Windows-Taskleistenverknüpfungen"></div></div>`;
+      return `<div id="task-dock-panel" class="task-dock-panel"><div class="dock-items task-dock-items" data-task-dock-items aria-label="Windows-Taskleistenverknüpfungen" data-i18n-aria-label="panel.dock.windows"></div></div>`;
     default:
       return "";
   }
@@ -312,10 +312,10 @@ function panelDisplayTitle(id) {
 function cardToolsHtml({ allowMinimize = true } = {}) {
   return `
     <span class="card-tools">
-      ${allowMinimize ? '<button type="button" class="card-tool minimize-btn" data-card-act="minimize" title="In den Dock minimieren">−</button>' : ""}
-      <button type="button" class="card-tool snap-btn" data-card-act="snap" title="1/4-Snap-Grid öffnen" aria-label="1/4-Snap-Grid öffnen">▦</button>
-      <button type="button" class="card-tool settings-btn" data-card-act="settings" title="Panel-Setup öffnen" aria-label="Panel-Setup öffnen">⚙</button>
-      <button type="button" class="card-tool more-btn" data-card-act="more" title="Weitere Aktionen" aria-label="Weitere Aktionen">⋯</button>
+      ${allowMinimize ? '<button type="button" class="card-tool minimize-btn" data-card-act="minimize" title="In den Dock minimieren" data-i18n-title="panel.actions.minimize">−</button>' : ""}
+      <button type="button" class="card-tool snap-btn" data-card-act="snap" title="1/4-Snap-Grid öffnen" data-i18n-title="panel.actions.snap" aria-label="1/4-Snap-Grid öffnen" data-i18n-aria-label="panel.actions.snap">▦</button>
+      <button type="button" class="card-tool settings-btn" data-card-act="settings" title="Panel-Setup öffnen" data-i18n-title="panel.actions.settings" aria-label="Panel-Setup öffnen" data-i18n-aria-label="panel.actions.settings">⚙</button>
+      <button type="button" class="card-tool more-btn" data-card-act="more" title="Weitere Aktionen" data-i18n-title="panel.actions.more" aria-label="Weitere Aktionen" data-i18n-aria-label="panel.actions.more">⋯</button>
     </span>`;
 }
 
@@ -409,7 +409,9 @@ function escapeHtml(text) {
     .replace(/"/g, "&quot;");
 }
 
-const HUD_HIT_SEL = ".hud-card, .path-card, .program-card, .desktop-card, .card-menu, .color-palette, #fab-bar, .modal_popup, .round-fab, .toast";
+// Fullscreen tutorials must capture hits even outside their highlighted panel.
+// Otherwise the transparent Electron desktop drops clicks on Next/Skip to Windows.
+const HUD_HIT_SEL = ".hud-card, .path-card, .program-card, .desktop-card, .card-menu, .color-palette, #fab-bar, .modal_popup, .round-fab, .toast, .bockis-panel-tour";
 
 function pointHitsHud(x, y) {
   if (document.body.classList.contains("is-ui-hold")) return true;
@@ -469,7 +471,7 @@ function setupDesktopClickThrough() {
       return;
     }
     const blocking = document.querySelector(
-      ".dragging, .is-file-dragging, .card-menu, .modal_popup, .drop-target, .color-palette"
+      ".dragging, .is-file-dragging, .card-menu, .modal_popup, .drop-target, .color-palette, .bockis-panel-tour"
     );
     const nextIgnore = !overHud && !blocking;
     if (nextIgnore === ignoring) return;

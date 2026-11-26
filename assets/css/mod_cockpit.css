@@ -7,7 +7,7 @@
     flex-direction: column;
     gap: 0.4rem;
     font-family: var(--font_pixel), var(--font_mono);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     user-select: none;
     contain: layout paint style;
 }
@@ -96,7 +96,7 @@
     font-family: var(--font_mono);
     font-size: calc(var(--fs) * 0.58);
     letter-spacing: 0.06em;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     opacity: 0.85;
     white-space: nowrap;
     transform: translate(-50%, -50%);
@@ -152,7 +152,7 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     line-height: 1;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     -webkit-font-smoothing: antialiased;
 }
 
@@ -247,7 +247,7 @@
     font-size: calc(var(--fs) * 1.55);
     font-weight: 700;
     letter-spacing: 0.06em;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     text-shadow: 0 0 0.6rem rgba(var(--color_r), var(--color_g), var(--color_b), 0.45);
     -webkit-font-smoothing: antialiased;
 }
@@ -579,7 +579,7 @@
     font-family: var(--font_mono);
     font-size: calc(var(--fs) * 0.58);
     letter-spacing: 0.04em;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     min-height: 1em;
     -webkit-font-smoothing: antialiased;
 }

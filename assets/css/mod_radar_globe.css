@@ -7,7 +7,7 @@
     flex-direction: column;
     gap: 0.35rem;
     font-family: var(--font_pixel), var(--font_mono);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     user-select: none;
 }
 

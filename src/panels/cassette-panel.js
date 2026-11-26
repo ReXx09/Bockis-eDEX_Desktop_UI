@@ -177,7 +177,7 @@
       if (els.dir) els.dir.textContent = sim.dir > 0 ? "FWD" : "REV";
       if (els.play) {
         els.play.classList.toggle("on", sim.playing);
-        els.play.textContent = sim.playing ? "PLAY" : "STOP";
+        els.play.textContent = window.edexI18n?.t?.(sim.playing ? "panel.cassette.play" : "panel.cassette.stop") || (sim.playing ? "PLAY" : "STOP");
       }
       els.reelL?.classList.toggle("is-spinning", sim.playing);
       els.reelR?.classList.toggle("is-spinning", sim.playing);

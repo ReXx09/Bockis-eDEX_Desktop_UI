@@ -44,7 +44,7 @@
 .ddj-system-actions button {
   border: 1px solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.4);
   background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.06);
-  color: rgb(var(--color_r), var(--color_g), var(--color_b));
+  color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
   font: inherit;
   font-size: 0.72em;
   padding: 0.3rem 0.5rem;
@@ -98,13 +98,13 @@
 .ddj-system-head span,
 .ddj-media-levels label,
 .ddj-system-source {
-  color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+  color: rgba(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)), 0.7);
   font-size: 0.72em;
 }
 
 .ddj-media-track strong {
   display: block;
-  color: rgb(var(--color_r), var(--color_g), var(--color_b));
+  color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
   font-size: 1.15em;
 }
 

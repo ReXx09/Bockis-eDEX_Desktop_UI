@@ -63,7 +63,7 @@ section#mod_coderain_stream {
     display: flex;
     align-items: flex-end;
     justify-content: flex-start;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     line-height: 1.2;
     padding: 0 0.4vh;
 }

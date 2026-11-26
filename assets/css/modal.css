@@ -94,7 +94,7 @@ div.modal_popup button {
     background: transparent;
     border: 0.19vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
     border-radius: 0.278vh;
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     font-size: 1.85vh;
     font-weight: bold;
     padding: 0.5vh 0.9vh;
@@ -153,7 +153,7 @@ div.modal_popup table:not(#settingsEditor) td:first-child {
 
 div.modal_popup textarea {
     background: var(--color_light_black);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     border: 0.15vh solid rgb(var(--color_r), var(--color_g), var(--color_b));
     padding: 0.4vh 0.2vh;
     font-size: 1.4vh;
@@ -167,7 +167,7 @@ div.modal_popup textarea:active, div.modal_popup textarea:focus {
 div.modal_popup td input {
     width: 100%;
     background: var(--color_light_black);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     border: 0.15vh solid rgb(var(--color_r), var(--color_g), var(--color_b));
     padding: 0.4vh 0.2vh;
     font-size: 1.4vh;
@@ -175,7 +175,7 @@ div.modal_popup td input {
 }
 
 div.modal_popup td input::placeholder {
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     opacity: 0.7;
 }
 
@@ -193,7 +193,7 @@ div.modal_popup td select {
     cursor: pointer;
     width: 100%;
     background: var(--color_light_black);
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     border: 0.15vh solid rgb(var(--color_r), var(--color_g), var(--color_b));
     padding: 0.4vh;
     font-size: 1.4vh;
@@ -219,7 +219,7 @@ div.modal_popup details.settings-section {
 }
 
 div.modal_popup details.settings-section > summary {
-    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    color: rgb(var(--color_text_r, var(--color_r)), var(--color_text_g, var(--color_g)), var(--color_text_b, var(--color_b)));
     font-weight: bold;
     list-style: none;
 }
